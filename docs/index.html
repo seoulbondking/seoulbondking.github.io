@@ -341,11 +341,10 @@ async function select(id) {
   document.getElementById('multiBtn').style.display = hasTotal ? '' : 'none';
   document.querySelectorAll('#modeButtons .gdp-only').forEach(b =>
     b.style.display = hasTotal ? '' : 'none');
-  if (!hasTotal && view === 'multi') {
-    view = 'chart';
-    document.querySelectorAll('#viewButtons button').forEach(b =>
-      b.classList.toggle('active', b.dataset.view === view));
-  }
+  // GDP 지표는 종합 보기를 기본으로, 그 외 지표는 종합이면 차트로 전환
+  view = hasTotal ? 'multi' : (view === 'multi' ? 'chart' : view);
+  document.querySelectorAll('#viewButtons button').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view));
   if (!hasTotal && ['cqoq', 'cyoy', 'share'].includes(mode)) {
     mode = 'level';
     document.querySelectorAll('#modeButtons button').forEach(b =>

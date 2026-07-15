@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KR Macro Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background: #f4f6f9; color: #222; }
@@ -82,6 +83,15 @@
       <select id="startSel"></select>
       <span style="font-size:12px;color:#888">~</span>
       <select id="endSel"></select>
+      <button id="exportBtn" style="margin-left:auto;padding:6px 14px;font-size:13px;
+        border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px">엑셀 다운로드</button>
+    </div>
+    <div id="compareBar" style="display:none;margin-bottom:12px;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="cmpInd" style="padding:6px;font-size:13px;border:1px solid #c8d0dc;border-radius:4px"></select>
+      <select id="cmpSeries" style="padding:6px;font-size:13px;border:1px solid #c8d0dc;border-radius:4px;max-width:280px"></select>
+      <button id="cmpAdd" style="padding:6px 14px;font-size:13px;border:1px solid #1a4fa0;
+        background:#1a4fa0;color:#fff;cursor:pointer;border-radius:4px">차트에 추가</button>
+      <span id="cmpChips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
     </div>
     <div class="card">
       <h2 id="title">불러오는 중…</h2>
@@ -221,6 +231,13 @@ const MODE_LABELS = {
   cqoq: '성장 기여도 QoQ (%p)', cyoy: '성장 기여도 YoY (%p)', share: 'GDP 대비 비중 %',
 };
 function updateMeta() {
+  if (view === 'compare') {
+    document.getElementById('metaLine').textContent =
+      mode === 'level'
+        ? '원자료 — 지표별 단위가 달라 축 스케일에 주의 (전기비/전년동기비 권장)'
+        : `단위: ${MODE_LABELS[mode]}`;
+    return;
+  }
   const unitLabel = mode === 'level' ? current.unit : MODE_LABELS[mode];
   document.getElementById('metaLine').textContent =
     `단위: ${unitLabel} · 주기: ${current.freq === 'Q' ? '분기' : '월'} · 갱신: ${current.updated_at}`;
@@ -228,19 +245,26 @@ function updateMeta() {
 
 function refresh() {
   updateMeta();
-  document.getElementById('chartWrap').style.display = view === 'chart' ? '' : 'none';
+  const isCmp = view === 'compare';
+  document.getElementById('chartWrap').style.display =
+    (view === 'chart' || isCmp) ? '' : 'none';
   document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
   document.getElementById('tableWrap').style.display = view === 'table' ? '' : 'none';
   document.getElementById('multiWrap').style.display = view === 'multi' ? '' : 'none';
   document.getElementById('modeButtons').style.display = view === 'multi' ? 'none' : '';
-  if (view === 'chart') draw();
+  document.getElementById('viewButtons').style.display = isCmp ? 'none' : '';
+  document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
+  if (isCmp) drawCompare();
+  else if (view === 'chart') draw();
   else if (view === 'table') renderTable();
   else renderMulti();
 }
 
 function dateLabel(d) {
   const [y, m] = d.split('-');
-  return current.freq === 'Q' ? `${y}.${Math.ceil(+m / 3)}Q` : `${y}.${m}`;
+  const yy = "'" + y.slice(2);
+  if (view === 'compare' || !current) return `${yy}.${m}`;
+  return current.freq === 'Q' ? `${yy}.${Math.ceil(+m / 3)}Q` : `${yy}.${m}`;
 }
 
 // GDP 종합: QoQ·YoY·기여도(QoQ/YoY)·비중을 블록으로 한꺼번에 표시
@@ -366,7 +390,162 @@ function draw() {
   });
 }
 
+// ── 지표 비교 (여러 지표의 시리즈를 한 차트에) ─────────────────
+let compareList = [];   // {indId, indName, sName, freq, data}
+
+function transformData(data, freq) {
+  if (mode === 'level' || !MODE_LABELS[mode]) return data;
+  if (mode === 'pop') return popChange(data, 1);
+  return popChange(data, freq === 'Q' ? 4 : 12);   // yoy (기여도/비중은 비교에서 미지원)
+}
+
+function drawCompare() {
+  const labelSet = new Set();
+  const datasets = compareList.map((c, i) => {
+    const data = transformData(c.data, c.freq).filter(p => inRange(p.d));
+    data.forEach(p => labelSet.add(p.d));
+    return {
+      label: `[${c.indName}] ${c.sName}`,
+      data: data.map(p => ({ x: p.d, y: p.v })),
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: PALETTE[i % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15,
+      spanGaps: true,
+    };
+  });
+  const labels = [...labelSet].sort();
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12, font: { size: 11 },
+             callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { ticks: { font: { size: 11 }, callback: v => v.toLocaleString('ko-KR') } },
+      },
+    },
+  });
+}
+
+function renderChips() {
+  const box = document.getElementById('cmpChips');
+  box.innerHTML = '';
+  compareList.forEach((c, i) => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'font-size:12px;padding:3px 8px;border:1px solid #c8d0dc;'
+      + `border-radius:12px;background:#fff;color:${PALETTE[i % PALETTE.length]}`;
+    chip.innerHTML = `${c.sName} <b style="cursor:pointer">×</b>`;
+    chip.querySelector('b').onclick = () => {
+      compareList.splice(i, 1);
+      renderChips(); updateComparePeriods(); refresh();
+    };
+    box.appendChild(chip);
+  });
+}
+
+function updateComparePeriods() {
+  const ds = new Set();
+  compareList.forEach(c => c.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  if (!periodDates.length) return;
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const s = document.getElementById('startSel'), e = document.getElementById('endSel');
+  s.innerHTML = opts; e.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 60)];
+  endD = periodDates[periodDates.length - 1];
+  s.value = startD; e.value = endD;
+}
+
+async function enterCompare() {
+  view = 'compare';
+  document.getElementById('title').textContent = '지표 비교';
+  document.getElementById('updatedAt').textContent = '';
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('active', b.id === 'compareNavBtn'));
+  document.querySelectorAll('#modeButtons .gdp-only').forEach(b => b.style.display = 'none');
+  if (['cqoq', 'cyoy', 'share'].includes(mode)) {
+    mode = 'level';
+    document.querySelectorAll('#modeButtons button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode));
+  }
+  // 지표 드롭다운 구성
+  const indSel = document.getElementById('cmpInd');
+  if (!indSel.options.length) {
+    indSel.innerHTML = catalog.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    await fillCmpSeries();
+    indSel.onchange = fillCmpSeries;
+    document.getElementById('cmpAdd').onclick = addCompare;
+  }
+  refresh();
+}
+
+async function fillCmpSeries() {
+  const ind = await loadIndicator(document.getElementById('cmpInd').value);
+  document.getElementById('cmpSeries').innerHTML =
+    ind.series.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
+}
+
+async function addCompare() {
+  const indId = document.getElementById('cmpInd').value;
+  const ind = await loadIndicator(indId);
+  const s = ind.series[+document.getElementById('cmpSeries').value];
+  if (!s || compareList.some(c => c.indId === indId && c.sName === s.name)) return;
+  compareList.push({ indId, indName: ind.name, sName: s.name, freq: ind.freq, data: s.data });
+  renderChips(); updateComparePeriods(); refresh();
+}
+
+// ── 엑셀 다운로드 ─────────────────────────────────────────────
+function sheetFromMode(md) {
+  const saved = mode; mode = md;
+  const rows = current.series.map(s => ({
+    name: s.name, map: new Map(transformSeries(s).map(p => [p.d, p.v])),
+  }));
+  mode = saved;
+  const dateSet = new Set();
+  rows.forEach(r => r.map.forEach((v, d) => dateSet.add(d)));
+  const dates = [...dateSet].sort().filter(inRange);
+  const aoa = [['항목', ...dates.map(dateLabel)]];
+  rows.forEach(r => aoa.push([r.name, ...dates.map(d => r.map.get(d) ?? null)]));
+  return aoa;
+}
+
+function exportExcel() {
+  if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리 로드 실패 (인터넷 연결 확인)'); return; }
+  const wb = XLSX.utils.book_new();
+  const today = new Date().toISOString().slice(0, 10);
+  if (view === 'compare') {
+    if (!compareList.length) { alert('추가된 시리즈가 없습니다.'); return; }
+    const ds = new Set();
+    compareList.forEach(c => transformData(c.data, c.freq).forEach(p => ds.add(p.d)));
+    const dates = [...ds].sort().filter(inRange);
+    const aoa = [['시리즈', ...dates.map(dateLabel)]];
+    compareList.forEach(c => {
+      const m = new Map(transformData(c.data, c.freq).map(p => [p.d, p.v]));
+      aoa.push([`[${c.indName}] ${c.sName}`, ...dates.map(d => m.get(d) ?? null)]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '지표비교');
+    XLSX.writeFile(wb, `compare_${today}.xlsx`);
+    return;
+  }
+  if (view === 'multi') {
+    [['원자료', 'level'], ['QoQ', 'pop'], ['YoY', 'yoy'],
+     ['기여도QoQ', 'cqoq'], ['기여도YoY', 'cyoy'], ['비중', 'share']].forEach(([nm, md]) => {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetFromMode(md)), nm);
+    });
+  } else {
+    const nm = mode === 'level' ? '원자료'
+      : { pop: 'QoQ', yoy: 'YoY', cqoq: '기여도QoQ', cyoy: '기여도YoY', share: '비중' }[mode];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetFromMode(mode)), nm);
+  }
+  XLSX.writeFile(wb, `${current.id}_${today}.xlsx`);
+}
+
 async function select(id) {
+  if (view === 'compare') view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
@@ -437,6 +616,16 @@ document.getElementById('endSel').onchange = e => {
       btn.onclick = () => select(item.id);
       nav.appendChild(btn);
     });
+    // 지표 비교 메뉴 (구분선 + 버튼)
+    const hr = document.createElement('div');
+    hr.style.cssText = 'border-top:1px solid #e0e4ea;margin:10px 0';
+    nav.appendChild(hr);
+    const cmpBtn = document.createElement('button');
+    cmpBtn.id = 'compareNavBtn';
+    cmpBtn.textContent = '📊 지표 비교';
+    cmpBtn.onclick = enterCompare;
+    nav.appendChild(cmpBtn);
+    document.getElementById('exportBtn').onclick = exportExcel;
     if (catalog.length) select(catalog[0].id);
     else document.getElementById('title').textContent = '지표가 없습니다. fetch.py를 먼저 실행하세요.';
   } catch (e) {

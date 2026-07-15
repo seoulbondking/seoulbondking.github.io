@@ -42,11 +42,13 @@
   table.data tbody tr:hover td:first-child { background: #f5f8fd; }
   table.data tbody tr:first-child { font-weight: 700; }
   td.neg { color: #c0392b; }
-  /* GDP 표: 세로선 + 구분선 (큰 구분 실선, 세부 내역 점선) + 들여쓰기 */
-  table.data.vlines th, table.data.vlines td { border-right: 1px solid #e8ecf1; }
-  table.data tr.lv0 td { border-top: 1.5px solid #9aa7b8; }
-  table.data tr.lv1 td { border-top: 1px dotted #b8c2cf; }
-  table.data tr.lv2 td { border-top: 1px dotted #dde3ea; }
+  /* GDP 표: 세로선 + 가로선 + 구분선 (큰 구분 실선, 세부 내역 점선) + 들여쓰기 */
+  table.data.vlines th, table.data.vlines td {
+    border-right: 1px solid #e8ecf1;
+    border-bottom: 1px solid #dbe2ea;   /* 모든 행 가로선 (기본보다 선명하게) */
+  }
+  table.data tr.sep-solid td { border-bottom: 2px solid #9aa7b8; }   /* 실선 */
+  table.data tr.sep-dot td { border-bottom: 1px dotted #b0bac7; }    /* 점선 */
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
   #multiWrap .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
@@ -203,10 +205,14 @@ const GDP_LEVELS = {
   '(공제)재화와 서비스의 수입': 0,
   '통계상 불일치': 0,
 };
-function rowClass(name) {
-  const key = name.replace(/ \[[^\]]*\]$/, '');   // 중복분리 접미사 제거
-  const lv = GDP_LEVELS[key];
-  return lv === undefined ? '' : ` class="lv${lv}"`;
+// 행 사이 구분선: 위 또는 아래가 큰 구분(lv0)이면 진한 실선, 세부 내역 사이는 점선
+function gdpRowAttr(names, i) {
+  const key = n => n.replace(/ \[[^\]]*\]$/, '');   // 중복분리 접미사 제거
+  const lv = GDP_LEVELS[key(names[i])];
+  if (lv === undefined) return '';
+  const nxt = i + 1 < names.length ? GDP_LEVELS[key(names[i + 1])] : 0;
+  const sep = (lv === 0 || nxt === 0 || nxt === undefined) ? 'sep-solid' : 'sep-dot';
+  return ` class="lv${lv} ${sep}"`;
 }
 const isGdp = () => current.series.length > 0 && current.series[0].name.includes('국내총생산');
 
@@ -274,10 +280,11 @@ function renderMulti() {
     let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
       + '<table class="data vlines"><thead><tr><th>항목</th>'
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-    items.forEach(s => {
+    const itemNames = items.map(s => s.name);
+    items.forEach((s, si) => {
       const m = new Map(s.data.map(p => [p.d, p.v]));
       const ded = s.name.startsWith('(공제)');
-      html += `<tr${rowClass(s.name)}><td>${s.name}</td>` + cols.map(d => {
+      html += `<tr${gdpRowAttr(itemNames, si)}><td>${s.name}</td>` + cols.map(d => {
         const v = met.fn(m, d, ded);
         const txt = v == null ? ''
           : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
@@ -306,10 +313,11 @@ function renderTable() {
       : v.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   const cls = isGdp() ? ' vlines' : '';
+  const rowNames = rows.map(r => r.name);
   let html = `<table class="data${cls}"><thead><tr><th>항목</th>`
     + dates.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-  rows.forEach(r => {
-    html += `<tr${isGdp() ? rowClass(r.name) : ''}><td>${r.name}</td>` + dates.map(d => {
+  rows.forEach((r, ri) => {
+    html += `<tr${isGdp() ? gdpRowAttr(rowNames, ri) : ''}><td>${r.name}</td>` + dates.map(d => {
       const v = r.map.get(d);
       return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`;
     }).join('') + '</tr>';

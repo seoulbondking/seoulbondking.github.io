@@ -16,7 +16,7 @@ indicators:
     freq: Q
     start_year: 2000     # 첫 실행: 2000년부터 전체 아카이브
     refetch_years: 2     # 이후 실행: 최근 2년만 다시 받아 병합 (개정 반영)
-    series_first: ["국내총생산에 대한 지출", "최종소비지출", "민간", "정부", "총자본형성"]
+    series_first: ["국내총생산에 대한 지출"]
     params:
       orgId: "301"
       tblId: "DT_200Y108"
@@ -30,7 +30,7 @@ indicators:
     freq: Q
     start_year: 2000
     refetch_years: 2
-    series_first: ["국내총생산에 대한 지출", "최종소비지출", "민간", "정부", "총자본형성"]
+    series_first: ["국내총생산에 대한 지출"]
     params:
       orgId: "301"
       tblId: "DT_200Y107"

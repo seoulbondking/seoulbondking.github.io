@@ -42,6 +42,13 @@
   table.data tbody tr:hover td:first-child { background: #f5f8fd; }
   table.data tbody tr:first-child { font-weight: 700; }
   td.neg { color: #c0392b; }
+  /* GDP 표: 세로선 + 구분선 (큰 구분 실선, 세부 내역 점선) + 들여쓰기 */
+  table.data.vlines th, table.data.vlines td { border-right: 1px solid #e8ecf1; }
+  table.data tr.lv0 td { border-top: 1.5px solid #9aa7b8; }
+  table.data tr.lv1 td { border-top: 1px dotted #b8c2cf; }
+  table.data tr.lv2 td { border-top: 1px dotted #dde3ea; }
+  table.data tr.lv1 td:first-child { padding-left: 24px; }
+  table.data tr.lv2 td:first-child { padding-left: 40px; }
   #multiWrap .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
   #multiWrap .block-title:first-child { margin-top: 0; }
   #multiWrap .tscroll { overflow-x: auto; margin-bottom: 4px; }
@@ -183,6 +190,26 @@ function render() {
   refresh();
 }
 
+// GDP 항목 계층: 0 = 큰 구분(실선), 1 = 하위(점선), 2 = 세부(옅은 점선)
+const GDP_LEVELS = {
+  '국내총생산에 대한 지출': 0,
+  '최종소비지출': 0,
+  '민간': 1, '가계': 2, '가계에 봉사하는 비영리단체': 2, '정부': 1,
+  '총자본형성': 0,
+  '총고정자본형성': 1, '건설투자': 2, '설비투자': 2, '지식재산생산물투자': 2,
+  '총고정자본형성(민간)': 1, '총고정자본형성(정부)': 1,
+  '재고증감 및 귀중품 순취득': 1,
+  '재화와 서비스의 수출': 0, '(재화)F.O.B. 기준': 1, '(서비스)': 1,
+  '(공제)재화와 서비스의 수입': 0,
+  '통계상 불일치': 0,
+};
+function rowClass(name) {
+  const key = name.replace(/ \[[^\]]*\]$/, '');   // 중복분리 접미사 제거
+  const lv = GDP_LEVELS[key];
+  return lv === undefined ? '' : ` class="lv${lv}"`;
+}
+const isGdp = () => current.series.length > 0 && current.series[0].name.includes('국내총생산');
+
 const MODE_LABELS = {
   pop: '전기비 %', yoy: '전년동기비 %',
   cqoq: '성장 기여도 QoQ (%p)', cyoy: '성장 기여도 YoY (%p)', share: 'GDP 대비 비중 %',
@@ -245,12 +272,12 @@ function renderMulti() {
   let out = '';
   metrics.forEach(met => {
     let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
-      + '<table class="data"><thead><tr><th>항목</th>'
+      + '<table class="data vlines"><thead><tr><th>항목</th>'
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
     items.forEach(s => {
       const m = new Map(s.data.map(p => [p.d, p.v]));
       const ded = s.name.startsWith('(공제)');
-      html += `<tr><td>${s.name}</td>` + cols.map(d => {
+      html += `<tr${rowClass(s.name)}><td>${s.name}</td>` + cols.map(d => {
         const v = met.fn(m, d, ded);
         const txt = v == null ? ''
           : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
@@ -278,10 +305,11 @@ function renderTable() {
       ? v.toLocaleString('ko-KR', { maximumFractionDigits: 1 })
       : v.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-  let html = '<table class="data"><thead><tr><th>항목</th>'
+  const cls = isGdp() ? ' vlines' : '';
+  let html = `<table class="data${cls}"><thead><tr><th>항목</th>`
     + dates.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach(r => {
-    html += `<tr><td>${r.name}</td>` + dates.map(d => {
+    html += `<tr${isGdp() ? rowClass(r.name) : ''}><td>${r.name}</td>` + dates.map(d => {
       const v = r.map.get(d);
       return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`;
     }).join('') + '</tr>';

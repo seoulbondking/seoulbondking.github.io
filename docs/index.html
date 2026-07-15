@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KR Macro Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background: #f4f6f9; color: #222; }
+  header { background: #1a2b4a; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; }
+  header h1 { font-size: 18px; }
+  header .updated { font-size: 12px; color: #9fb3d1; }
+  .layout { display: flex; min-height: calc(100vh - 50px); }
+  nav { width: 230px; background: #fff; border-right: 1px solid #e0e4ea; padding: 12px 0; flex-shrink: 0; }
+  nav button { display: block; width: 100%; text-align: left; padding: 10px 18px; border: 0; background: none;
+               cursor: pointer; font-size: 13.5px; color: #333; }
+  nav button:hover { background: #eef2f8; }
+  nav button.active { background: #e3ecfb; color: #1a4fa0; font-weight: 700; border-right: 3px solid #1a4fa0; }
+  main { flex: 1; padding: 20px 24px; min-width: 0; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .toolbar .mode button { padding: 6px 14px; font-size: 13px; border: 1px solid #c8d0dc; background: #fff; cursor: pointer; }
+  .toolbar .mode button:first-child { border-radius: 4px 0 0 4px; }
+  .toolbar .mode button:last-child { border-radius: 0 4px 4px 0; }
+  .toolbar .mode button.active { background: #1a4fa0; color: #fff; border-color: #1a4fa0; }
+  .toolbar select { padding: 6px; font-size: 13px; border: 1px solid #c8d0dc; border-radius: 4px; }
+  .card { background: #fff; border: 1px solid #e0e4ea; border-radius: 8px; padding: 18px; }
+  .card h2 { font-size: 15px; margin-bottom: 4px; }
+  .card .meta { font-size: 12px; color: #888; margin-bottom: 12px; }
+  #chartWrap { position: relative; height: 460px; }
+  .series-picker { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
+  .series-picker label { cursor: pointer; user-select: none; }
+  .empty { color: #888; padding: 60px; text-align: center; }
+  #tableWrap { overflow-x: auto; max-height: 560px; overflow-y: auto; }
+  table.data { border-collapse: collapse; font-size: 12.5px; white-space: nowrap; width: 100%; }
+  table.data th, table.data td { padding: 5px 10px; text-align: right; border-bottom: 1px solid #eef1f5; }
+  table.data thead th { background: #f0f3f8; position: sticky; top: 0; font-weight: 700; }
+  table.data th:first-child, table.data td:first-child {
+    text-align: left; position: sticky; left: 0; background: #fff; border-right: 1px solid #e0e4ea; }
+  table.data thead th:first-child { background: #f0f3f8; z-index: 2; }
+  table.data tbody tr:hover td { background: #f5f8fd; }
+  table.data tbody tr:hover td:first-child { background: #f5f8fd; }
+  table.data tbody tr:first-child { font-weight: 700; }
+  td.neg { color: #c0392b; }
+  #multiWrap .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
+  #multiWrap .block-title:first-child { margin-top: 0; }
+  #multiWrap .tscroll { overflow-x: auto; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>KR Macro Dashboard</h1>
+  <span class="updated" id="updatedAt"></span>
+</header>
+<div class="layout">
+  <nav id="nav"></nav>
+  <main>
+    <div class="toolbar">
+      <div class="mode" id="viewButtons">
+        <button data-view="multi" id="multiBtn" style="display:none">종합</button>
+        <button data-view="table">표</button>
+        <button data-view="chart" class="active">차트</button>
+      </div>
+      <div class="mode" id="modeButtons">
+        <button data-mode="level" class="active">원자료</button>
+        <button data-mode="pop">전기비 %</button>
+        <button data-mode="yoy">전년동기비 %</button>
+        <button data-mode="cqoq" class="gdp-only" style="display:none">기여도 QoQ</button>
+        <button data-mode="cyoy" class="gdp-only" style="display:none">기여도 YoY</button>
+        <button data-mode="share" class="gdp-only" style="display:none">비중</button>
+      </div>
+      <span style="font-size:13px;color:#555">기간</span>
+      <select id="startSel"></select>
+      <span style="font-size:12px;color:#888">~</span>
+      <select id="endSel"></select>
+    </div>
+    <div class="card">
+      <h2 id="title">불러오는 중…</h2>
+      <div class="meta" id="metaLine"></div>
+      <div id="chartWrap"><canvas id="chart"></canvas></div>
+      <div id="tableWrap" style="display:none"></div>
+      <div id="multiWrap" style="display:none"></div>
+      <div class="series-picker" id="seriesPicker"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
+                 '#b0486e','#5c6b7a','#8aa832','#c26b1d','#4666d1','#9e3fbf'];
+let catalog = [], current = null, chart = null;
+let mode = 'level', view = 'chart';
+let periodDates = [], startD = null, endD = null;   // 기간 설정
+let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
+
+const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
+const lagYoY = () => current.freq === 'Q' ? 4 : 12;
+
+// file://(더블클릭)에서도 동작하도록 fetch 대신 <script> 태그로 데이터 로드
+function loadScript(path) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = path + (location.protocol === 'file:' ? '' : '?t=' + Date.now());
+    s.onload = () => { s.remove(); resolve(); };
+    s.onerror = () => { s.remove(); reject(new Error(path + ' 로드 실패')); };
+    document.head.appendChild(s);
+  });
+}
+async function loadCatalog() {
+  await loadScript('data/index.js');
+  return window.__MACRO_INDEX__ || [];
+}
+async function loadIndicator(id) {
+  await loadScript('data/' + id + '.js');
+  return (window.__MACRO__ || {})[id];
+}
+
+function popChange(data, lag) {   // 전기비/전년동기비 (%)
+  const out = [];
+  for (let i = lag; i < data.length; i++) {
+    const prev = data[i - lag].v;
+    if (prev) out.push({ d: data[i].d, v: (data[i].v / prev - 1) * 100 });
+  }
+  return out;
+}
+
+// 시리즈 하나를 현재 모드에 맞게 변환
+// level/pop/yoy: 자체 데이터만 사용 · cqoq/cyoy/share: GDP 총계(첫 시리즈) 기준
+function transformSeries(s) {
+  if (mode === 'level') return s.data;
+  if (mode === 'pop') return popChange(s.data, 1);
+  if (mode === 'yoy') return popChange(s.data, lagYoY());
+
+  const total = current.series[0];
+  const gmap = new Map(total.data.map(p => [p.d, p.v]));
+  const dates = total.data.map(p => p.d);
+  const sign = s.name.startsWith('(공제)') ? -1 : 1;
+  const m = new Map(s.data.map(p => [p.d, p.v]));
+  const out = [];
+
+  if (mode === 'share') {                     // GDP 대비 비중 (%)
+    s.data.forEach(p => {
+      const g = gmap.get(p.d);
+      if (g) out.push({ d: p.d, v: p.v / g * 100 * sign });
+    });
+    return out;
+  }
+  // 기여도 (%p) = (X_t − X_{t−lag}) / GDP_{t−lag} × 100, 공제 항목 부호 반전
+  const lag = mode === 'cqoq' ? 1 : lagYoY();
+  dates.forEach((d, i) => {
+    if (i < lag) return;
+    const a = m.get(d), b = m.get(dates[i - lag]), g = gmap.get(dates[i - lag]);
+    if (a != null && b != null && g) out.push({ d, v: (a - b) / g * 100 * sign });
+  });
+  return out;
+}
+
+function render() {
+  const picker = document.getElementById('seriesPicker');
+  picker.innerHTML = '';
+  // 전체 선택/해제 버튼
+  const allBtn = document.createElement('button');
+  allBtn.textContent = visible.size === current.series.length ? '전체 해제' : '전체 선택';
+  allBtn.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid #c8d0dc;'
+    + 'background:#fff;cursor:pointer;border-radius:4px';
+  allBtn.onclick = () => {
+    visible = visible.size === current.series.length
+      ? new Set() : new Set(current.series.map(s => s.name));
+    render();
+  };
+  picker.appendChild(allBtn);
+  current.series.forEach((s, i) => {
+    const id = 'sp' + i;
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="checkbox" id="${id}" ${visible.has(s.name) ? 'checked' : ''}>
+      <span style="color:${PALETTE[i % PALETTE.length]}">■</span> ${s.name}`;
+    label.querySelector('input').onchange = e => {
+      e.target.checked ? visible.add(s.name) : visible.delete(s.name);
+      refresh();
+    };
+    picker.appendChild(label);
+  });
+  refresh();
+}
+
+const MODE_LABELS = {
+  pop: '전기비 %', yoy: '전년동기비 %',
+  cqoq: '성장 기여도 QoQ (%p)', cyoy: '성장 기여도 YoY (%p)', share: 'GDP 대비 비중 %',
+};
+function updateMeta() {
+  const unitLabel = mode === 'level' ? current.unit : MODE_LABELS[mode];
+  document.getElementById('metaLine').textContent =
+    `단위: ${unitLabel} · 주기: ${current.freq === 'Q' ? '분기' : '월'} · 갱신: ${current.updated_at}`;
+}
+
+function refresh() {
+  updateMeta();
+  document.getElementById('chartWrap').style.display = view === 'chart' ? '' : 'none';
+  document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
+  document.getElementById('tableWrap').style.display = view === 'table' ? '' : 'none';
+  document.getElementById('multiWrap').style.display = view === 'multi' ? '' : 'none';
+  document.getElementById('modeButtons').style.display = view === 'multi' ? 'none' : '';
+  if (view === 'chart') draw();
+  else if (view === 'table') renderTable();
+  else renderMulti();
+}
+
+function dateLabel(d) {
+  const [y, m] = d.split('-');
+  return current.freq === 'Q' ? `${y}.${Math.ceil(+m / 3)}Q` : `${y}.${m}`;
+}
+
+// GDP 종합: QoQ·YoY·기여도(QoQ/YoY)·비중을 블록으로 한꺼번에 표시
+// 기여도 = (X_t − X_{t−lag}) / GDP_{t−lag} × 100  (전기 비중 방식, 공제 항목은 부호 반전)
+function renderMulti() {
+  const total = current.series[0];             // series_first 로 GDP 총계가 첫 번째
+  const gmap = new Map(total.data.map(p => [p.d, p.v]));
+  const dates = total.data.map(p => p.d);
+  const idx = new Map(dates.map((d, i) => [d, i]));
+  const items = current.series.filter(s => !s.name.includes('['));  // 중복분리 하위항목 제외
+  const lagY = lagYoY();
+  const cols = dates.filter(inRange);
+  const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? dates[i - lag] : null; };
+
+  const metrics = [
+    { title: '성장률 — 전기비 (QoQ, %)', dec: 1,
+      fn: (m, d) => { const p = prevD(d, 1), a = m.get(d), b = p && m.get(p);
+        return a != null && b ? (a / b - 1) * 100 : null; } },
+    { title: '성장률 — 전년동기비 (YoY, %)', dec: 1,
+      fn: (m, d) => { const p = prevD(d, lagY), a = m.get(d), b = p && m.get(p);
+        return a != null && b ? (a / b - 1) * 100 : null; } },
+    { title: '성장 기여도 — 전기비 (QoQ, %p)', dec: 2,
+      fn: (m, d, ded) => { const p = prevD(d, 1); if (!p) return null;
+        const a = m.get(d), b = m.get(p), g = gmap.get(p);
+        return a != null && b != null && g ? (a - b) / g * 100 * (ded ? -1 : 1) : null; } },
+    { title: '성장 기여도 — 전년동기비 (YoY, %p)', dec: 2,
+      fn: (m, d, ded) => { const p = prevD(d, lagY); if (!p) return null;
+        const a = m.get(d), b = m.get(p), g = gmap.get(p);
+        return a != null && b != null && g ? (a - b) / g * 100 * (ded ? -1 : 1) : null; } },
+    { title: 'GDP 대비 비중 (%)', dec: 1,
+      fn: (m, d, ded) => { const a = m.get(d), g = gmap.get(d);
+        return a != null && g ? a / g * 100 * (ded ? -1 : 1) : null; } },
+  ];
+
+  let out = '';
+  metrics.forEach(met => {
+    let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
+      + '<table class="data"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    items.forEach(s => {
+      const m = new Map(s.data.map(p => [p.d, p.v]));
+      const ded = s.name.startsWith('(공제)');
+      html += `<tr><td>${s.name}</td>` + cols.map(d => {
+        const v = met.fn(m, d, ded);
+        const txt = v == null ? ''
+          : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+      }).join('') + '</tr>';
+    });
+    out += html + '</tbody></table></div>';
+  });
+  document.getElementById('multiWrap').innerHTML = out;
+  document.querySelectorAll('#multiWrap .tscroll').forEach(w => { w.scrollLeft = w.scrollWidth; });
+}
+
+// 엑셀처럼 항목(행) × 기간(열) 수치 표
+function renderTable() {
+  const rows = current.series.map(s => ({
+    name: s.name,
+    map: new Map(transformSeries(s).map(p => [p.d, p.v])),
+  }));
+  const dateSet = new Set();
+  rows.forEach(r => r.map.forEach((v, d) => dateSet.add(d)));
+  const dates = [...dateSet].sort().filter(inRange);
+
+  const fmt = v => v == null ? ''
+    : mode === 'level'
+      ? v.toLocaleString('ko-KR', { maximumFractionDigits: 1 })
+      : v.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  let html = '<table class="data"><thead><tr><th>항목</th>'
+    + dates.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += `<tr><td>${r.name}</td>` + dates.map(d => {
+      const v = r.map.get(d);
+      return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`;
+    }).join('') + '</tr>';
+  });
+  document.getElementById('tableWrap').innerHTML = html + '</tbody></table>';
+  // 최신 기간이 보이도록 오른쪽 끝으로 스크롤
+  const wrap = document.getElementById('tableWrap');
+  wrap.scrollLeft = wrap.scrollWidth;
+}
+
+function draw() {
+  const datasets = [];
+  const labelSet = new Set();
+  current.series.forEach((s, i) => {
+    if (!visible.has(s.name)) return;
+    const data = transformSeries(s).filter(p => inRange(p.d));
+    data.forEach(p => labelSet.add(p.d));
+    datasets.push({
+      label: s.name,
+      data: data.map(p => ({ x: p.d, y: p.v })),
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: PALETTE[i % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15,
+    });
+  });
+  const labels = [...labelSet].sort();
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c =>
+          ` ${c.dataset.label}: ${c.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}` } },
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12, font: { size: 11 } } },
+        y: { ticks: { font: { size: 11 },
+             callback: v => v.toLocaleString('ko-KR') } },
+      },
+    },
+  });
+}
+
+async function select(id) {
+  current = await loadIndicator(id);
+  document.getElementById('title').textContent = current.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('active', b.dataset.id === id));
+  // 종합·기여도·비중은 총계 시리즈가 첫 번째인 지표(GDP)에서만 노출
+  const hasTotal = current.series.length > 0 && current.series[0].name.includes('국내총생산');
+  document.getElementById('multiBtn').style.display = hasTotal ? '' : 'none';
+  document.querySelectorAll('#modeButtons .gdp-only').forEach(b =>
+    b.style.display = hasTotal ? '' : 'none');
+  if (!hasTotal && view === 'multi') {
+    view = 'chart';
+    document.querySelectorAll('#viewButtons button').forEach(b =>
+      b.classList.toggle('active', b.dataset.view === view));
+  }
+  if (!hasTotal && ['cqoq', 'cyoy', 'share'].includes(mode)) {
+    mode = 'level';
+    document.querySelectorAll('#modeButtons button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode));
+  }
+  // 기간 선택 옵션 구성 (기본: 최근 40기간 ~ 최신)
+  const ds = new Set();
+  current.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const startSel = document.getElementById('startSel'), endSel = document.getElementById('endSel');
+  startSel.innerHTML = opts; endSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 40)];
+  endD = periodDates[periodDates.length - 1];
+  startSel.value = startD; endSel.value = endD;
+  // 기본으로 첫 3개 시리즈 표시
+  visible = new Set(current.series.slice(0, 3).map(s => s.name));
+  render();
+}
+
+document.getElementById('modeButtons').addEventListener('click', e => {
+  if (!e.target.dataset.mode) return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeButtons button').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  refresh();
+});
+document.getElementById('viewButtons').addEventListener('click', e => {
+  if (!e.target.dataset.view) return;
+  view = e.target.dataset.view;
+  document.querySelectorAll('#viewButtons button').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view));
+  refresh();
+});
+document.getElementById('startSel').onchange = e => {
+  startD = e.target.value;
+  if (endD < startD) { endD = startD; document.getElementById('endSel').value = endD; }
+  refresh();
+};
+document.getElementById('endSel').onchange = e => {
+  endD = e.target.value;
+  if (endD < startD) { startD = endD; document.getElementById('startSel').value = startD; }
+  refresh();
+};
+
+(async () => {
+  try {
+    catalog = await loadCatalog();
+    const nav = document.getElementById('nav');
+    catalog.forEach(item => {
+      const btn = document.createElement('button');
+      btn.textContent = item.name;
+      btn.dataset.id = item.id;
+      btn.onclick = () => select(item.id);
+      nav.appendChild(btn);
+    });
+    if (catalog.length) select(catalog[0].id);
+    else document.getElementById('title').textContent = '지표가 없습니다. fetch.py를 먼저 실행하세요.';
+  } catch (e) {
+    document.getElementById('title').textContent = '데이터 로드 실패: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

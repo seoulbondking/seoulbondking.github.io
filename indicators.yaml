@@ -1,0 +1,99 @@
+# ─────────────────────────────────────────────────────────────
+# 지표 정의 파일
+# 여기에 지표를 추가하면 fetch.py가 자동으로 수집해서
+# docs/data/<id>.json 으로 저장합니다. 코드 수정 불필요.
+#
+# freq: Q(분기), M(월)
+# lookback_years: 오늘 기준 최근 N년치 수집
+# params: KOSIS 파라미터 (orgId, tblId, itmId, objL1 ...)
+#   * KOSIS 통계표에서 "OpenAPI" 버튼 → URL 생성기로 값 확인 가능
+# ─────────────────────────────────────────────────────────────
+indicators:
+  - id: kr_gdp_real
+    name: 실질 국내총생산 (계절조정, 연쇄)
+    source: kosis
+    unit: 십억원
+    freq: Q
+    start_year: 2000     # 첫 실행: 2000년부터 전체 아카이브
+    refetch_years: 2     # 이후 실행: 최근 2년만 다시 받아 병합 (개정 반영)
+    series_first: ["국내총생산에 대한 지출", "최종소비지출", "민간", "정부", "총자본형성"]
+    params:
+      orgId: "301"
+      tblId: "DT_200Y108"
+      itmId: "13103136297999 "
+      objL1: "ALL"
+
+  - id: kr_gdp_nominal
+    name: 명목 국내총생산 (계절조정)
+    source: kosis
+    unit: 십억원
+    freq: Q
+    start_year: 2000
+    refetch_years: 2
+    series_first: ["국내총생산에 대한 지출", "최종소비지출", "민간", "정부", "총자본형성"]
+    params:
+      orgId: "301"
+      tblId: "DT_200Y107"
+      itmId: "13103136276999 "
+      objL1: "ALL"
+
+  - id: kr_cpi
+    name: 소비자물가지수 (2020=100)
+    source: kosis
+    unit: 지수
+    freq: M
+    lookback_years: 10
+    params:
+      orgId: "101"
+      tblId: "DT_1J22009"
+      itmId: "T "
+      objL1: "ALL"
+
+  # ── ECOS (한국은행) ──────────────────────────────────────────
+  - id: kr_household_credit
+    name: 가계신용 (용도별, 분기)
+    source: ecos
+    unit: 십억원
+    freq: Q
+    lookback_years: 15
+    params:
+      stat_code: "151Y004"
+
+  - id: kr_bop
+    name: 국제수지 (BPM6, 월)
+    source: ecos
+    unit: 백만달러
+    freq: M
+    lookback_years: 10
+    params:
+      stat_code: "301Y013"
+
+  - id: kr_csi
+    name: 소비자심리지수·기대인플레이션
+    source: ecos
+    unit: 지수·%
+    freq: M
+    lookback_years: 10
+    params:
+      stat_code: "511Y002"
+      item_codes: ["FME"]
+
+  - id: kr_infl_expect
+    name: 기대인플레이션율
+    source: ecos
+    unit: '%'
+    freq: M
+    lookback_years: 10
+    params:
+      stat_code: "511Y003"
+      item_codes: ["FMB", "FMC", "FMD"]
+
+  - id: kr_base_rate
+    name: 한국은행 기준금리
+    source: ecos
+    unit: '%'
+    freq: M
+    lookback_years: 20
+    params:
+      stat_code: "722Y001"
+      item_codes: ["0101000"]

@@ -59,6 +59,11 @@
   .rowbtn { visibility: hidden; cursor: pointer; font-size: 11px; color: #97a3b4; margin-right: 5px; }
   table.data tbody tr:hover .rowbtn { visibility: visible; }
   .rowbtn:hover { color: #1a4fa0; }
+  /* 셀 호버 시 세로(열) 강조 + 클릭 시 십자 강조 */
+  table.data td.colhov, table.data th.colhov { background: #eef2f8; }
+  table.data tr.xrow td { background: #e3ecfb; }
+  table.data td.xcol, table.data th.xcol { background: #e3ecfb; }
+  table.data td.xsel { background: #c8dcfa; font-weight: 700; }
   .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
   #multiWrap .block-title:first-child, #comboWrap .block-title:first-child { margin-top: 0; }
   .tscroll { overflow-x: auto; margin-bottom: 4px; }
@@ -837,6 +842,51 @@ document.getElementById('viewButtons').addEventListener('click', e => {
     refresh();
   });
 });
+// 표 셀 호버: 세로(열) 강조 · 클릭: 가로+세로 십자 강조 (다시 클릭하면 해제)
+function attachTableXY(containerId) {
+  const root = document.getElementById(containerId);
+  let hovTbl = null, hovCol = -1;
+
+  function clearHov() {
+    if (hovTbl) hovTbl.querySelectorAll('.colhov').forEach(c => c.classList.remove('colhov'));
+    hovTbl = null; hovCol = -1;
+  }
+  root.addEventListener('mouseover', e => {
+    const cell = e.target.closest('td, th');
+    if (!cell || !root.contains(cell)) return;
+    const tbl = cell.closest('table');
+    const ci = cell.cellIndex;
+    if (tbl === hovTbl && ci === hovCol) return;
+    clearHov();
+    if (ci > 0) {
+      tbl.querySelectorAll('tr').forEach(tr => {
+        const c = tr.cells[ci];
+        if (c) c.classList.add('colhov');
+      });
+      hovTbl = tbl; hovCol = ci;
+    }
+  });
+  root.addEventListener('mouseleave', clearHov);
+
+  root.addEventListener('click', e => {
+    if (e.target.closest('.rowbtn')) return;         // 숨기기/강조 버튼과 충돌 방지
+    const td = e.target.closest('td');
+    if (!td || !root.contains(td) || td.cellIndex === 0) return;
+    const tbl = td.closest('table');
+    const wasSel = td.classList.contains('xsel');
+    document.querySelectorAll('.xsel, .xcol').forEach(c => c.classList.remove('xsel', 'xcol'));
+    document.querySelectorAll('.xrow').forEach(r => r.classList.remove('xrow'));
+    if (wasSel) return;                              // 같은 셀 재클릭 → 해제
+    td.parentElement.classList.add('xrow');
+    tbl.querySelectorAll('tr').forEach(tr => {
+      const c = tr.cells[td.cellIndex];
+      if (c) c.classList.add('xcol');
+    });
+    td.classList.add('xsel');
+  });
+}
+['tableWrap', 'multiWrap', 'comboWrap'].forEach(attachTableXY);
+
 // 표 좌우 스크롤 (◀ ▶: 보이는 폭의 절반씩, 표 여러 개면 동시에)
 function scrollTables(dir) {
   const els = [];

@@ -64,6 +64,7 @@
   table.data tr.xrow td { background: #e3ecfb; }
   table.data td.xcol, table.data th.xcol { background: #e3ecfb; }
   table.data td.xsel { background: #c8dcfa; font-weight: 700; }
+  table.data td.xrange { background: #d5e4fb; }   /* Shift 범위 선택 */
   .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
   #multiWrap .block-title:first-child, #comboWrap .block-title:first-child { margin-top: 0; }
   .tscroll { overflow-x: auto; margin-bottom: 4px; }
@@ -327,7 +328,7 @@ function dateLabel(d) {
   const [y, m, dd] = d.split('-');
   const yy = "'" + y.slice(2);
   if (view === 'compare' || !current) return `${yy}.${m}`;
-  if (current.freq === 'A') return y;
+  if (current.freq === 'A') return yy;
   if (current.freq === 'W') return `${yy}.${m}.${dd}`;
   return current.freq === 'Q' ? `${yy}.${Math.ceil(+m / 3)}Q` : `${yy}.${m}`;
 }
@@ -842,7 +843,27 @@ document.getElementById('viewButtons').addEventListener('click', e => {
     refresh();
   });
 });
-// 표 셀 호버: 세로(열) 강조 · 클릭: 가로+세로 십자 강조 (다시 클릭하면 해제)
+// 표 셀 호버: 세로(열) 강조 · 클릭: 십자 강조
+// Ctrl+클릭: 십자 추가/제거 · Shift+클릭: 마지막 클릭 셀부터 범위 강조
+const xySel = { cells: new Set(), anchor: null };
+function applyXY() {
+  document.querySelectorAll('.xsel, .xcol').forEach(c => c.classList.remove('xsel', 'xcol'));
+  document.querySelectorAll('.xrow').forEach(r => r.classList.remove('xrow'));
+  xySel.cells.forEach(td => {
+    if (!td.isConnected) { xySel.cells.delete(td); return; }
+    const tbl = td.closest('table');
+    td.parentElement.classList.add('xrow');
+    tbl.querySelectorAll('tr').forEach(tr => {
+      const c = tr.cells[td.cellIndex];
+      if (c) c.classList.add('xcol');
+    });
+    td.classList.add('xsel');
+  });
+}
+function clearRange() {
+  document.querySelectorAll('.xrange').forEach(c => c.classList.remove('xrange'));
+}
+
 function attachTableXY(containerId) {
   const root = document.getElementById(containerId);
   let hovTbl = null, hovCol = -1;
@@ -868,21 +889,45 @@ function attachTableXY(containerId) {
   });
   root.addEventListener('mouseleave', clearHov);
 
+  // Shift+클릭 시 브라우저 텍스트 선택 방지
+  root.addEventListener('mousedown', e => { if (e.shiftKey) e.preventDefault(); });
+
   root.addEventListener('click', e => {
     if (e.target.closest('.rowbtn')) return;         // 숨기기/강조 버튼과 충돌 방지
     const td = e.target.closest('td');
     if (!td || !root.contains(td) || td.cellIndex === 0) return;
     const tbl = td.closest('table');
-    const wasSel = td.classList.contains('xsel');
-    document.querySelectorAll('.xsel, .xcol').forEach(c => c.classList.remove('xsel', 'xcol'));
-    document.querySelectorAll('.xrow').forEach(r => r.classList.remove('xrow'));
-    if (wasSel) return;                              // 같은 셀 재클릭 → 해제
-    td.parentElement.classList.add('xrow');
-    tbl.querySelectorAll('tr').forEach(tr => {
-      const c = tr.cells[td.cellIndex];
-      if (c) c.classList.add('xcol');
-    });
-    td.classList.add('xsel');
+
+    // Shift+클릭: 마지막 클릭 셀(앵커) ~ 현재 셀 직사각형 범위 강조 (같은 표에서만)
+    if (e.shiftKey && xySel.anchor && xySel.anchor.isConnected
+        && xySel.anchor.closest('table') === tbl) {
+      clearRange();
+      const rows = [...tbl.rows];
+      const r1 = xySel.anchor.parentElement.rowIndex, r2 = td.parentElement.rowIndex;
+      const c1 = xySel.anchor.cellIndex, c2 = td.cellIndex;
+      for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
+        for (let c = Math.max(1, Math.min(c1, c2)); c <= Math.max(c1, c2); c++) {
+          const cell = rows[r] && rows[r].cells[c];
+          if (cell) cell.classList.add('xrange');
+        }
+      }
+      return;
+    }
+
+    // Ctrl(⌘)+클릭: 십자 추가/제거
+    if (e.ctrlKey || e.metaKey) {
+      xySel.cells.has(td) ? xySel.cells.delete(td) : xySel.cells.add(td);
+      xySel.anchor = td;
+      applyXY();
+      return;
+    }
+
+    // 일반 클릭: 단일 십자 (같은 셀 재클릭 시 해제)
+    const wasOnly = xySel.cells.has(td) && xySel.cells.size === 1;
+    xySel.cells.clear();
+    clearRange();
+    if (!wasOnly) { xySel.cells.add(td); xySel.anchor = td; }
+    applyXY();
   });
 }
 ['tableWrap', 'multiWrap', 'comboWrap'].forEach(attachTableXY);

@@ -19,7 +19,9 @@
   nav button:hover { background: #eef2f8; }
   nav button.active { background: #e3ecfb; color: #1a4fa0; font-weight: 700; border-right: 3px solid #1a4fa0; }
   main { flex: 1; padding: 20px 24px; min-width: 0; }
-  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
+             position: sticky; top: 0; z-index: 30; background: #f4f6f9;
+             padding: 10px 0; box-shadow: 0 4px 6px -4px rgba(0,0,0,.12); }
   .toolbar .mode button { padding: 6px 14px; font-size: 13px; border: 1px solid #c8d0dc; background: #fff; cursor: pointer; }
   .toolbar .mode button:first-child { border-radius: 4px 0 0 4px; }
   .toolbar .mode button:last-child { border-radius: 0 4px 4px 0; }
@@ -57,9 +59,10 @@
   .rowbtn { visibility: hidden; cursor: pointer; font-size: 11px; color: #97a3b4; margin-right: 5px; }
   table.data tbody tr:hover .rowbtn { visibility: visible; }
   .rowbtn:hover { color: #1a4fa0; }
-  #multiWrap .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
-  #multiWrap .block-title:first-child { margin-top: 0; }
-  #multiWrap .tscroll { overflow-x: auto; margin-bottom: 4px; }
+  .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
+  #multiWrap .block-title:first-child, #comboWrap .block-title:first-child { margin-top: 0; }
+  .tscroll { overflow-x: auto; margin-bottom: 4px; }
+  .cchart { position: relative; height: 300px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -88,6 +91,12 @@
       <select id="startSel"></select>
       <span style="font-size:12px;color:#888">~</span>
       <select id="endSel"></select>
+      <span id="scrollBtns" style="display:none">
+        <button id="scrollL" title="반 화면 왼쪽으로" style="padding:6px 10px;font-size:13px;
+          border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px 0 0 4px">◀</button><button
+          id="scrollR" title="반 화면 오른쪽으로" style="padding:6px 10px;font-size:13px;
+          border:1px solid #c8d0dc;border-left:0;background:#fff;cursor:pointer;border-radius:0 4px 4px 0">▶</button>
+      </span>
       <button id="restoreBtn" style="display:none;padding:6px 14px;font-size:13px;
         border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px"></button>
       <button id="exportBtn" style="margin-left:auto;padding:6px 14px;font-size:13px;
@@ -106,6 +115,7 @@
       <div id="chartWrap"><canvas id="chart"></canvas></div>
       <div id="tableWrap" style="display:none"></div>
       <div id="multiWrap" style="display:none"></div>
+      <div id="comboWrap" style="display:none"></div>
       <div class="series-picker" id="seriesPicker"></div>
     </div>
   </main>
@@ -120,7 +130,8 @@ let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
 
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
-const lagYoY = () => current.freq === 'Q' ? 4 : current.freq === 'A' ? 1 : 12;
+const lagYoY = () =>
+  ({ Q: 4, A: 1, W: 52, M: 12 }[current.freq] || 12);
 const stripCode = n => n.replace(/ \[[^\]]*\]$/, '');
 // 잔차 성격이라 증감률(%)이 무의미한 항목 (0 근처 → 증감률 폭발)
 const NO_GROWTH = new Set(['재고증감 및 귀중품 순취득', '통계상 불일치', '통계상불일치']);
@@ -273,35 +284,46 @@ function updateMeta() {
         : `단위: ${MODE_LABELS[mode]}`;
     return;
   }
+  const freqLabel = { Q: '분기', M: '월', A: '연간', W: '주간' }[current.freq] || current.freq;
+  if (view === 'multi' || view === 'combo') {   // 블록마다 단위가 있으므로 생략
+    document.getElementById('metaLine').textContent =
+      `주기: ${freqLabel} · 갱신: ${current.updated_at}`;
+    return;
+  }
   const unitLabel = mode === 'level' ? current.unit : MODE_LABELS[mode];
-  const freqLabel = { Q: '분기', M: '월', A: '연간' }[current.freq] || current.freq;
   document.getElementById('metaLine').textContent =
     `단위: ${unitLabel} · 주기: ${freqLabel} · 갱신: ${current.updated_at}`;
 }
 
 function refresh() {
   updateMeta();
-  const isCmp = view === 'compare';
+  const isCmp = view === 'compare', isCombo = view === 'combo';
   document.getElementById('chartWrap').style.display =
     (view === 'chart' || isCmp) ? '' : 'none';
   document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
   document.getElementById('tableWrap').style.display = view === 'table' ? '' : 'none';
   document.getElementById('multiWrap').style.display = view === 'multi' ? '' : 'none';
-  document.getElementById('modeButtons').style.display = view === 'multi' ? 'none' : '';
-  document.getElementById('viewButtons').style.display = isCmp ? 'none' : '';
+  document.getElementById('comboWrap').style.display = isCombo ? '' : 'none';
+  document.getElementById('modeButtons').style.display =
+    (view === 'multi' || isCombo) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
+  document.getElementById('scrollBtns').style.display =
+    (view === 'table' || view === 'multi' || isCombo) ? '' : 'none';
   updateRestoreBtn();
-  if (isCmp) drawCompare();
+  if (isCombo) renderCombo();
+  else if (isCmp) drawCompare();
   else if (view === 'chart') draw();
   else if (view === 'table') renderTable();
   else renderMulti();
 }
 
 function dateLabel(d) {
-  const [y, m] = d.split('-');
+  const [y, m, dd] = d.split('-');
   const yy = "'" + y.slice(2);
   if (view === 'compare' || !current) return `${yy}.${m}`;
   if (current.freq === 'A') return y;
+  if (current.freq === 'W') return `${yy}.${m}.${dd}`;
   return current.freq === 'Q' ? `${yy}.${Math.ceil(+m / 3)}Q` : `${yy}.${m}`;
 }
 
@@ -444,7 +466,7 @@ let compareList = [];   // {indId, indName, sName, freq, data}
 function transformData(data, freq) {
   if (mode === 'level' || !MODE_LABELS[mode]) return data;
   if (mode === 'pop') return popChange(data, 1);
-  return popChange(data, freq === 'Q' ? 4 : freq === 'A' ? 1 : 12);   // yoy
+  return popChange(data, { Q: 4, A: 1, W: 52, M: 12 }[freq] || 12);   // yoy
 }
 
 function drawCompare() {
@@ -546,6 +568,148 @@ async function addCompare() {
   renderChips(); updateComparePeriods(); refresh();
 }
 
+// ── 주간 아파트 매매&전세 동향 (매매·전세·수급 종합) ──────────
+const APT_COMBO = {
+  id: 'apt_weekly',
+  name: '주간 아파트 매매&전세 동향',
+  ids: ['kr_apt_sale_idx', 'kr_apt_jeonse_idx', 'kr_apt_sale_demand'],
+};
+let comboData = null;
+let comboCharts = [];
+
+const wow = s => popChange(s.data, 1).filter(p => inRange(p.d));   // 주간변동률
+const lvl = s => s.data.filter(p => inRange(p.d));                 // 원지수
+const cum = s => {                                                 // 누적변동률 (기간 시작=0)
+  const data = s.data.filter(p => inRange(p.d));
+  if (!data.length) return [];
+  const base = data[0].v;
+  return base ? data.map(p => ({ d: p.d, v: (p.v / base - 1) * 100 })) : [];
+};
+function findSer(ind, kw) {
+  return ind.series.find(x => x.name === kw)
+    || ind.series.find(x => x.name.includes(kw)) || null;
+}
+
+async function enterCombo() {
+  const [sale, jeonse, demand] = await Promise.all(
+    APT_COMBO.ids.map(id => loadIndicator(id).catch(() => null)));
+  if (!sale || !jeonse || !demand) {
+    alert('부동산 데이터가 없습니다. fetch.py를 먼저 실행하세요.');
+    return;
+  }
+  comboData = { sale, jeonse, demand };
+  current = { id: APT_COMBO.id, name: APT_COMBO.name, freq: 'W', unit: '지수',
+              updated_at: sale.updated_at, series: [] };
+  view = 'combo';
+  document.getElementById('title').textContent = APT_COMBO.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + sale.updated_at;
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('active', b.id === 'aptComboBtn'));
+  // 기간: 세 지표 날짜 합집합, 기본 최근 1년(52주)
+  const ds = new Set();
+  [sale, jeonse, demand].forEach(ind =>
+    ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 52)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderCombo() {
+  comboCharts.forEach(c => c.destroy());
+  comboCharts = [];
+  const { sale, jeonse, demand } = comboData;
+
+  const chartDefs = [
+    { title: '매매가격지수 주간변동률 (%) — 전국 vs 서울',
+      baseline: 0,
+      sets: [['전국 매매', findSer(sale, '전국'), wow],
+             ['서울 매매', findSer(sale, '서울'), wow]] },
+    { title: '서울 아파트 매매 vs 전세 주간변동률 (%)',
+      baseline: 0,
+      sets: [['서울 매매', findSer(sale, '서울'), wow],
+             ['서울 전세', findSer(jeonse, '서울'), wow]] },
+    { title: '서울 동남권 매매수급지수 (기준=100)',
+      baseline: 100,
+      sets: [['서울 동남권 수급', findSer(demand, '동남') || findSer(demand, '서울'), lvl]] },
+  ];
+  const tableDefs = [
+    ['매매가격지수 주간변동률 (%)', sale, wow, 2],
+    ['전세가격지수 주간변동률 (%)', jeonse, wow, 2],
+    ['매매수급지수 (기준=100)', demand, lvl, 1],
+  ];
+
+  let html = '';
+  chartDefs.forEach((cd, i) => {
+    html += `<div class="block-title">${cd.title}</div>`
+      + `<div class="cchart"><canvas id="cchart${i}"></canvas></div>`;
+  });
+  tableDefs.forEach(([title, ind, fn, dec]) => {
+    const dates = [...new Set(ind.series.flatMap(s => fn(s).map(p => p.d)))].sort();
+    html += `<div class="block-title">${title}</div><div class="tscroll">`
+      + '<table class="data vlines"><thead><tr><th>지역</th>'
+      + dates.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    ind.series.forEach(s => {
+      const m = new Map(fn(s).map(p => [p.d, p.v]));
+      html += `<tr><td>${s.name}</td>` + dates.map(d => {
+        const v = m.get(d);
+        const txt = v == null ? ''
+          : v.toLocaleString('ko-KR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+      }).join('') + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  const wrap = document.getElementById('comboWrap');
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.tscroll').forEach(w => { w.scrollLeft = w.scrollWidth; });
+
+  chartDefs.forEach((cd, i) => {
+    const labelSet = new Set();
+    const datasets = cd.sets.filter(([, s]) => s).map(([nm, s, fn], j) => {
+      const data = fn(s);
+      data.forEach(p => labelSet.add(p.d));
+      return {
+        label: nm, data: data.map(p => ({ x: p.d, y: p.v })),
+        borderColor: PALETTE[j % PALETTE.length],
+        backgroundColor: PALETTE[j % PALETTE.length],
+        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15,
+      };
+    });
+    // 기준선 (변동률 0 / 수급지수 100) — 범례에는 표시하지 않음
+    if (cd.baseline != null) {
+      const ls = [...labelSet].sort();
+      datasets.push({
+        label: '__baseline__',
+        data: ls.map(d => ({ x: d, y: cd.baseline })),
+        borderColor: '#9aa7b8', borderWidth: 1, borderDash: [6, 4],
+        pointRadius: 0, pointHitRadius: 0,
+      });
+    }
+    comboCharts.push(new Chart(document.getElementById('cchart' + i), {
+      type: 'line',
+      data: { labels: [...labelSet].sort(), datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true, position: 'bottom',
+          labels: { font: { size: 11 }, filter: it => it.text !== '__baseline__' } },
+          tooltip: { filter: it => it.dataset.label !== '__baseline__' } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 10, font: { size: 11 },
+               callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 11 } } },
+        },
+      },
+    }));
+  });
+}
+
 // ── 엑셀 다운로드 ─────────────────────────────────────────────
 function sheetFromMode(md) {
   const saved = mode; mode = md;
@@ -581,6 +745,22 @@ function exportExcel() {
     XLSX.writeFile(wb, `compare_${today}.xlsx`);
     return;
   }
+  if (view === 'combo') {
+    if (!comboData) { alert('데이터가 없습니다.'); return; }
+    const { sale, jeonse, demand } = comboData;
+    [['매매_주간변동률', sale, wow], ['전세_주간변동률', jeonse, wow],
+     ['매매수급지수', demand, lvl]].forEach(([nm, ind, fn]) => {
+      const dates = [...new Set(ind.series.flatMap(s => fn(s).map(p => p.d)))].sort();
+      const aoa = [['지역', ...dates.map(dateLabel)]];
+      ind.series.forEach(s => {
+        const m = new Map(fn(s).map(p => [p.d, p.v]));
+        aoa.push([s.name, ...dates.map(d => m.get(d) ?? null)]);
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nm);
+    });
+    XLSX.writeFile(wb, `apt_weekly_${today}.xlsx`);
+    return;
+  }
   if (view === 'multi') {
     [['원자료', 'level'], ['QoQ', 'pop'], ['YoY', 'yoy'],
      ['기여도QoQ', 'cqoq'], ['기여도YoY', 'cyoy'], ['비중', 'share']].forEach(([nm, md]) => {
@@ -595,7 +775,7 @@ function exportExcel() {
 }
 
 async function select(id) {
-  if (view === 'compare') view = 'chart';
+  if (view === 'compare' || view === 'combo') view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
@@ -657,6 +837,17 @@ document.getElementById('viewButtons').addEventListener('click', e => {
     refresh();
   });
 });
+// 표 좌우 스크롤 (◀ ▶: 보이는 폭의 절반씩, 표 여러 개면 동시에)
+function scrollTables(dir) {
+  const els = [];
+  if (view === 'table') els.push(document.getElementById('tableWrap'));
+  if (view === 'multi') els.push(...document.querySelectorAll('#multiWrap .tscroll'));
+  if (view === 'combo') els.push(...document.querySelectorAll('#comboWrap .tscroll'));
+  els.forEach(el => el.scrollBy({ left: dir * el.clientWidth / 2, behavior: 'smooth' }));
+}
+document.getElementById('scrollL').onclick = () => scrollTables(-1);
+document.getElementById('scrollR').onclick = () => scrollTables(1);
+
 document.getElementById('restoreBtn').onclick = () => {
   hiddenRows = new Set();
   saveRowPrefs();
@@ -677,7 +868,20 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
+    let comboInserted = false;
     catalog.forEach(item => {
+      if (APT_COMBO.ids.includes(item.id)) {
+        // 부동산 3개 지표는 종합 메뉴 하나로 묶어서 표시
+        if (!comboInserted) {
+          const btn = document.createElement('button');
+          btn.id = 'aptComboBtn';
+          btn.textContent = APT_COMBO.name;
+          btn.onclick = enterCombo;
+          nav.appendChild(btn);
+          comboInserted = true;
+        }
+        return;
+      }
       const btn = document.createElement('button');
       btn.textContent = item.name;
       btn.dataset.id = item.id;

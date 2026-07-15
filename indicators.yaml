@@ -68,6 +68,46 @@ indicators:
       itmId: "T "
       objL1: "ALL"
 
+  # ── 부동산원 R-ONE (주간 아파트 지수, 전국·수도권·서울·서울권역) ──
+  - id: kr_apt_sale_idx
+    name: 아파트 매매가격지수 (주간)
+    source: reb
+    unit: 지수
+    freq: W
+    start_year: 2015
+    refetch_years: 1
+    params:
+      statbl_id: "T244183132827305"
+      itm_id: "10001"
+      cls_ids: ["50001", "50002", "50008", "50009", "50010",
+                "50011", "50012", "50013", "50014", "50015"]
+
+  - id: kr_apt_jeonse_idx
+    name: 아파트 전세가격지수 (주간)
+    source: reb
+    unit: 지수
+    freq: W
+    start_year: 2015
+    refetch_years: 1
+    params:
+      statbl_id: "T247713133046872"
+      itm_id: "10001"
+      cls_ids: ["50001", "50002", "50008", "50009", "50010",
+                "50011", "50012", "50013", "50014", "50015"]
+
+  - id: kr_apt_sale_demand
+    name: 아파트 매매수급동향 (주간)
+    source: reb
+    unit: 지수
+    freq: W
+    start_year: 2015
+    refetch_years: 1
+    params:
+      statbl_id: "T248163133074619"
+      itm_id: "10001"
+      cls_ids: ["50001", "50002", "50008", "50009", "50010",
+                "50011", "50012", "50013", "50014", "50015"]
+
   # ── ECOS (한국은행) ──────────────────────────────────────────
   - id: kr_household_credit
     name: 가계신용 (용도별, 분기)

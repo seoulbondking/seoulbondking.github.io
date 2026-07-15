@@ -25,6 +25,7 @@ jobs:
         env:
           KOSIS_API_KEY: ${{ secrets.KOSIS_API_KEY }}
           ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+          REB_API_KEY: ${{ secrets.REB_API_KEY }}
         run: python fetch.py
 
       - name: 변경사항 커밋

@@ -66,6 +66,22 @@ def merge_series(old_series: list, new_series: list) -> list:
     return merged
 
 
+def derive_annual(base_payload: dict) -> list:
+    """분기 시리즈를 연도별 합산해 연간 시리즈 생성 (4개 분기가 모두 있는 해만)."""
+    series = []
+    for s in base_payload["series"]:
+        by_year: dict[str, list] = {}
+        for p in s["data"]:
+            by_year.setdefault(p["d"][:4], []).append(p["v"])
+        data = [
+            {"d": f"{y}-12-31", "v": round(sum(vs), 1)}
+            for y, vs in sorted(by_year.items()) if len(vs) == 4
+        ]
+        if data:
+            series.append({"name": s["name"], "data": data})
+    return series
+
+
 def archive_start_year(payload: dict) -> int | None:
     """아카이브 JSON에서 가장 이른 관측 연도."""
     try:
@@ -94,35 +110,49 @@ def main():
 
     this_year = datetime.now(KST).year
     for ind in indicators:
-        fetch_fn = SOURCES.get(ind["source"])
-        if fetch_fn is None:
-            print(f"[skip] {ind['id']}: 알 수 없는 source '{ind['source']}'")
-            continue
-
-        # 수집 시작 연도 결정: 아카이브가 있으면 최근만(증분), 없으면 전체
-        target_start = ind.get("start_year") or this_year - ind.get("lookback_years", 10)
         out_path = DATA_DIR / f"{ind['id']}.json"
-        old = None
-        if not force_full and out_path.exists():
+        incremental = False
+
+        if ind["source"] == "derived":
+            # 파생 지표: 다른 지표의 아카이브에서 계산 (예: 분기 → 연간 합산)
+            base_path = DATA_DIR / f"{ind['params']['from']}.json"
             try:
-                old = json.loads(out_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                old = None
-        # 아카이브가 설정된 시작연도보다 늦게 시작하면 (예: 2011 > 2000) 전체 재수집
-        incremental = old is not None and (archive_start_year(old) or 9999) <= target_start
-        ind["_start_year"] = (
-            this_year - ind.get("refetch_years", 2) if incremental else target_start
-        )
+                base = json.loads(base_path.read_text(encoding="utf-8"))
+                series = derive_annual(base)
+            except Exception as e:
+                print(f"[fail] {ind['id']}: 기반 지표({ind['params']['from']}) 오류 - {e}")
+                failures.append(ind["id"])
+                continue
+            ind["_start_year"] = archive_start_year({"series": series}) or "-"
+        else:
+            fetch_fn = SOURCES.get(ind["source"])
+            if fetch_fn is None:
+                print(f"[skip] {ind['id']}: 알 수 없는 source '{ind['source']}'")
+                continue
 
-        try:
-            series = fetch_fn(ind)
-        except Exception as e:  # 한 지표 실패가 전체를 막지 않도록
-            print(f"[fail] {ind['id']}: {e}")
-            failures.append(ind["id"])
-            continue
+            # 수집 시작 연도 결정: 아카이브가 있으면 최근만(증분), 없으면 전체
+            target_start = ind.get("start_year") or this_year - ind.get("lookback_years", 10)
+            old = None
+            if not force_full and out_path.exists():
+                try:
+                    old = json.loads(out_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    old = None
+            # 아카이브가 설정된 시작연도보다 늦게 시작하면 (예: 2011 > 2000) 전체 재수집
+            incremental = old is not None and (archive_start_year(old) or 9999) <= target_start
+            ind["_start_year"] = (
+                this_year - ind.get("refetch_years", 2) if incremental else target_start
+            )
 
-        if incremental:
-            series = merge_series(old["series"], series)
+            try:
+                series = fetch_fn(ind)
+            except Exception as e:  # 한 지표 실패가 전체를 막지 않도록
+                print(f"[fail] {ind['id']}: {e}")
+                failures.append(ind["id"])
+                continue
+
+            if incremental:
+                series = merge_series(old["series"], series)
 
         # series_first 에 지정된 항목(총계 등)을 맨 앞으로 정렬
         pinned = ind.get("series_first", [])

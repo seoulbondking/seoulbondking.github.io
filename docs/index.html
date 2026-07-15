@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KR Macro Dashboard</title>
+<title>Macrobox</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -52,6 +52,11 @@
   table.data tr.sep-dot td { border-bottom: 1px dotted #b0bac7; }    /* 점선 */
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
+  table.data tr.hl td { background: #fff3c4; }               /* 강조 행 */
+  table.data tbody tr.hl:hover td { background: #ffeda8; }
+  .rowbtn { visibility: hidden; cursor: pointer; font-size: 11px; color: #97a3b4; margin-right: 5px; }
+  table.data tbody tr:hover .rowbtn { visibility: visible; }
+  .rowbtn:hover { color: #1a4fa0; }
   #multiWrap .block-title { margin: 16px 0 6px; font-size: 14px; font-weight: 700; color: #1a2b4a; }
   #multiWrap .block-title:first-child { margin-top: 0; }
   #multiWrap .tscroll { overflow-x: auto; margin-bottom: 4px; }
@@ -59,7 +64,7 @@
 </head>
 <body>
 <header>
-  <h1>KR Macro Dashboard</h1>
+  <h1>Macrobox</h1>
   <span class="updated" id="updatedAt"></span>
 </header>
 <div class="layout">
@@ -83,6 +88,8 @@
       <select id="startSel"></select>
       <span style="font-size:12px;color:#888">~</span>
       <select id="endSel"></select>
+      <button id="restoreBtn" style="display:none;padding:6px 14px;font-size:13px;
+        border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px"></button>
       <button id="exportBtn" style="margin-left:auto;padding:6px 14px;font-size:13px;
         border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px">엑셀 다운로드</button>
     </div>
@@ -113,7 +120,35 @@ let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
 
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
-const lagYoY = () => current.freq === 'Q' ? 4 : 12;
+const lagYoY = () => current.freq === 'Q' ? 4 : current.freq === 'A' ? 1 : 12;
+const stripCode = n => n.replace(/ \[[^\]]*\]$/, '');
+// 잔차 성격이라 증감률(%)이 무의미한 항목 (0 근처 → 증감률 폭발)
+const NO_GROWTH = new Set(['재고증감 및 귀중품 순취득', '통계상 불일치', '통계상불일치']);
+
+// 항목 숨기기/강조 (지표별로 브라우저에 저장)
+let hiddenRows = new Set(), hlRows = new Set();
+function loadRowPrefs() {
+  try {
+    hiddenRows = new Set(JSON.parse(localStorage.getItem('hide_' + current.id) || '[]'));
+    hlRows = new Set(JSON.parse(localStorage.getItem('hl_' + current.id) || '[]'));
+  } catch (e) { hiddenRows = new Set(); hlRows = new Set(); }
+}
+function saveRowPrefs() {
+  try {
+    localStorage.setItem('hide_' + current.id, JSON.stringify([...hiddenRows]));
+    localStorage.setItem('hl_' + current.id, JSON.stringify([...hlRows]));
+  } catch (e) { /* 사파리 프라이빗 모드 등 */ }
+}
+function nameCell(name) {
+  return `<td><span class="rowbtn" data-name="${name}" data-act="hide" title="이 항목 숨기기">✕</span>`
+    + `<span class="rowbtn" data-name="${name}" data-act="hl" title="강조">★</span>${name}</td>`;
+}
+function updateRestoreBtn() {
+  const b = document.getElementById('restoreBtn');
+  const show = hiddenRows.size > 0 && (view === 'table' || view === 'multi');
+  b.style.display = show ? '' : 'none';
+  if (show) b.textContent = `숨긴 항목 ${hiddenRows.size}개 복원`;
+}
 
 // file://(더블클릭)에서도 동작하도록 fetch 대신 <script> 태그로 데이터 로드
 function loadScript(path) {
@@ -147,6 +182,7 @@ function popChange(data, lag) {   // 전기비/전년동기비 (%)
 // level/pop/yoy: 자체 데이터만 사용 · cqoq/cyoy/share: GDP 총계(첫 시리즈) 기준
 function transformSeries(s) {
   if (mode === 'level') return s.data;
+  if ((mode === 'pop' || mode === 'yoy') && NO_GROWTH.has(stripCode(s.name))) return [];
   if (mode === 'pop') return popChange(s.data, 1);
   if (mode === 'yoy') return popChange(s.data, lagYoY());
 
@@ -216,13 +252,12 @@ const GDP_LEVELS = {
   '통계상 불일치': 0,
 };
 // 행 사이 구분선: 위 또는 아래가 큰 구분(lv0)이면 진한 실선, 세부 내역 사이는 점선
-function gdpRowAttr(names, i) {
-  const key = n => n.replace(/ \[[^\]]*\]$/, '');   // 중복분리 접미사 제거
-  const lv = GDP_LEVELS[key(names[i])];
-  if (lv === undefined) return '';
-  const nxt = i + 1 < names.length ? GDP_LEVELS[key(names[i + 1])] : 0;
+function gdpRowAttr(names, i, extra = '') {
+  const lv = GDP_LEVELS[stripCode(names[i])];
+  if (lv === undefined) return extra ? ` class="${extra}"` : '';
+  const nxt = i + 1 < names.length ? GDP_LEVELS[stripCode(names[i + 1])] : 0;
   const sep = (lv === 0 || nxt === 0 || nxt === undefined) ? 'sep-solid' : 'sep-dot';
-  return ` class="lv${lv} ${sep}"`;
+  return ` class="lv${lv} ${sep}${extra ? ' ' + extra : ''}"`;
 }
 const isGdp = () => current.series.length > 0 && current.series[0].name.includes('국내총생산');
 
@@ -239,8 +274,9 @@ function updateMeta() {
     return;
   }
   const unitLabel = mode === 'level' ? current.unit : MODE_LABELS[mode];
+  const freqLabel = { Q: '분기', M: '월', A: '연간' }[current.freq] || current.freq;
   document.getElementById('metaLine').textContent =
-    `단위: ${unitLabel} · 주기: ${current.freq === 'Q' ? '분기' : '월'} · 갱신: ${current.updated_at}`;
+    `단위: ${unitLabel} · 주기: ${freqLabel} · 갱신: ${current.updated_at}`;
 }
 
 function refresh() {
@@ -254,6 +290,7 @@ function refresh() {
   document.getElementById('modeButtons').style.display = view === 'multi' ? 'none' : '';
   document.getElementById('viewButtons').style.display = isCmp ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
+  updateRestoreBtn();
   if (isCmp) drawCompare();
   else if (view === 'chart') draw();
   else if (view === 'table') renderTable();
@@ -264,6 +301,7 @@ function dateLabel(d) {
   const [y, m] = d.split('-');
   const yy = "'" + y.slice(2);
   if (view === 'compare' || !current) return `${yy}.${m}`;
+  if (current.freq === 'A') return y;
   return current.freq === 'Q' ? `${yy}.${Math.ceil(+m / 3)}Q` : `${yy}.${m}`;
 }
 
@@ -274,16 +312,17 @@ function renderMulti() {
   const gmap = new Map(total.data.map(p => [p.d, p.v]));
   const dates = total.data.map(p => p.d);
   const idx = new Map(dates.map((d, i) => [d, i]));
-  const items = current.series.filter(s => !s.name.includes('['));  // 중복분리 하위항목 제외
+  const items = current.series.filter(s =>
+    !s.name.includes('[') && !hiddenRows.has(s.name));  // 중복분리 하위항목·숨긴 항목 제외
   const lagY = lagYoY();
   const cols = dates.filter(inRange);
   const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? dates[i - lag] : null; };
 
   const metrics = [
-    { title: '성장률 — 전기비 (QoQ, %)', dec: 1,
+    { title: '성장률 — 전기비 (QoQ, %)', dec: 1, growth: true,
       fn: (m, d) => { const p = prevD(d, 1), a = m.get(d), b = p && m.get(p);
         return a != null && b ? (a / b - 1) * 100 : null; } },
-    { title: '성장률 — 전년동기비 (YoY, %)', dec: 1,
+    { title: '성장률 — 전년동기비 (YoY, %)', dec: 1, growth: true,
       fn: (m, d) => { const p = prevD(d, lagY), a = m.get(d), b = p && m.get(p);
         return a != null && b ? (a / b - 1) * 100 : null; } },
     { title: '성장 기여도 — 전기비 (QoQ, %p)', dec: 2,
@@ -299,8 +338,11 @@ function renderMulti() {
         return a != null && g ? a / g * 100 * (ded ? -1 : 1) : null; } },
   ];
 
+  // 연간 지표는 전기비 = 전년비이므로 QoQ 블록 생략
+  const shown = current.freq === 'A'
+    ? metrics.filter(met => !met.title.includes('전기비')) : metrics;
   let out = '';
-  metrics.forEach(met => {
+  shown.forEach(met => {
     let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
       + '<table class="data vlines"><thead><tr><th>항목</th>'
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
@@ -308,8 +350,10 @@ function renderMulti() {
     items.forEach((s, si) => {
       const m = new Map(s.data.map(p => [p.d, p.v]));
       const ded = s.name.startsWith('(공제)');
-      html += `<tr${gdpRowAttr(itemNames, si)}><td>${s.name}</td>` + cols.map(d => {
-        const v = met.fn(m, d, ded);
+      const nog = met.growth && NO_GROWTH.has(stripCode(s.name));   // 잔차 항목 증감률 표시 안 함
+      const hl = hlRows.has(s.name) ? 'hl' : '';
+      html += `<tr${gdpRowAttr(itemNames, si, hl)}>${nameCell(s.name)}` + cols.map(d => {
+        const v = nog ? null : met.fn(m, d, ded);
         const txt = v == null ? ''
           : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
         return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
@@ -323,10 +367,12 @@ function renderMulti() {
 
 // 엑셀처럼 항목(행) × 기간(열) 수치 표
 function renderTable() {
-  const rows = current.series.map(s => ({
-    name: s.name,
-    map: new Map(transformSeries(s).map(p => [p.d, p.v])),
-  }));
+  const rows = current.series
+    .filter(s => !hiddenRows.has(s.name))
+    .map(s => ({
+      name: s.name,
+      map: new Map(transformSeries(s).map(p => [p.d, p.v])),
+    }));
   const dateSet = new Set();
   rows.forEach(r => r.map.forEach((v, d) => dateSet.add(d)));
   const dates = [...dateSet].sort().filter(inRange);
@@ -341,7 +387,9 @@ function renderTable() {
   let html = `<table class="data${cls}"><thead><tr><th>항목</th>`
     + dates.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach((r, ri) => {
-    html += `<tr${isGdp() ? gdpRowAttr(rowNames, ri) : ''}><td>${r.name}</td>` + dates.map(d => {
+    const hl = hlRows.has(r.name) ? 'hl' : '';
+    const attr = isGdp() ? gdpRowAttr(rowNames, ri, hl) : (hl ? ` class="${hl}"` : '');
+    html += `<tr${attr}>${nameCell(r.name)}` + dates.map(d => {
       const v = r.map.get(d);
       return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`;
     }).join('') + '</tr>';
@@ -396,7 +444,7 @@ let compareList = [];   // {indId, indName, sName, freq, data}
 function transformData(data, freq) {
   if (mode === 'level' || !MODE_LABELS[mode]) return data;
   if (mode === 'pop') return popChange(data, 1);
-  return popChange(data, freq === 'Q' ? 4 : 12);   // yoy (기여도/비중은 비교에서 미지원)
+  return popChange(data, freq === 'Q' ? 4 : freq === 'A' ? 1 : 12);   // yoy
 }
 
 function drawCompare() {
@@ -501,9 +549,11 @@ async function addCompare() {
 // ── 엑셀 다운로드 ─────────────────────────────────────────────
 function sheetFromMode(md) {
   const saved = mode; mode = md;
-  const rows = current.series.map(s => ({
-    name: s.name, map: new Map(transformSeries(s).map(p => [p.d, p.v])),
-  }));
+  const rows = current.series
+    .filter(s => !hiddenRows.has(s.name))
+    .map(s => ({
+      name: s.name, map: new Map(transformSeries(s).map(p => [p.d, p.v])),
+    }));
   mode = saved;
   const dateSet = new Set();
   rows.forEach(r => r.map.forEach((v, d) => dateSet.add(d)));
@@ -577,6 +627,7 @@ async function select(id) {
   startSel.value = startD; endSel.value = endD;
   // 기본으로 첫 3개 시리즈 표시
   visible = new Set(current.series.slice(0, 3).map(s => s.name));
+  loadRowPrefs();   // 이 지표의 숨김/강조 설정 복원
   render();
 }
 
@@ -594,6 +645,23 @@ document.getElementById('viewButtons').addEventListener('click', e => {
     b.classList.toggle('active', b.dataset.view === view));
   refresh();
 });
+// 항목 숨기기(✕)·강조(★) 버튼 (표·종합 공통, 이벤트 위임)
+['tableWrap', 'multiWrap'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    const t = e.target;
+    if (!t.classList || !t.classList.contains('rowbtn')) return;
+    const name = t.dataset.name;
+    if (t.dataset.act === 'hide') hiddenRows.add(name);
+    else hlRows.has(name) ? hlRows.delete(name) : hlRows.add(name);
+    saveRowPrefs();
+    refresh();
+  });
+});
+document.getElementById('restoreBtn').onclick = () => {
+  hiddenRows = new Set();
+  saveRowPrefs();
+  refresh();
+};
 document.getElementById('startSel').onchange = e => {
   startD = e.target.value;
   if (endD < startD) { endD = startD; document.getElementById('endSel').value = endD; }

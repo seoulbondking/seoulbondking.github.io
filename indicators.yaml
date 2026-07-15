@@ -10,7 +10,7 @@
 # ─────────────────────────────────────────────────────────────
 indicators:
   - id: kr_gdp_real
-    name: 실질 국내총생산 (계절조정, 연쇄)
+    name: 실질 국내총생산 (계절조정, 분기)
     source: kosis
     unit: 십억원
     freq: Q
@@ -24,7 +24,7 @@ indicators:
       objL1: "ALL"
 
   - id: kr_gdp_nominal
-    name: 명목 국내총생산 (계절조정)
+    name: 명목 국내총생산 (계절조정, 분기)
     source: kosis
     unit: 십억원
     freq: Q
@@ -36,6 +36,25 @@ indicators:
       tblId: "DT_200Y107"
       itmId: "13103136276999 "
       objL1: "ALL"
+
+  # 연간 GDP: 분기 아카이브를 연도별 합산해 자동 생성 (API 호출 없음)
+  - id: kr_gdp_real_annual
+    name: 실질 국내총생산 (연간)
+    source: derived
+    unit: 십억원
+    freq: A
+    params:
+      from: kr_gdp_real
+      method: annual_sum
+
+  - id: kr_gdp_nominal_annual
+    name: 명목 국내총생산 (연간)
+    source: derived
+    unit: 십억원
+    freq: A
+    params:
+      from: kr_gdp_nominal
+      method: annual_sum
 
   - id: kr_cpi
     name: 소비자물가지수 (2020=100)

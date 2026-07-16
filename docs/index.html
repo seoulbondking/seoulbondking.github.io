@@ -6,28 +6,51 @@
 <title>Macrobox</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background: #f4f6f9; color: #222; }
-  header { background: #1a2b4a; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; }
+  header { background: linear-gradient(90deg, #17233d, #24365c); color: #fff; padding: 14px 24px;
+    display: flex; align-items: baseline; gap: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
   header h1 { font-size: 18px; }
   header .updated { font-size: 12px; color: #9fb3d1; }
   .layout { display: flex; min-height: calc(100vh - 50px); }
-  nav { width: 230px; background: #fff; border-right: 1px solid #e0e4ea; padding: 12px 0; flex-shrink: 0; }
-  nav button { display: block; width: 100%; text-align: left; padding: 10px 18px; border: 0; background: none;
-               cursor: pointer; font-size: 13.5px; color: #333; }
-  nav button:hover { background: #eef2f8; }
-  nav button.active { background: #e3ecfb; color: #1a4fa0; font-weight: 700; border-right: 3px solid #1a4fa0; }
+  nav { width: 232px; background: #fff; border-right: 1px solid #e8ebf1; padding: 12px 10px; flex-shrink: 0; }
+  nav button { display: block; width: 100%; text-align: left; padding: 9px 14px; border: 0; background: none;
+               cursor: pointer; font-size: 13.5px; color: #3a4457; border-radius: 9px; margin-bottom: 2px;
+               transition: background .12s, color .12s; }
+  nav button:hover { background: #f0f3f9; color: #1a2b4a; }
+  nav button.active { background: #e9f0fc; color: #1a4fa0; font-weight: 700;
+    box-shadow: inset 3px 0 0 #1a4fa0; }
   main { flex: 1; padding: 20px 24px; min-width: 0; }
   .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
              position: sticky; top: 0; z-index: 30; background: #f4f6f9;
              padding: 10px 0; box-shadow: 0 4px 6px -4px rgba(0,0,0,.12); }
-  .toolbar .mode button { padding: 6px 14px; font-size: 13px; border: 1px solid #c8d0dc; background: #fff; cursor: pointer; }
-  .toolbar .mode button:first-child { border-radius: 4px 0 0 4px; }
-  .toolbar .mode button:last-child { border-radius: 0 4px 4px 0; }
-  .toolbar .mode button.active { background: #1a4fa0; color: #fff; border-color: #1a4fa0; }
-  .toolbar select { padding: 6px; font-size: 13px; border: 1px solid #c8d0dc; border-radius: 4px; }
-  .card { background: #fff; border: 1px solid #e0e4ea; border-radius: 8px; padding: 18px; }
+  /* 세그먼트 컨트롤 (종합/표/차트, 모드, 탭 등) */
+  .mode { display: inline-flex; background: #eceff5; border-radius: 10px; padding: 3px; gap: 2px; }
+  .mode button { padding: 6px 14px; font-size: 13px; border: 0; background: transparent;
+    color: #5a6683; cursor: pointer; border-radius: 8px; font-weight: 600; transition: all .15s ease; }
+  .mode button:hover { color: #1a2b4a; }
+  .mode button.active { background: #fff; color: #1a4fa0;
+    box-shadow: 0 1px 3px rgba(20,40,80,.16); }
+  select { padding: 7px 11px; font-size: 13px; border: 1px solid #d7dde8; border-radius: 9px;
+    background: #fff; color: #2a3242; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  select:hover { border-color: #b7c1d4; }
+  select:focus { outline: 0; border-color: #1a4fa0; box-shadow: 0 0 0 3px rgba(26,79,160,.12); }
+  /* 일반 버튼 공통 폴리시 (인라인 스타일 버튼에도 부드러운 전환) */
+  button { transition: all .15s ease; }
+  /* 보조 버튼(엑셀·스크롤·추가 등) 모던 폴리시 — 인라인 스타일 덮어쓰기 */
+  #exportBtn, #restoreBtn, #cuClear, #grpExpand, #grpCollapse {
+    border-radius: 9px !important; border-color: #d7dde8 !important; font-weight: 500; color: #3a4457; }
+  #exportBtn:hover, #restoreBtn:hover, #cuClear:hover, #grpExpand:hover, #grpCollapse:hover {
+    border-color: #b7c1d4 !important; background: #f6f8fc !important; }
+  #cuAdd { border-radius: 9px !important; box-shadow: 0 1px 3px rgba(26,79,160,.25); }
+  #cuAdd:hover { background: #14448f !important; }
+  #scrollL { border-radius: 9px 0 0 9px !important; }
+  #scrollR { border-radius: 0 9px 9px 0 !important; }
+  #scrollL:hover, #scrollR:hover { background: #f6f8fc !important; }
+  .card { background: #fff; border: 1px solid #e8ebf1; border-radius: 14px; padding: 20px;
+    box-shadow: 0 2px 10px rgba(20,40,80,.05); }
   .card h2 { font-size: 15px; margin-bottom: 4px; }
   .card .meta { font-size: 12px; color: #888; margin-bottom: 12px; }
   #chartWrap { position: relative; height: 460px; }
@@ -39,8 +62,14 @@
   table.data th, table.data td { padding: 5px 10px; text-align: right; border-bottom: 1px solid #eef1f5; }
   table.data thead th { background: #f0f3f8; position: sticky; top: 0; font-weight: 700; }
   table.data th:first-child, table.data td:first-child {
-    text-align: left; position: sticky; left: 0; background: #fff; border-right: 1px solid #e0e4ea; }
-  table.data thead th:first-child { background: #f0f3f8; z-index: 2; }
+    text-align: left; position: sticky; left: 0; background: #fff; z-index: 1;
+    min-width: 130px; box-shadow: 1px 0 0 #d5dbe4; }
+  table.data thead th:first-child { background: #f0f3f8;
+    position: sticky; top: 0; left: 0; z-index: 4; }
+  /* 고정 첫 열: 트리 그룹/강조 행도 배경 유지 */
+  table.data tr.p1 td { background: #eaeef4; border-top: 2px solid #9aa7b8; }
+  table.data tr.hl td:first-child { background: #fff3c4; }
+  table.data tr.xrow td:first-child { background: #e3ecfb; }
   table.data tbody tr:hover td { background: #f5f8fd; }
   table.data tbody tr:hover td:first-child { background: #f5f8fd; }
   table.data tbody tr:first-child { font-weight: 700; }
@@ -54,6 +83,11 @@
   table.data tr.sep-dot td { border-bottom: 1px dotted #b0bac7; }    /* 점선 */
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
+  table.data tr.lv3 td:first-child { padding-left: 56px; }
+  table.data tr.rlv1 td:first-child { padding-left: 22px; }
+  table.data tr.rlv2 td:first-child { padding-left: 38px; }
+  table.data tr.rlv3 td:first-child { padding-left: 54px; color: #445; }
+  table.data tr.rlv1 td:first-child, table.data tr.rlv2 td:first-child { font-weight: 600; }
   table.data tr.hl td { background: #fff3c4; }               /* 강조 행 */
   table.data tbody tr.hl:hover td { background: #ffeda8; }
   .rowbtn { visibility: hidden; cursor: pointer; font-size: 11px; color: #97a3b4; margin-right: 5px; }
@@ -69,6 +103,25 @@
   #multiWrap .block-title:first-child, #comboWrap .block-title:first-child { margin-top: 0; }
   .tscroll { overflow-x: auto; margin-bottom: 4px; }
   .cchart { position: relative; height: 300px; margin-bottom: 10px; }
+  /* 지역 카테고리 그룹 헤더 (접기/펴기) */
+  table.data tr.grp td { background: #eaeef4; font-weight: 700; cursor: pointer;
+    border-top: 2px solid #9aa7b8; color: #1a2b4a; position: sticky; left: 0; }
+  table.data tr.grp td:first-child { position: sticky; left: 0; z-index: 1; }
+  table.data tr.grp .caret { display: inline-block; width: 14px; color: #5c6b7a; }
+  /* 트리 접기 버튼 (+/−) */
+  .tcaret { display: inline-block; width: 15px; text-align: center; color: #1a4fa0;
+    font-weight: 700; cursor: pointer; user-select: none; }
+  .tcaret-sp { display: inline-block; width: 15px; }
+  table.data tr.parent td:first-child { cursor: pointer; }
+  table.data tr.p1 td:first-child { font-weight: 700; }
+  table.data tr.p2 td:first-child { font-weight: 600; }
+  .grpbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;
+    position: sticky; top: 62px; z-index: 20; background: #f4f6f9; padding: 8px 0; }
+  .grpbar button { font-size: 12px; padding: 4px 11px; border: 1px solid #d7dde8;
+    background: #fff; cursor: pointer; border-radius: 8px; font-weight: 500; }
+  .grpbar button:hover { border-color: #b7c1d4; }
+  .grpbar button.catbtn { background: #eaf1fd; color: #1a4fa0; border-color: #cadcf6; font-weight: 600; }
+  .grpbar button.catbtn.off { background: #fff; color: #98a3b6; border-color: #e0e5ec; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -121,7 +174,28 @@
       <div id="chartWrap"><canvas id="chart"></canvas></div>
       <div id="tableWrap" style="display:none"></div>
       <div id="multiWrap" style="display:none"></div>
+      <div id="aptTabs" class="mode" style="display:none;margin-bottom:12px">
+        <button data-at="chart" class="active">차트</button>
+        <button data-at="map">지도</button>
+        <button data-at="custom">사용자 설정</button>
+      </div>
       <div id="comboWrap" style="display:none"></div>
+      <div id="customWrap" style="display:none"></div>
+      <div id="mapWrap" style="display:none">
+        <div id="mapBar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <div class="mode" id="mapMetricBtns">
+            <button data-mm="sale" class="active">매매 변동률</button>
+            <button data-mm="jeonse">전세 변동률</button>
+            <button data-mm="demand">매매수급</button>
+          </div>
+          <span id="mapCrumb" style="font-size:13px;color:#333"></span>
+          <span id="mapAsof" style="font-size:12px;color:#888;margin-left:auto"></span>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div id="mapSvgBox" style="flex:1;min-width:320px"></div>
+          <div id="mapLegend" style="width:150px;font-size:12px"></div>
+        </div>
+      </div>
       <div class="series-picker" id="seriesPicker"></div>
     </div>
   </main>
@@ -304,24 +378,45 @@ function updateMeta() {
 function refresh() {
   updateMeta();
   const isCmp = view === 'compare', isCombo = view === 'combo';
+  const tab = isCombo ? comboTab : null;
+  document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('chartWrap').style.display =
     (view === 'chart' || isCmp) ? '' : 'none';
   document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
   document.getElementById('tableWrap').style.display = view === 'table' ? '' : 'none';
   document.getElementById('multiWrap').style.display = view === 'multi' ? '' : 'none';
-  document.getElementById('comboWrap').style.display = isCombo ? '' : 'none';
+  document.getElementById('comboWrap').style.display = (isCombo && tab === 'chart') ? '' : 'none';
+  document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
+  document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
     (view === 'multi' || isCombo) ? 'none' : '';
   document.getElementById('viewButtons').style.display = (isCmp || isCombo) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCombo) ? '' : 'none';
+    (view === 'table' || view === 'multi' || (isCombo && tab === 'chart')) ? '' : 'none';
+  document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
+  document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isCombo) renderCombo();
+  if (isCombo) {
+    if (tab === 'chart') renderCombo();
+    else if (tab === 'map') showMapTab();
+    else renderCustom();
+  }
   else if (isCmp) drawCompare();
   else if (view === 'chart') draw();
   else if (view === 'table') renderTable();
   else renderMulti();
+}
+
+function showMapTab() {
+  if (window.__GEO__) { mapLevel = mapLevel || 'sido'; renderMap(); return; }
+  document.getElementById('mapSvgBox').innerHTML = '<div style="padding:30px;color:#888">지도 불러오는 중…</div>';
+  loadGeo().then(ok => {
+    if (!ok) document.getElementById('mapSvgBox').innerHTML =
+      '<div style="padding:30px;color:#888">지도 데이터(geo/geo.js)가 없습니다.<br>'
+      + 'PC에서 <b>python tools/fetch_geo.py</b> 를 실행해 주세요.</div>';
+    else { mapLevel = 'sido'; mapZone = null; renderMap(); }
+  });
 }
 
 function dateLabel(d) {
@@ -582,6 +677,113 @@ const APT_COMBO = {
 };
 let comboData = null;
 let comboCharts = [];
+let comboTab = 'chart';   // 부동산 페이지 하위 탭: chart | map | custom
+let customLists = [[], []], customCharts = [null, null];   // 사용자 설정 차트 2개
+let collapsed = new Set();   // 접힌 트리 노드 key (그룹 g:key, 지역 catKey|지역명)
+
+// 트리 노드 목록. 대표 지역(전국·서울·인천·경기)이 있으면 그 지역이 곧 그룹 헤더가
+// 되어 이름이 중복되지 않는다. 대표가 없는 그룹(광역시·도)만 별도 헤더를 둔다.
+function buildComboTree(series) {
+  const nodes = [];
+  groupSeries(series).forEach(g => {
+    // 대표 지역이 있는 그룹(전국·서울·인천·경기)만 head 사용. 광역시·도(head=null)는 제외.
+    const hasHead = g.key === 'seoul' || CAT_HEAD[g.key] != null;
+    const head = hasHead ? g.items.find(s => regionLevel(g.key, s.name) === 0) : null;
+    if (head) {
+      nodes.push({ isGroup: true, hasData: true, key: 'g:' + g.key,
+                   label: baseName(head.name), series: head, level: 0,
+                   count: g.items.length - 1 });
+      g.items.forEach(s => {
+        if (s === head) return;
+        nodes.push({ isGroup: false, key: g.key + '|' + baseName(s.name),
+                     name: baseName(s.name), series: s, level: regionLevel(g.key, s.name) });
+      });
+    } else {
+      nodes.push({ isGroup: true, hasData: false, key: 'g:' + g.key, label: g.label,
+                   level: 0, count: g.items.length });
+      g.items.forEach(s => {
+        nodes.push({ isGroup: false, key: g.key + '|' + baseName(s.name),
+                     name: baseName(s.name), series: s, level: 1 });
+      });
+    }
+  });
+  for (let i = 0; i < nodes.length; i++)
+    nodes[i].hasChildren = i + 1 < nodes.length && nodes[i + 1].level > nodes[i].level;
+  return nodes;
+}
+
+// ── 지역 카테고리 분류 (부동산원 주간 아파트) ──────────────────
+// 경기 28개 시 + 자치구, 인천 자치구(구/동/서구는 광역시 중복이라 제외) 목록으로
+// 경기·인천을 구분하고, 나머지 시·구는 모두 '지방'으로 집계.
+// 서울 계층: 서울 › 강북/강남지역 › 5개 권역 › 자치구 (level 0~3)
+const SEOUL_SEQ = [
+  ['서울',0], ['강북지역',1],
+    ['도심권',2], ['종로구',3],['중구',3],['용산구',3],
+    ['동북권',2], ['성동구',3],['광진구',3],['동대문구',3],['중랑구',3],['성북구',3],['강북구',3],['도봉구',3],['노원구',3],
+    ['서북권',2], ['은평구',3],['서대문구',3],['마포구',3],
+  ['강남지역',1],
+    ['서남권',2], ['양천구',3],['강서구',3],['구로구',3],['금천구',3],['영등포구',3],['동작구',3],['관악구',3],
+    ['동남권',2], ['서초구',3],['강남구',3],['송파구',3],['강동구',3],
+];
+const SEOUL_ORDER = new Map(SEOUL_SEQ.map(([n], i) => [n, i]));
+const SEOUL_LEVEL = new Map(SEOUL_SEQ.map(([n, l]) => [n, l]));
+const SEOUL = new Set(SEOUL_SEQ.map(x => x[0]));
+
+// 카테고리별 소속 지역 (head = 그룹 대표, 나머지는 하위로 들여쓰기).
+// 광역시·도는 대표 지역만 표시하고 하위 구/시/군은 넣지 않는다.
+const CAT_DEFS = [
+  ['nation','전국·수도권·지방','전국',['전국','수도권','지방','지방권']],
+  ['incheon','인천','인천',['인천','남동구','부평구','계양구','연수구','미추홀구','강화군','옹진구']],
+  ['gyeonggi','경기','경기',['경기','수원시','성남시','고양시','용인시','부천시','안산시','안양시','남양주시','화성시','평택시','의정부시','시흥시','파주시','김포시','광명시','광주시','군포시','오산시','이천시','양주시','안성시','구리시','포천시','의왕시','하남시','여주시','동두천시','과천시','양평군','가평군','연천군']],
+  ['metro','세종·광역시·제주',null,['세종','대전','대구','부산','울산','광주','제주']],
+  ['prov','도 (강원·충청·경상·전라)',null,['강원','충북','충남','경북','경남','전북','전남']],
+];
+const NAME2CAT = {}, CAT_HEAD = {}, CAT_ORDER = {};
+CAT_DEFS.forEach(([key, , head, names]) => {
+  CAT_HEAD[key] = head;
+  names.forEach((n, i) => { NAME2CAT[n] = key; CAT_ORDER[n] = i; });
+});
+
+const REGION_GROUPS = [
+  ...CAT_DEFS.slice(0, 1).map(([key, label]) => ({ key, label })),   // 전국·수도권·지방
+  { key: 'seoul', label: '서울' },
+  ...CAT_DEFS.slice(1).map(([key, label]) => ({ key, label })),      // 인천·경기·광역시·도
+];
+const baseName = n => n.replace(/ \[[^\]]*\]$/, '');
+const cidOf = n => { const m = n.match(/\[(\d+)\]$/); return m ? m[1] : ''; };
+// 여러 시에 같은 이름(광역시 중·동·서·남·북구, 강서구) → CLS_ID 로만 구분
+const AMBIG_BASE = new Set(['중구', '동구', '서구', '남구', '북구', '강서구']);
+// 서울의 겹치는 자치구 CLS_ID → 자치구명 (매매 통계표 기준)
+const SEOUL_CID = { '50044': '중구', '50061': '강서구' };
+const GU_CID = { '중구': '50044', '강서구': '50061' };   // 역방향 (지도 값 조회용)
+function classifyRegion(name) {
+  const n = baseName(name);
+  if (AMBIG_BASE.has(n)) return SEOUL_CID[cidOf(name)] ? 'seoul' : null;  // 서울 것만
+  if (SEOUL.has(n)) return 'seoul';
+  return NAME2CAT[n] || null;        // 목록에 없는 지역(구 등)은 표시 안 함
+}
+function regionLevel(groupKey, name) {   // 그룹 내부 들여쓰기 (서울 0~3, 대표=0 하위=1)
+  const n = baseName(name);
+  if (groupKey === 'seoul') return SEOUL_LEVEL.get(n) ?? 0;
+  const head = CAT_HEAD[groupKey];
+  return head ? (n === head ? 0 : 1) : 0;   // 광역시·도는 평면(모두 0)
+}
+function regionOrder(groupKey, name) {
+  const n = baseName(name);
+  if (groupKey === 'seoul') return SEOUL_ORDER.get(n) ?? 999;
+  return n === CAT_HEAD[groupKey] ? -1 : (CAT_ORDER[n] ?? 999);
+}
+function groupSeries(series) {
+  const buckets = new Map(REGION_GROUPS.map(g => [g.key, []]));
+  series.forEach(s => { const k = classifyRegion(s.name); if (k) buckets.get(k).push(s); });
+  return REGION_GROUPS
+    .map(g => {
+      const items = [...buckets.get(g.key)].sort((a, b) =>
+        regionOrder(g.key, a.name) - regionOrder(g.key, b.name));
+      return { ...g, items };
+    })
+    .filter(g => g.items.length);
+}
 
 const wow = s => popChange(s.data, 1).filter(p => inRange(p.d));   // 주간변동률
 const lvl = s => s.data.filter(p => inRange(p.d));                 // 원지수
@@ -606,11 +808,25 @@ async function enterCombo() {
   comboData = { sale, jeonse, demand };
   current = { id: APT_COMBO.id, name: APT_COMBO.name, freq: 'W', unit: '지수',
               updated_at: sale.updated_at, series: [] };
-  view = 'combo';
+  // 접기 상태 복원 (첫 방문이면 서울 권역·경기 접힘 → 구 단위는 숨김)
+  const DEFAULT_COLLAPSED = ['g:gyeonggi',
+    'seoul|도심권','seoul|동북권','seoul|서북권','seoul|서남권','seoul|동남권'];
+  try {
+    const saved = localStorage.getItem('aptTree');
+    collapsed = new Set(saved ? JSON.parse(saved) : DEFAULT_COLLAPSED);
+  } catch (e) { collapsed = new Set(DEFAULT_COLLAPSED); }
+  view = 'combo'; comboTab = 'chart';
   document.getElementById('title').textContent = APT_COMBO.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + sale.updated_at;
   document.querySelectorAll('nav button').forEach(b =>
     b.classList.toggle('active', b.id === 'aptComboBtn'));
+  if (!document.getElementById('aptTabs').dataset.bound) {
+    document.getElementById('aptTabs').addEventListener('click', e => {
+      if (!e.target.dataset.at) return;
+      comboTab = e.target.dataset.at; refresh();
+    });
+    document.getElementById('aptTabs').dataset.bound = '1';
+  }
   // 기간: 세 지표 날짜 합집합, 기본 최근 1년(52주)
   const ds = new Set();
   [sale, jeonse, demand].forEach(ind =>
@@ -635,13 +851,18 @@ function renderCombo() {
       baseline: 0,
       sets: [['전국 매매', findSer(sale, '전국'), wow],
              ['서울 매매', findSer(sale, '서울'), wow]] },
-    { title: '서울 아파트 매매 vs 전세 주간변동률 (%)',
+    { title: '서울 매매 vs 전세 주간변동률 (%)',
       baseline: 0,
       sets: [['서울 매매', findSer(sale, '서울'), wow],
              ['서울 전세', findSer(jeonse, '서울'), wow]] },
-    { title: '서울 동남권 매매수급지수 (기준=100)',
+    { title: '서울 매매 vs 전세 원지수',
+      sets: [['서울 매매', findSer(sale, '서울'), lvl],
+             ['서울 전세', findSer(jeonse, '서울'), lvl]] },
+    { title: '매매수급지수 (기준=100) — 서울 동남권·수도권·전국',
       baseline: 100,
-      sets: [['서울 동남권 수급', findSer(demand, '동남') || findSer(demand, '서울'), lvl]] },
+      sets: [['서울 동남권', findSer(demand, '동남') || findSer(demand, '서울'), lvl],
+             ['수도권', findSer(demand, '수도권'), lvl],
+             ['전국', findSer(demand, '전국'), lvl]] },
   ];
   const tableDefs = [
     ['매매가격지수 주간변동률 (%)', sale, wow, 2],
@@ -649,29 +870,111 @@ function renderCombo() {
     ['매매수급지수 (기준=100)', demand, lvl, 1],
   ];
 
+  // 지수 기준시점 (=100): 전국 매매지수가 100에 가장 가까운 시점
+  let baseNote = '';
+  const baseSer = findSer(sale, '전국');
+  if (baseSer && baseSer.data.length) {
+    let best = null, bd = 1e9;
+    baseSer.data.forEach(p => { const d = Math.abs(p.v - 100); if (d < bd) { bd = d; best = p.d; } });
+    if (best) { const [y, m] = best.split('-'); baseNote = `${y}년 ${+m}월`; }
+  }
+
   let html = '';
+  if (baseNote) html += `<div style="font-size:12.5px;color:#555;margin-bottom:10px">`
+    + `📌 지수 기준시점 (지수 = 100): <b>${baseNote}</b> · 수급지수는 100 초과 매수우위 · 100 미만 매도우위</div>`;
+  html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(300px,1fr));gap:8px 22px">';
   chartDefs.forEach((cd, i) => {
-    html += `<div class="block-title">${cd.title}</div>`
-      + `<div class="cchart"><canvas id="cchart${i}"></canvas></div>`;
+    html += `<div><div class="block-title">${cd.title}</div>`
+      + `<div class="cchart"><canvas id="cchart${i}"></canvas></div></div>`;
   });
-  tableDefs.forEach(([title, ind, fn, dec]) => {
+  html += '</div>';
+  // 카테고리 버튼 바 (클릭하면 해당 그룹 접기/펴기 · 접힌 것은 흐리게)
+  const cats = groupSeries(sale.series);   // 존재하는 그룹만
+  html += '<div class="grpbar"><button id="grpExpand">전체 펼치기</button>'
+    + '<button id="grpCollapse">전체 접기</button><span style="width:6px"></span>'
+    + cats.map(g => {
+        const off = collapsed.has('g:' + g.key);
+        return `<button class="catbtn${off ? ' off' : ''}" data-grp="${g.key}">${g.label}</button>`;
+      }).join('') + '</div>';
+  tableDefs.forEach(([title, ind, fn, dec], ti) => {
     const dates = [...new Set(ind.series.flatMap(s => fn(s).map(p => p.d)))].sort();
+    const nodes = buildComboTree(ind.series);   // 트리(그룹→지역 계층)
     html += `<div class="block-title">${title}</div><div class="tscroll">`
       + '<table class="data vlines"><thead><tr><th>지역</th>'
       + dates.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-    ind.series.forEach(s => {
-      const m = new Map(fn(s).map(p => [p.d, p.v]));
-      html += `<tr><td>${s.name}</td>` + dates.map(d => {
-        const v = m.get(d);
-        const txt = v == null ? ''
-          : v.toLocaleString('ko-KR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
-      }).join('') + '</tr>';
+
+    let hideLevel = null;   // 이 레벨보다 깊은 행은 숨김
+    nodes.forEach(nd => {
+      if (hideLevel !== null) {
+        if (nd.level > hideLevel) return;   // 접힌 상위의 하위 → 숨김
+        hideLevel = null;                    // 하위 트리 벗어남
+      }
+      const isCol = collapsed.has(nd.key);
+      const caret = nd.hasChildren
+        ? `<span class="tcaret">${isCol ? '＋' : '－'}</span>`
+        : '<span class="tcaret-sp"></span>';
+      const pad = 8 + nd.level * 14;
+      if (nd.isGroup) {
+        const hm = nd.hasData ? new Map(fn(nd.series).map(p => [p.d, p.v])) : null;
+        const cells = dates.map(d => {
+          if (!hm) return '<td></td>';
+          const v = hm.get(d);
+          const txt = v == null ? ''
+            : v.toLocaleString('ko-KR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+        }).join('');
+        html += `<tr class="parent p1" data-node="${nd.key}">`
+          + `<td style="padding-left:${pad}px">${caret}${nd.label} `
+          + `<span style="color:#8592a3;font-weight:400">(${nd.count})</span></td>`
+          + cells + '</tr>';
+      } else {
+        const cls = 'parent'.repeat(0) + (nd.hasChildren ? ` parent p${Math.min(nd.level, 2)}` : '');
+        const m = new Map(fn(nd.series).map(p => [p.d, p.v]));
+        html += `<tr class="${cls}"${nd.hasChildren ? ` data-node="${nd.key}"` : ''}>`
+          + `<td style="padding-left:${pad}px">${caret}${nd.name}</td>`
+          + dates.map(d => {
+            const v = m.get(d);
+            const txt = v == null ? ''
+              : v.toLocaleString('ko-KR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+            return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+          }).join('') + '</tr>';
+      }
+      if (isCol && nd.hasChildren) hideLevel = nd.level;   // 이후 하위 행 숨김
     });
     html += '</tbody></table></div>';
   });
   const wrap = document.getElementById('comboWrap');
   wrap.innerHTML = html;
+
+  function toggleNode(k) {
+    collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k);
+    try { localStorage.setItem('aptTree', JSON.stringify([...collapsed])); } catch (e) {}
+    renderCombo();
+  }
+  // 트리 행 클릭(+/−)
+  wrap.querySelectorAll('tr.parent').forEach(tr => {
+    tr.querySelector('td:first-child').onclick = () => toggleNode(tr.dataset.node);
+  });
+  // 상단 카테고리 버튼 → 그룹 노드 토글
+  wrap.querySelectorAll('.catbtn').forEach(btn => {
+    btn.onclick = () => toggleNode('g:' + btn.dataset.grp);
+  });
+  // 전체 펼치기/접기 (그룹 + 상위 지역 노드 모두)
+  const allParents = () => {
+    const s = new Set();
+    buildComboTree(comboData.sale.series).forEach(nd => { if (nd.hasChildren) s.add(nd.key); });
+    return s;
+  };
+  wrap.querySelector('#grpCollapse').onclick = () => {
+    collapsed = allParents();
+    try { localStorage.setItem('aptTree', JSON.stringify([...collapsed])); } catch (e) {}
+    renderCombo();
+  };
+  wrap.querySelector('#grpExpand').onclick = () => {
+    collapsed = new Set();
+    try { localStorage.setItem('aptTree', '[]'); } catch (e) {}
+    renderCombo();
+  };
   wrap.querySelectorAll('.tscroll').forEach(w => { w.scrollLeft = w.scrollWidth; });
 
   chartDefs.forEach((cd, i) => {
@@ -713,6 +1016,300 @@ function renderCombo() {
         },
       },
     }));
+  });
+}
+
+// ── 지도 (드릴다운 코로플레스) ────────────────────────────────
+let mapMetric = 'sale', mapLevel = 'sido', mapZone = null, mapGeoLoaded = false;
+// 서울 자치구 → 권역 매핑 (SEOUL_SEQ 계층에서 추출 + 이름겹침 구 보정)
+const GU2ZONE = {}; { let z = null; SEOUL_SEQ.forEach(([n, l]) => {
+  if (l === 2) z = n; else if (l === 3) GU2ZONE[n] = z; }); }
+
+function loadGeo() {
+  return new Promise((resolve) => {
+    if (window.__GEO__) { mapGeoLoaded = true; return resolve(true); }
+    const s = document.createElement('script');
+    s.src = 'geo/geo.js' + (location.protocol === 'file:' ? '' : '?t=' + Date.now());
+    s.onload = () => { mapGeoLoaded = !!window.__GEO__; resolve(mapGeoLoaded); };
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+
+function mapInd() { return { sale: comboData.sale, jeonse: comboData.jeonse, demand: comboData.demand }[mapMetric]; }
+function mapIsLevel() { return mapMetric === 'demand'; }   // 수급은 지수 레벨, 나머지는 주간변동률
+function mapAsofDate() {
+  const ind = mapInd();
+  const ds = new Set(); ind.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  return [...ds].sort().pop();
+}
+function regionValue(name) {
+  const ind = mapInd();
+  let s;
+  if (GU_CID[name]) s = ind.series.find(x => cidOf(x.name) === GU_CID[name]);   // 서울 중구/강서구
+  if (!s) s = ind.series.find(x => baseName(x.name) === name);
+  if (!s) return null;
+  const data = mapIsLevel() ? s.data : popChange(s.data, 1);
+  const pt = data.length ? data[data.length - 1] : null;
+  return pt ? pt.v : null;
+}
+
+async function enterMap() {
+  view = 'map';
+  document.getElementById('title').textContent = '지도 — 주간 아파트';
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'mapNavBtn'));
+  if (!comboData) {
+    const [sale, jeonse, demand] = await Promise.all(
+      ['kr_apt_sale_idx', 'kr_apt_jeonse_idx', 'kr_apt_sale_demand'].map(id => loadIndicator(id).catch(() => null)));
+    if (!sale) { alert('부동산 데이터가 없습니다. fetch.py를 먼저 실행하세요.'); return; }
+    comboData = { sale, jeonse, demand };
+  }
+  const ok = await loadGeo();
+  if (!ok) {
+    document.getElementById('mapSvgBox').innerHTML =
+      '<div style="padding:40px;color:#888">지도 데이터(geo/geo.js)가 없습니다.<br>'
+      + 'PC에서 <b>python tools/fetch_geo.py</b> 를 한 번 실행해 주세요.</div>';
+    refresh();
+    return;
+  }
+  mapLevel = 'sido'; mapZone = null;
+  refresh();
+}
+
+function mapFeatures() {
+  const G = window.__GEO__;
+  if (mapLevel === 'sido') return G.sido.features;
+  if (mapLevel === 'incheon') return G.incheon.features;
+  if (mapLevel === 'gyeonggi') return G.gyeonggi.features;
+  // seoul(권역별) / seoul_gu(자치구): 서울 구 지오메트리 사용
+  let feats = G.seoul.features;
+  if (mapLevel === 'seoul_gu' && mapZone)   // 특정 권역의 구만
+    feats = feats.filter(f => GU2ZONE[f.properties.name] === mapZone);
+  return feats;
+}
+function featureValue(f) {
+  const nm = f.properties.name;
+  if (mapLevel === 'seoul') return regionValue(GU2ZONE[nm] || nm);   // 권역 값으로 색칠
+  return regionValue(nm);
+}
+function featureLabel(f) {
+  const nm = f.properties.name;
+  return mapLevel === 'seoul' ? (GU2ZONE[nm] || nm) : nm;
+}
+
+function renderMap() {
+  document.querySelectorAll('#mapMetricBtns button').forEach(b =>
+    b.classList.toggle('active', b.dataset.mm === mapMetric));
+  document.getElementById('mapAsof').textContent = '기준: ' + (mapAsofDate() || '-')
+    + (mapIsLevel() ? ' · 수급지수' : ' · 주간변동률(%)');
+  // 브레드크럼
+  const crumbs = [['전국', () => { mapLevel = 'sido'; mapZone = null; refresh(); }]];
+  if (mapLevel === 'seoul' || mapLevel === 'seoul_gu')
+    crumbs.push(['서울', () => { mapLevel = 'seoul'; mapZone = null; refresh(); }]);
+  if (mapLevel === 'seoul_gu' && mapZone) crumbs.push([mapZone, null]);
+  if (mapLevel === 'incheon') crumbs.push(['인천', null]);
+  if (mapLevel === 'gyeonggi') crumbs.push(['경기', null]);
+  const cb = document.getElementById('mapCrumb');
+  cb.innerHTML = crumbs.map((c, i) =>
+    (i ? ' › ' : '') + (c[1] ? `<a href="#" data-ci="${i}" style="color:#1a4fa0">${c[0]}</a>` : `<b>${c[0]}</b>`)).join('');
+  cb.querySelectorAll('a').forEach(a => a.onclick = e => { e.preventDefault(); crumbs[+a.dataset.ci][1](); });
+
+  const feats = mapFeatures();
+  if (!feats || !feats.length) {
+    document.getElementById('mapSvgBox').innerHTML =
+      `<div style="padding:30px;color:#c0392b">'${mapLevel}' 경계 데이터가 비어 있습니다.<br>`
+      + 'tools/fetch_geo.py 를 다시 실행해 geo.js 를 갱신해 주세요.<br>'
+      + '(출력의 "서울 N · 인천 N · 경기 N" 개수를 확인)</div>';
+    return;
+  }
+  const vals = feats.map(featureValue).filter(v => v != null);
+  const center = mapIsLevel() ? 100 : 0;
+  const spread = Math.max(0.1, ...vals.map(v => Math.abs(v - center)));
+  // 진한 빨강(상승/매수우위) ↔ 흰색 ↔ 진한 파랑(하락/매도우위)
+  const color = d3.scaleLinear().domain([center - spread, center, center + spread])
+    .range(['#2c6fbf', '#f4f4f4', '#c0392b']).clamp(true);
+
+  const box = document.getElementById('mapSvgBox');
+  box.style.position = 'relative';
+  const W = Math.min(box.clientWidth || 560, 640), H = Math.round(W * 0.92);
+  const fc = { type: 'FeatureCollection', features: feats };
+  const proj = d3.geoMercator().fitSize([W, H], fc);
+  const path = d3.geoPath(proj);
+
+  const svg = d3.select(box).html('').append('svg')
+    .attr('width', W).attr('height', H).attr('viewBox', `0 0 ${W} ${H}`);
+  const tip = d3.select(box).append('div').attr('class', 'maptip')
+    .style('position', 'absolute').style('pointer-events', 'none')
+    .style('background', 'rgba(26,43,74,.95)')
+    .style('padding', '6px 10px').style('font-size', '14px').style('font-weight', '700')
+    .style('border-radius', '5px').style('white-space', 'nowrap')
+    .style('box-shadow', '0 2px 6px rgba(0,0,0,.25)').style('opacity', 0).style('z-index', 5);
+
+  // 권역/시·도 경계는 더 진하게, 자치구 경계는 얇게
+  const strokeCol = mapLevel === 'sido' ? '#33415c' : '#5c6b7a';
+  const strokeW = mapLevel === 'sido' ? 1.3 : 1.0;
+
+  const hasGeo = k => window.__GEO__[k] && window.__GEO__[k].features && window.__GEO__[k].features.length;
+  const drillTarget = { '서울': 'seoul', '인천': 'incheon', '경기': 'gyeonggi' };
+  const drillable = f => {
+    const nm = f.properties.name;
+    if (mapLevel === 'sido') return !!drillTarget[nm] && hasGeo(drillTarget[nm]);
+    if (mapLevel === 'seoul') return true;   // 권역 → 자치구
+    return false;
+  };
+  svg.selectAll('path').data(feats).join('path')
+    .attr('d', path)
+    .attr('fill', f => { const v = featureValue(f); return v == null ? '#e6e9ee' : color(v); })
+    .attr('stroke', strokeCol).attr('stroke-width', strokeW)
+    .style('cursor', f => drillable(f) ? 'pointer' : 'default')
+    .on('mouseenter', function () { d3.select(this).attr('stroke', '#111').attr('stroke-width', strokeW + 1.2); })
+    .on('mousemove', (e, f) => {
+      const v = featureValue(f);
+      const vc = v == null ? '#cfd6e0' : (v > center ? '#ff8a80' : v < center ? '#82b1ff' : '#fff');
+      tip.html(`<span style="color:#fff">${featureLabel(f)}</span> `
+          + `<span style="color:${vc}">${v == null ? '데이터 없음' : v.toFixed(mapIsLevel() ? 1 : 2)}</span>`)
+        .style('left', (e.offsetX + 6) + 'px').style('top', (e.offsetY - 4) + 'px').style('opacity', 1);
+    })
+    .on('mouseleave', function () {
+      d3.select(this).attr('stroke', strokeCol).attr('stroke-width', strokeW);
+      tip.style('opacity', 0);
+    })
+    .on('click', (e, f) => {
+      const nm = f.properties.name;
+      if (mapLevel === 'sido') {
+        const t = drillTarget[nm];
+        if (t && hasGeo(t)) mapLevel = t; else return;
+      } else if (mapLevel === 'seoul') {
+        mapZone = GU2ZONE[nm] || null; mapLevel = 'seoul_gu';
+      } else return;
+      refresh();
+    });
+
+  // 지역 이름 라벨 (중심점). 서울 권역 단계는 권역 이름만 한 번씩 표시.
+  let labelData;
+  if (mapLevel === 'seoul') {
+    const byZone = {};
+    feats.forEach(f => { const z = GU2ZONE[f.properties.name]; if (!z) return;
+      (byZone[z] = byZone[z] || []).push(path.centroid(f)); });
+    labelData = Object.entries(byZone).map(([z, pts]) =>
+      ({ name: z, x: d3.mean(pts, p => p[0]), y: d3.mean(pts, p => p[1]) }));
+  } else {
+    labelData = feats.map(f => { const c = path.centroid(f);
+      return { name: f.properties.name, x: c[0], y: c[1] }; });
+  }
+  svg.selectAll('text').data(labelData).join('text')
+    .attr('x', d => d.x).attr('y', d => d.y)
+    .attr('text-anchor', 'middle').attr('dy', '0.32em').attr('pointer-events', 'none')
+    .style('font-size', mapLevel === 'sido' || mapLevel === 'seoul' ? '12px' : '10px')
+    .style('font-weight', mapLevel === 'seoul' ? '700' : '400')
+    .style('fill', '#1a2b4a').style('paint-order', 'stroke')
+    .style('stroke', 'rgba(255,255,255,.85)').style('stroke-width', '2.5px')
+    .text(d => d.name);
+
+  // 범례
+  const lg = document.getElementById('mapLegend');
+  const stops = mapIsLevel()
+    ? [center + spread, center, center - spread]
+    : [center + spread, center + spread / 2, 0, center - spread / 2, center - spread];
+  lg.innerHTML = '<div style="font-weight:700;margin-bottom:6px">'
+    + (mapIsLevel() ? '수급지수' : '주간변동률 %') + '</div>'
+    + stops.map(s => `<div style="display:flex;align-items:center;gap:6px;margin:2px 0">`
+      + `<span style="width:16px;height:12px;background:${color(s)};display:inline-block;border:1px solid #ccc"></span>`
+      + `${s.toFixed(mapIsLevel() ? 0 : 1)}</div>`).join('')
+    + '<div style="margin-top:8px;color:#888">빨강=상승/매수우위<br>파랑=하락/매도우위<br>회색=데이터 없음</div>';
+}
+
+// ── 사용자 설정 차트 (원하는 지역·지표·변환을 골라 겹쳐보기) ──────
+function customSeriesOf(ind, region) {
+  if (GU_CID[region]) return ind.series.find(x => cidOf(x.name) === GU_CID[region]);
+  return ind.series.find(x => baseName(x.name) === region);
+}
+function customTransform(data, tf) {
+  if (tf === 'level') return data;
+  if (tf === 'wow') return popChange(data, 1);
+  return popChange(data, 52);   // yoy (주간 → 52주 전 대비)
+}
+function customRegions() {   // 표시 가능한 지역 (카테고리 순서, 중복 제거)
+  const out = [];
+  groupSeries(comboData.sale.series).forEach(g => g.items.forEach(s => out.push(baseName(s.name))));
+  return [...new Set(out)];
+}
+function customPanelHTML(i) {
+  const inds = [['sale', '매매지수'], ['jeonse', '전세지수'], ['demand', '매매수급지수']];
+  const tfs = [['wow', '주간변동률'], ['yoy', '전년동기비(52주)'], ['level', '원지수/원지표']];
+  const sel = 'font-size:13px';
+  return '<div style="flex:1;min-width:340px">'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+    + `<select id="cuInd${i}" style="${sel}">` + inds.map(([v, t]) => `<option value="${v}">${t}</option>`).join('') + '</select>'
+    + `<select id="cuReg${i}" style="${sel};max-width:150px"></select>`
+    + `<select id="cuTf${i}" style="${sel}">` + tfs.map(([v, t]) => `<option value="${v}">${t}</option>`).join('') + '</select>'
+    + `<button id="cuAdd${i}" style="padding:7px 14px;font-size:13px;border:1px solid #1a4fa0;background:#1a4fa0;color:#fff;cursor:pointer;border-radius:9px">추가</button>`
+    + `<button id="cuClear${i}" style="padding:7px 12px;font-size:13px;border:1px solid #d7dde8;background:#fff;cursor:pointer;border-radius:9px">삭제</button>`
+    + '</div>'
+    + `<div id="cuChips${i}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>`
+    + `<div class="cchart" style="height:420px"><canvas id="customChart${i}"></canvas></div></div>`;
+}
+function renderCustom() {
+  const wrap = document.getElementById('customWrap');
+  if (!wrap.dataset.init) {
+    wrap.innerHTML = '<div style="display:flex;gap:22px;flex-wrap:wrap">'
+      + customPanelHTML(0) + customPanelHTML(1) + '</div>';
+    [0, 1].forEach(i => {
+      document.getElementById('cuReg' + i).innerHTML =
+        customRegions().map(r => `<option>${r}</option>`).join('');
+      document.getElementById('cuAdd' + i).onclick = () => {
+        const indKey = document.getElementById('cuInd' + i).value;
+        const region = document.getElementById('cuReg' + i).value;
+        const tf = document.getElementById('cuTf' + i).value;
+        const indName = { sale: '매매', jeonse: '전세', demand: '수급' }[indKey];
+        const tfName = { level: '', wow: ' WoW', yoy: ' YoY' }[tf];
+        const label = `${region} ${indName}${tfName}`.trim();
+        if (!customLists[i].some(c => c.label === label)) customLists[i].push({ indKey, region, tf, label });
+        drawCustomChart(i);
+      };
+      document.getElementById('cuClear' + i).onclick = () => { customLists[i] = []; drawCustomChart(i); };
+    });
+    wrap.dataset.init = '1';
+  }
+  drawCustomChart(0); drawCustomChart(1);
+}
+function drawCustomChart(i) {
+  const list = customLists[i];
+  const chips = document.getElementById('cuChips' + i);
+  chips.innerHTML = list.length ? '' : '<span style="color:#aaa;font-size:12px">추가된 항목 없음</span>';
+  list.forEach((c, j) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font-size:12px;padding:3px 8px;border:1px solid #d7dde8;border-radius:12px;'
+      + 'background:#fff;color:' + PALETTE[j % PALETTE.length];
+    el.innerHTML = `${c.label} <b style="cursor:pointer">×</b>`;
+    el.querySelector('b').onclick = () => { list.splice(j, 1); drawCustomChart(i); };
+    chips.appendChild(el);
+  });
+  const labelSet = new Set();
+  const datasets = list.map((c, j) => {
+    const s = customSeriesOf(comboData[c.indKey], c.region);
+    const data = s ? customTransform(s.data, c.tf).filter(p => inRange(p.d)) : [];
+    data.forEach(p => labelSet.add(p.d));
+    return {
+      label: c.label, data: data.map(p => ({ x: p.d, y: p.v })),
+      borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true,
+    };
+  });
+  const labels = [...labelSet].sort();
+  if (customCharts[i]) customCharts[i].destroy();
+  customCharts[i] = new Chart(document.getElementById('customChart' + i), {
+    type: 'line', data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 11 },
+             callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { ticks: { font: { size: 11 } } },
+      },
+    },
   });
 }
 
@@ -781,7 +1378,7 @@ function exportExcel() {
 }
 
 async function select(id) {
-  if (view === 'compare' || view === 'combo') view = 'chart';
+  if (view === 'compare' || view === 'combo' || view === 'map') view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
@@ -992,6 +1589,10 @@ document.getElementById('endSel').onchange = e => {
     cmpBtn.textContent = '📊 지표 비교';
     cmpBtn.onclick = enterCompare;
     nav.appendChild(cmpBtn);
+    document.getElementById('mapMetricBtns').addEventListener('click', e => {
+      if (!e.target.dataset.mm) return;
+      mapMetric = e.target.dataset.mm; renderMap();
+    });
     document.getElementById('exportBtn').onclick = exportExcel;
     if (catalog.length) select(catalog[0].id);
     else document.getElementById('title').textContent = '지표가 없습니다. fetch.py를 먼저 실행하세요.';
@@ -1002,3 +1603,4 @@ document.getElementById('endSel').onchange = e => {
 </script>
 </body>
 </html>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        

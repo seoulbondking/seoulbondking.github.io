@@ -192,17 +192,17 @@
           <span style="font-size:12px;color:#98a3b6">우클릭: 추이 그래프</span>
           <span id="mapAsof" style="font-size:12px;color:#888;margin-left:auto"></span>
         </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div id="mapSvgBox" style="flex:1;min-width:320px"></div>
-          <div id="mapLegend" style="width:150px;font-size:12px"></div>
-        </div>
-        <div id="mapTrend" style="display:none;position:absolute;z-index:10;background:#fff;
-          border:1px solid #d7dde8;border-radius:12px;box-shadow:0 8px 28px rgba(20,40,80,.2);padding:12px;width:380px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <b id="mapTrendTitle" style="font-size:13px;color:#1a2b4a"></b>
-            <span id="mapTrendClose" style="cursor:pointer;color:#98a3b6;font-size:18px;line-height:1">×</span>
+          <div style="width:330px;min-width:280px;flex-shrink:0">
+            <div id="mapLegend" style="font-size:12px;margin-bottom:14px"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+              <b style="font-size:12.5px;color:#1a2b4a">지역 추이 <span id="trendMeta" style="color:#98a3b6;font-weight:400"></span></b>
+              <button id="trendClear" style="font-size:11.5px;padding:3px 9px;border:1px solid #d7dde8;background:#fff;cursor:pointer;border-radius:8px">지우기</button>
+            </div>
+            <div id="trendChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:20px"></div>
+            <div style="height:230px"><canvas id="mapTrendCanvas"></canvas></div>
           </div>
-          <div style="height:210px"><canvas id="mapTrendCanvas"></canvas></div>
         </div>
       </div>
       <div class="series-picker" id="seriesPicker"></div>
@@ -1111,9 +1111,9 @@ function featureLabel(f) {
 }
 
 function renderMap() {
-  const tp = document.getElementById('mapTrend'); if (tp) tp.style.display = 'none';
   document.querySelectorAll('#mapMetricBtns button').forEach(b =>
     b.classList.toggle('active', b.dataset.mm === mapMetric));
+  document.getElementById('trendClear').onclick = () => { trendRegions = []; drawTrend(); };
   document.getElementById('mapAsof').textContent = '기준: ' + (mapAsofDate() || '-')
     + (mapIsLevel() ? ' · 수급지수' : ' · 주간변동률(%)');
   // 브레드크럼
@@ -1232,53 +1232,60 @@ function renderMap() {
       + `<span style="width:16px;height:12px;background:${color(s)};display:inline-block;border:1px solid #ccc"></span>`
       + `${s.toFixed(mapIsLevel() ? 0 : 1)}</div>`).join('')
     + '<div style="margin-top:8px;color:#888">빨강=상승/매수우위<br>파랑=하락/매도우위<br>회색=데이터 없음</div>';
+
+  drawTrend();   // 누적된 추이(현재 지표 기준)도 갱신
 }
 
-// 지도 우클릭 → 지역 추이 그래프 팝업
-let mapTrendChart = null;
-function showTrend(e, f) {
+// 지도 우클릭 → 오른쪽 패널에 지역 추이 누적 (여러 지역 겹쳐보기)
+let trendRegions = [], mapTrendChart = null;
+function showTrend(e, f) {                 // 우클릭 핸들러
   e.preventDefault();
   const nm = f.properties.name;
   const region = mapLevel === 'seoul' ? (GU2ZONE[nm] || nm) : nm;
-  const s = seriesForRegion(region);
-  const panel = document.getElementById('mapTrend');
-  document.getElementById('mapTrendClose').onclick = () => { panel.style.display = 'none'; };
-  const metricNm = mapMetric === 'sale' ? '매매' : mapMetric === 'jeonse' ? '전세' : '수급';
+  if (!seriesForRegion(region)) return;    // 데이터 없으면 무시
+  if (!trendRegions.includes(region)) trendRegions.push(region);
+  else trendRegions.splice(trendRegions.indexOf(region), 1);   // 같은 곳 다시 우클릭 → 제거
+  drawTrend();
+}
+function drawTrend() {
   const isLv = mapIsLevel();
-  const data = s ? (isLv ? s.data : popChange(s.data, 1)).filter(p => inRange(p.d)) : [];
-  document.getElementById('mapTrendTitle').textContent =
-    `${region} · ${metricNm}${isLv ? ' 지수' : ' 주간변동률(%)'}`;
-  // 팝업 위치 (지도 영역 기준, 화면 밖으로 안 나가게)
-  const rect = document.getElementById('mapWrap').getBoundingClientRect();
-  panel.style.left = Math.max(0, Math.min(e.clientX - rect.left + 12, rect.width - 392)) + 'px';
-  panel.style.top = Math.max(0, e.clientY - rect.top - 20) + 'px';
-  panel.style.display = 'block';
-
+  const metricNm = mapMetric === 'sale' ? '매매' : mapMetric === 'jeonse' ? '전세' : '수급';
+  document.getElementById('trendMeta').textContent =
+    `(${metricNm} ${isLv ? '지수' : '주간변동률%'} · 우클릭 추가)`;
+  const chips = document.getElementById('trendChips');
+  chips.innerHTML = trendRegions.length ? '' : '<span style="color:#aaa;font-size:11.5px">지도에서 지역 우클릭</span>';
+  const labelSet = new Set();
+  const datasets = trendRegions.map((region, i) => {
+    const col = PALETTE[i % PALETTE.length];
+    const chip = document.createElement('span');
+    chip.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + col;
+    chip.innerHTML = `${region} <b style="cursor:pointer">×</b>`;
+    chip.querySelector('b').onclick = () => { trendRegions.splice(i, 1); drawTrend(); };
+    chips.appendChild(chip);
+    const s = seriesForRegion(region);
+    const data = s ? (isLv ? s.data : popChange(s.data, 1)).filter(p => inRange(p.d)) : [];
+    data.forEach(p => labelSet.add(p.d));
+    return {
+      label: region, data: data.map(p => ({ x: p.d, y: p.v })),
+      borderColor: col, backgroundColor: col,
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true,
+    };
+  });
+  const labels = [...labelSet].sort();
   if (mapTrendChart) mapTrendChart.destroy();
-  if (!data.length) {
-    document.getElementById('mapTrendTitle').textContent += ' — 데이터 없음';
-    return;
-  }
   mapTrendChart = new Chart(document.getElementById('mapTrendCanvas'), {
-    type: 'line',
-    data: {
-      labels: data.map(p => p.d),
-      datasets: [{
-        data: data.map(p => ({ x: p.d, y: p.v })),
-        borderColor: '#1a4fa0', backgroundColor: 'rgba(26,79,160,.08)',
-        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, fill: !isLv ? false : true,
-      }],
-    },
+    type: 'line', data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-      plugins: { legend: { display: false },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: trendRegions.length > 0, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
         tooltip: { callbacks: { title: it => dateLabel(it[0].label),
-          label: it => ` ${it.parsed.y.toFixed(isLv ? 1 : 2)}` } } },
+          label: it => ` ${it.dataset.label}: ${it.parsed.y.toFixed(isLv ? 1 : 2)}` } } },
       scales: {
-        x: { ticks: { maxTicksLimit: 8, font: { size: 10 },
+        x: { ticks: { maxTicksLimit: 7, font: { size: 10 },
              callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
         y: { ticks: { font: { size: 10 } },
-             grid: { color: ctx => (!isLv && ctx.tick.value === 0) || (isLv && ctx.tick.value === 100) ? '#c0392b55' : '#eee' } },
+             grid: { color: c => (!isLv && c.tick.value === 0) || (isLv && c.tick.value === 100) ? '#c0392b55' : '#eee' } },
       },
     },
   });

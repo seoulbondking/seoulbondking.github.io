@@ -1250,6 +1250,17 @@ function renderCpiCombo() {
   // 종합 탭 차트 렌더 + 컨트롤
   if (cpiTab === 'main') {
     const chips = w.querySelector('#cmChips');
+    // 전체 선택/해제 버튼
+    const allBtn = document.createElement('button');
+    allBtn.textContent = cpiMainSel.size === chartItems.length ? '전체 해제' : '전체 선택';
+    allBtn.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid #d7dde8;'
+      + 'background:#fff;cursor:pointer;border-radius:8px';
+    allBtn.onclick = () => {
+      cpiMainSel = cpiMainSel.size === chartItems.length
+        ? new Set() : new Set(chartItems.map(r => r.label));
+      renderCpiCombo();
+    };
+    chips.appendChild(allBtn);
     chartItems.forEach((r, i) => {
       const lb = document.createElement('label');
       lb.style.cssText = 'cursor:pointer;user-select:none';
@@ -2257,7 +2268,8 @@ document.getElementById('endSel').onchange = e => {
     const nav = document.getElementById('nav');
     let comboInserted = false, cpiInserted = false;
     catalog.forEach(item => {
-      if (item.id === 'kr_cpi_items') return;   // 품목상세는 구성품목 탭 전용 (메뉴 숨김)
+      // 메뉴 숨김: 품목상세(구성품목 탭 전용) + CPI 종합에 흡수된 지표들 (지표 비교에서는 사용 가능)
+      if (['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate'].includes(item.id)) return;
       if (CPI_COMBO.ids.includes(item.id)) {
         // CPI 3종은 "소비자물가 종합" 하나로 묶음
         if (!cpiInserted) {

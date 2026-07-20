@@ -1110,10 +1110,10 @@ function renderCpiContrib() {
     const focused = [...cpiCtbFocus].filter(n =>
       chartCap.aggArr.get(n) || chartCap.contribs.get(n));
     if (focused.length) {
-      // 선택 항목만 막대로 (스택 없이)
+      // 선택 항목들도 누적 막대로 (위로 쌓기)
       datasets = focused.map((n, i) => ({
         label: n, data: chartCap.aggArr.get(n) || chartCap.contribs.get(n),
-        backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 0,
+        backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 0, stack: 's',
       }));
     } else {
       datasets = chartCap.cats.map(([n, arr], i) => ({
@@ -1126,7 +1126,7 @@ function renderCpiContrib() {
       type: 'line', borderColor: '#1a2b4a', backgroundColor: '#1a2b4a',
       borderWidth: 2, pointRadius: 2, tension: 0.1, order: -1,
     });
-    const stk = !focused.length;   // 선택 항목이 있으면 스택 해제
+    const stk = true;   // 기본·선택 모드 모두 누적 막대
     cpiCtbChartObj = new Chart(document.getElementById('cpiCtbChart'), {
       type: 'bar',
       data: { labels: cols, datasets },

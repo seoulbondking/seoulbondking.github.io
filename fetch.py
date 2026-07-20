@@ -181,11 +181,13 @@ def main():
         tag = f"증분 {ind['_start_year']}~" if incremental else f"전체 {ind['_start_year']}~"
         print(f"[ok]   {ind['id']}: 시리즈 {len(series)}개, 관측치 {n_points}개 ({tag})")
 
-    # 대시보드가 읽는 지표 목록 (전체 수집일 때만 갱신)
+    # 대시보드가 읽는 지표 목록 (전체 수집일 때만 갱신).
+    # 이번 실행에서 실패했어도 기존 데이터 파일이 있으면 목록에 유지한다
+    # (일부 API 장애로 대시보드 메뉴가 통째로 사라지는 것을 방지).
     if not only:
         catalog = [
             {"id": i["id"], "name": i["name"], "freq": i["freq"], "unit": i.get("unit", "")}
-            for i in indicators if i["id"] not in failures
+            for i in indicators if (DATA_DIR / f"{i['id']}.json").exists()
         ]
         cat_body = json.dumps(catalog, ensure_ascii=False)
         (DATA_DIR / "index.json").write_text(cat_body, encoding="utf-8")
@@ -195,7 +197,12 @@ def main():
         print(f"[ok]   index.json: 지표 {len(catalog)}개")
 
     if failures:
-        sys.exit(f"실패한 지표: {failures}")
+        print(f"\n⚠ 실패한 지표: {failures}")
+        print("  (기존 데이터는 그대로 유지됩니다. 국내 API가 해외 IP를 차단하면"
+              " GitHub Actions에서 KOSIS·부동산원이 실패할 수 있습니다.)")
+        # 전부 실패했을 때만 오류로 종료 → 일부만 실패하면 성공분은 커밋되도록
+        if len(failures) >= len(indicators):
+            sys.exit(1)
 
 
 if __name__ == "__main__":

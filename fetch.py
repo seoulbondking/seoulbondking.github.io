@@ -96,13 +96,14 @@ def archive_start_year(payload: dict) -> int | None:
 def main():
     load_dotenv()
     config = yaml.safe_load((ROOT / "indicators.yaml").read_text(encoding="utf-8"))
-    indicators = config["indicators"]
+    all_indicators = config["indicators"]     # 메뉴 목록은 항상 전체 기준
+    indicators = all_indicators
 
     args = sys.argv[1:]
     force_full = "--full" in args
     only = {a for a in args if not a.startswith("--")}
     if only:
-        indicators = [i for i in indicators if i["id"] in only]
+        indicators = [i for i in all_indicators if i["id"] in only]
         if not indicators:
             sys.exit(f"indicators.yaml 에 해당 id가 없습니다: {only}")
 
@@ -181,20 +182,18 @@ def main():
         tag = f"증분 {ind['_start_year']}~" if incremental else f"전체 {ind['_start_year']}~"
         print(f"[ok]   {ind['id']}: 시리즈 {len(series)}개, 관측치 {n_points}개 ({tag})")
 
-    # 대시보드가 읽는 지표 목록 (전체 수집일 때만 갱신).
-    # 이번 실행에서 실패했어도 기존 데이터 파일이 있으면 목록에 유지한다
-    # (일부 API 장애로 대시보드 메뉴가 통째로 사라지는 것을 방지).
-    if not only:
-        catalog = [
-            {"id": i["id"], "name": i["name"], "freq": i["freq"], "unit": i.get("unit", "")}
-            for i in indicators if (DATA_DIR / f"{i['id']}.json").exists()
-        ]
-        cat_body = json.dumps(catalog, ensure_ascii=False)
-        (DATA_DIR / "index.json").write_text(cat_body, encoding="utf-8")
-        (DATA_DIR / "index.js").write_text(
-            f"window.__MACRO_INDEX__={cat_body};", encoding="utf-8"
-        )
-        print(f"[ok]   index.json: 지표 {len(catalog)}개")
+    # 대시보드 메뉴 목록: 항상 전체 지표 기준으로, 데이터 파일이 있는 것만 수록.
+    # (일부만 수집해도 메뉴가 갱신되고, 이번에 실패해도 기존 지표는 유지된다)
+    catalog = [
+        {"id": i["id"], "name": i["name"], "freq": i["freq"], "unit": i.get("unit", "")}
+        for i in all_indicators if (DATA_DIR / f"{i['id']}.json").exists()
+    ]
+    cat_body = json.dumps(catalog, ensure_ascii=False)
+    (DATA_DIR / "index.json").write_text(cat_body, encoding="utf-8")
+    (DATA_DIR / "index.js").write_text(
+        f"window.__MACRO_INDEX__={cat_body};", encoding="utf-8"
+    )
+    print(f"[ok]   index.json: 지표 {len(catalog)}개")
 
     if failures:
         print(f"\n⚠ 실패한 지표: {failures}")

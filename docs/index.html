@@ -360,6 +360,20 @@ function gdpRowAttr(names, i, extra = '') {
   return ` class="lv${lv} ${sep}${extra ? ' ' + extra : ''}"`;
 }
 const isGdp = () => current.series.length > 0 && current.series[0].name.includes('국내총생산');
+// CPI 품목성질별 계층 (KR_Macro CPI 시트 순서)
+const CPI_SEQ = [
+  ['총지수', 0],
+  ['상품', 1], ['농축수산물', 2], ['공업제품', 2], ['전기·가스·수도', 2], ['전기 · 가스 · 수도', 2],
+  ['서비스', 1], ['집세', 2], ['공공서비스', 2], ['개인서비스', 2],
+];
+const CPI_ORDER = new Map(CPI_SEQ.map(([n], i) => [n, i]));
+const CPI_LEVEL = new Map(CPI_SEQ.map(([n, l]) => [n, l]));
+const isCpi = () => !!current && /물가지수/.test(current.name || '');   // 소비자물가·생활물가
+function cpiRowAttr(name) {
+  const lv = CPI_LEVEL.get(name.trim());
+  if (lv === undefined) return '';
+  return ` class="lv${lv}${lv === 0 ? ' sep-solid' : ''}"`;
+}
 
 const MODE_LABELS = {
   pop: '전기비 %', yoy: '전년동기비 %',
@@ -386,27 +400,28 @@ function updateMeta() {
 
 function refresh() {
   updateMeta();
-  const isCmp = view === 'compare', isCombo = view === 'combo';
+  const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('chartWrap').style.display =
     (view === 'chart' || isCmp) ? '' : 'none';
   document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
   document.getElementById('tableWrap').style.display = view === 'table' ? '' : 'none';
-  document.getElementById('multiWrap').style.display = view === 'multi' ? '' : 'none';
+  document.getElementById('multiWrap').style.display = (view === 'multi' || isCpiC) ? '' : 'none';
   document.getElementById('comboWrap').style.display = (isCombo && tab === 'chart') ? '' : 'none';
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isCombo) {
+  if (isCpiC) renderCpiCombo();
+  else if (isCombo) {
     if (tab === 'chart') renderCombo();
     else if (tab === 'map') showMapTab();
     else renderCustom();
@@ -450,11 +465,22 @@ function renderMulti() {
   const cols = dates.filter(inRange);
   const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? dates[i - lag] : null; };
 
-  const metrics = [
-    { title: '성장률 — 전기비 (QoQ, %)', dec: 1, growth: true,
+  // CPI: 지수 · 전월비(MoM) · 전년동월비(YoY) — KR_Macro CPI 시트 구성
+  const cpiMetrics = [
+    { title: '소비자물가지수 (원지수)', dec: 2,
+      fn: (m, d) => { const a = m.get(d); return a == null ? null : a; } },
+    { title: '전월비 MoM (%)', dec: 2, growth: true,
       fn: (m, d) => { const p = prevD(d, 1), a = m.get(d), b = p && m.get(p);
         return a != null && b ? (a / b - 1) * 100 : null; } },
-    { title: '성장률 — 전년동기비 (YoY, %)', dec: 1, growth: true,
+    { title: '전년동월비 YoY (%)', dec: 2, growth: true,
+      fn: (m, d) => { const p = prevD(d, lagY), a = m.get(d), b = p && m.get(p);
+        return a != null && b ? (a / b - 1) * 100 : null; } },
+  ];
+  const gdpMetrics = [
+    { title: '성장률 — 전기비 (QoQ, %)', dec: 2, growth: true,
+      fn: (m, d) => { const p = prevD(d, 1), a = m.get(d), b = p && m.get(p);
+        return a != null && b ? (a / b - 1) * 100 : null; } },
+    { title: '성장률 — 전년동기비 (YoY, %)', dec: 2, growth: true,
       fn: (m, d) => { const p = prevD(d, lagY), a = m.get(d), b = p && m.get(p);
         return a != null && b ? (a / b - 1) * 100 : null; } },
     { title: '성장 기여도 — 전기비 (QoQ, %p)', dec: 2,
@@ -465,10 +491,12 @@ function renderMulti() {
       fn: (m, d, ded) => { const p = prevD(d, lagY); if (!p) return null;
         const a = m.get(d), b = m.get(p), g = gmap.get(p);
         return a != null && b != null && g ? (a - b) / g * 100 * (ded ? -1 : 1) : null; } },
-    { title: 'GDP 대비 비중 (%)', dec: 1,
+    { title: 'GDP 대비 비중 (%)', dec: 2,
       fn: (m, d, ded) => { const a = m.get(d), g = gmap.get(d);
         return a != null && g ? a / g * 100 * (ded ? -1 : 1) : null; } },
   ];
+  const cpi = isCpi();
+  const metrics = cpi ? cpiMetrics : gdpMetrics;
 
   // 연간 지표는 전기비 = 전년비이므로 QoQ 블록 생략
   const shown = current.freq === 'A'
@@ -484,7 +512,10 @@ function renderMulti() {
       const ded = s.name.startsWith('(공제)');
       const nog = met.growth && NO_GROWTH.has(stripCode(s.name));   // 잔차 항목 증감률 표시 안 함
       const hl = hlRows.has(s.name) ? 'hl' : '';
-      html += `<tr${gdpRowAttr(itemNames, si, hl)}>${nameCell(s.name)}` + cols.map(d => {
+      const attr = cpi
+        ? (cpiRowAttr(s.name) || (hl ? ` class="${hl}"` : ''))
+        : gdpRowAttr(itemNames, si, hl);
+      html += `<tr${attr}>${nameCell(s.name)}` + cols.map(d => {
         const v = nog ? null : met.fn(m, d, ded);
         const txt = v == null ? ''
           : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
@@ -509,10 +540,11 @@ function renderTable() {
   rows.forEach(r => r.map.forEach((v, d) => dateSet.add(d)));
   const dates = [...dateSet].sort().filter(inRange);
 
+  // % 계열(전기비·전년동기비·기여도·비중)은 소수 둘째자리까지
   const fmt = v => v == null ? ''
     : mode === 'level'
-      ? v.toLocaleString('ko-KR', { maximumFractionDigits: 1 })
-      : v.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      ? v.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
+      : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const cls = isGdp() ? ' vlines' : '';
   const rowNames = rows.map(r => r.name);
@@ -676,6 +708,113 @@ async function addCompare() {
   if (!s || compareList.some(c => c.indId === indId && c.sName === s.name)) return;
   compareList.push({ indId, indName: ind.name, sName: s.name, freq: ind.freq, data: s.data });
   renderChips(); updateComparePeriods(); refresh();
+}
+
+// ── 소비자물가 종합 (총지수·근원·생활물가 + 품목성질별) ────────
+const CPI_COMBO = { id: 'cpi_all', name: '소비자물가 종합',
+                    ids: ['kr_cpi', 'kr_cpi_core', 'kr_cpi_living'],
+                    extraIds: ['kr_csi', 'kr_infl_expect'] };   // 함께 불러오되 메뉴는 유지
+// [표시명, 지표, 시리즈 검색어, 들여쓰기 레벨, 'level'=원지수 블록에만 표시]
+const CPI_ROWS = [
+  ['Headline CPI (총지수)', 'kr_cpi', '총지수', 0],
+  ['Core CPI (식료품·에너지 제외)', 'kr_cpi_core', '식료품 및 에너지제외', 0],
+  ['생활물가지수', 'kr_cpi_living', '생활물가지수', 0],
+  // 'raw' = 증감률로 바꾸지 않고 원래 값(지수·%)을 모든 블록에 그대로 표시
+  ['소비자심리지수', 'kr_csi', '소비자심리지수', 0, 'raw'],
+  ['1년 기대인플레(%)', 'kr_infl_expect', '향후1년', 0, 'raw'],
+  ['3년 기대인플레(%)', 'kr_infl_expect', '3년후', 0, 'raw'],
+  ['5년 기대인플레(%)', 'kr_infl_expect', '5년후', 0, 'raw'],
+  ['주요 품목', null, null, 0],          // 구분 헤더 (데이터 없음)
+  ['상품', 'kr_cpi', '상품', 1],
+  ['농축수산물', 'kr_cpi', '농축수산물', 2],
+  ['공업제품', 'kr_cpi', '공업제품', 2],
+  ['전기·가스·수도', 'kr_cpi', '전기', 2],
+  ['서비스', 'kr_cpi', '서비스', 1],
+  ['집세', 'kr_cpi', '집세', 2],
+  ['공공서비스', 'kr_cpi', '공공서비스', 2],
+  ['개인서비스', 'kr_cpi', '개인서비스', 2],
+];
+let cpiData = null;
+
+function cpiRowSeries(indKey, key) {
+  const ind = cpiData && cpiData[indKey];
+  if (!ind) return null;
+  return ind.series.find(x => baseName(x.name) === key)
+      || ind.series.find(x => x.name.includes(key))
+      || (key === '총지수' ? ind.series[0] : null);
+}
+
+async function enterCpiCombo() {
+  const allIds = CPI_COMBO.ids.concat(CPI_COMBO.extraIds);
+  const inds = await Promise.all(allIds.map(id => loadIndicator(id).catch(() => null)));
+  if (!inds[0]) { alert('CPI 데이터가 없습니다. fetch.py 를 먼저 실행하세요.'); return; }
+  cpiData = {};
+  allIds.forEach((id, i) => { cpiData[id] = inds[i]; });
+  view = 'cpicombo';
+  current = { id: CPI_COMBO.id, name: CPI_COMBO.name, freq: 'M', unit: '지수',
+              updated_at: inds[0].updated_at, series: [] };
+  document.getElementById('title').textContent = CPI_COMBO.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + inds[0].updated_at;
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('active', b.id === 'cpiComboBtn'));
+  const ds = new Set();
+  inds.filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 24)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderCpiCombo() {
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const metrics = [
+    { id: 'mom', title: '전월비 MoM (%)', dec: 2,
+      fn: (m, d) => { const p = prevD(d, 1), a = m.get(d), b = p && m.get(p);
+        return a != null && b ? (a / b - 1) * 100 : null; } },
+    { id: 'yoy', title: '전년동월비 YoY (%)', dec: 2,
+      fn: (m, d) => { const p = prevD(d, 12), a = m.get(d), b = p && m.get(p);
+        return a != null && b ? (a / b - 1) * 100 : null; } },
+    { id: 'level', title: '원지수 · 수준', dec: 2,
+      fn: (m, d) => { const a = m.get(d); return a == null ? null : a; } },
+  ];
+  const rows = CPI_ROWS.map(([label, indKey, key, lv, flag]) => {
+    if (!indKey) return { label, lv, sect: true, map: new Map() };   // 구분 헤더
+    const s = cpiRowSeries(indKey, key);
+    return { label, lv, raw: flag === 'raw',
+             map: s ? new Map(s.data.map(p => [p.d, p.v])) : new Map() };
+  });
+  let out = '';
+  metrics.forEach(met => {
+    let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
+      + '<table class="data vlines"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(r => {
+      if (r.sect) {   // 구분 헤더 행 (데이터 없이 제목만)
+        html += `<tr class="p1"><td>${r.label}</td>`
+          + cols.map(() => '<td></td>').join('') + '</tr>';
+        return;
+      }
+      const hl = hlRows.has(r.label) ? ' hl' : '';
+      html += `<tr class="lv${r.lv}${r.lv === 0 ? ' sep-solid' : ''}${hl}">${nameCell(r.label)}`
+        + cols.map(d => {
+          // raw 행(심리지수·기대인플레)은 모든 블록에서 원래 값 그대로
+          const v = r.raw ? (r.map.get(d) ?? null) : met.fn(r.map, d);
+          const txt = v == null ? ''
+            : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+        }).join('') + '</tr>';
+    });
+    out += html + '</tbody></table></div>';
+  });
+  const w = document.getElementById('multiWrap');
+  w.innerHTML = out;
+  w.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
 }
 
 // ── 주간 아파트 매매&전세 동향 (매매·전세·수급 종합) ──────────
@@ -1449,19 +1588,20 @@ function exportExcel() {
 }
 
 async function select(id) {
-  if (view === 'compare' || view === 'combo' || view === 'map') view = 'chart';
+  if (['compare', 'combo', 'map', 'cpicombo'].includes(view)) view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
   document.querySelectorAll('nav button').forEach(b =>
     b.classList.toggle('active', b.dataset.id === id));
-  // 종합·기여도·비중은 총계 시리즈가 첫 번째인 지표(GDP)에서만 노출
+  // 종합: GDP(총계 기준) + CPI(지수·MoM·YoY). 기여도·비중은 GDP 전용.
   const hasTotal = current.series.length > 0 && current.series[0].name.includes('국내총생산');
-  document.getElementById('multiBtn').style.display = hasTotal ? '' : 'none';
+  const cpiInd = /물가지수/.test(current.name || '');
+  document.getElementById('multiBtn').style.display = (hasTotal || cpiInd) ? '' : 'none';
   document.querySelectorAll('#modeButtons .gdp-only').forEach(b =>
     b.style.display = hasTotal ? '' : 'none');
-  // GDP 지표는 종합 보기를 기본으로, 그 외 지표는 종합이면 차트로 전환
-  view = hasTotal ? 'multi' : (view === 'multi' ? 'chart' : view);
+  // GDP·CPI 는 종합 보기를 기본으로, 그 외 지표는 종합이면 차트로 전환
+  view = (hasTotal || cpiInd) ? 'multi' : (view === 'multi' ? 'chart' : view);
   document.querySelectorAll('#viewButtons button').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
   if (!hasTotal && ['cqoq', 'cyoy', 'share'].includes(mode)) {
@@ -1631,8 +1771,20 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false;
+    let comboInserted = false, cpiInserted = false;
     catalog.forEach(item => {
+      if (CPI_COMBO.ids.includes(item.id)) {
+        // CPI 3종은 "소비자물가 종합" 하나로 묶음
+        if (!cpiInserted) {
+          const b = document.createElement('button');
+          b.id = 'cpiComboBtn';
+          b.textContent = CPI_COMBO.name;
+          b.onclick = enterCpiCombo;
+          nav.appendChild(b);
+          cpiInserted = true;
+        }
+        return;
+      }
       if (APT_COMBO.ids.includes(item.id)) {
         // 부동산 3개 지표는 종합 메뉴 하나로 묶어서 표시
         if (!comboInserted) {

@@ -76,23 +76,29 @@ def fetch(indicator: dict) -> list[dict]:
     if isinstance(rows, dict):
         raise KosisError(f"KOSIS API 오류: {rows}")
 
-    # 시리즈명 = 분류명(C1_NM) [+ 항목명(ITM_NM) 이 여럿이면 병기]
+    # 시리즈명 = 가장 깊은 분류명 (objL2 를 쓰면 C2_NM, 없으면 C1_NM)
+    def deepest(r, suffix="_NM"):
+        for k in ("C4", "C3", "C2", "C1"):
+            v = r.get(k + suffix)
+            if v:
+                return v.strip() if suffix == "_NM" else v
+        return None
+
     itm_names = {r.get("ITM_NM") for r in rows}
     multi_itm = len(itm_names) > 1
 
-    # 같은 이름이 서로 다른 분류코드(C1)로 중복되면 코드로 구분
-    # (예: GDP 통계에서 '(재화)F.O.B. 기준'이 수출/수입 하위에 각각 존재)
+    # 같은 이름이 서로 다른 분류코드로 중복되면 코드로 구분
     name_codes: dict[str, set] = {}
     for r in rows:
-        nm = r.get("C1_NM") or r.get("ITM_NM") or "값"
-        name_codes.setdefault(nm, set()).add(r.get("C1", ""))
+        nm = deepest(r) or r.get("ITM_NM") or "값"
+        name_codes.setdefault(nm, set()).add(deepest(r, "") or "")
     dup_names = {nm for nm, codes in name_codes.items() if len(codes) > 1}
 
     series: dict[str, list] = {}
     for r in rows:
-        name = r.get("C1_NM") or r.get("ITM_NM") or "값"
+        name = deepest(r) or r.get("ITM_NM") or "값"
         if name in dup_names:
-            name = f"{name} [{r.get('C1', '')}]"
+            name = f"{name} [{deepest(r, '') or ''}]"
         if multi_itm:
             name = f"{name} · {r.get('ITM_NM')}"
         try:

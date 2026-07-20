@@ -56,17 +56,50 @@ indicators:
       from: kr_gdp_nominal
       method: annual_sum
 
+  # 품목성질별 (총지수·상품·서비스 계층) — KR_Macro CPI 시트와 동일 구성
   - id: kr_cpi
-    name: 소비자물가지수 (2020=100)
+    name: 소비자물가지수 (품목성질별)
     source: kosis
     unit: 지수
     freq: M
-    lookback_years: 10
+    start_year: 2010
+    refetch_years: 2
+    series_first: ["총지수"]
+    params:
+      orgId: "101"
+      tblId: "DT_1J22002"
+      itmId: "T "
+      objL1: "T10 "
+      objL2: "00 21 211 212 213 22 221 222 223 "
+
+  # 식료품·에너지 제외(근원) 등
+  - id: kr_cpi_core
+    name: 소비자물가지수 (식료품·에너지)
+    source: kosis
+    unit: 지수
+    freq: M
+    start_year: 2010
+    refetch_years: 2
     params:
       orgId: "101"
       tblId: "DT_1J22009"
       itmId: "T "
       objL1: "ALL"
+
+  # 생활물가지수 (체감물가 — 자주 사는 품목 위주)
+  - id: kr_cpi_living
+    name: 생활물가지수
+    source: kosis
+    unit: 지수
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1J22005"
+      itmId: "T "
+      objL1: "T10 "
+      objL2: "ALL"
 
   # ── 부동산원 R-ONE (주간 아파트 지수, 전국·수도권·서울·서울권역) ──
   # cls_ids 를 생략하면 통계표의 모든 지역(전국·수도권·서울권역·경기 시별·

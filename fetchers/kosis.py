@@ -55,26 +55,43 @@ def fetch(indicator: dict) -> list[dict]:
     freq = indicator["freq"]
     start_year = indicator.get("_start_year") \
         or date.today().year - indicator.get("lookback_years", 10)
-    start, end = _period_range(freq, start_year)
+    today = date.today()
 
-    params = {
+    def prd(y, last_of_year):
+        """연도 y의 시작/끝 기간 코드 (올해면 현재 시점까지)."""
+        if not last_of_year:
+            return f"{y}01"
+        if y >= today.year:
+            return (f"{today.year}0{(today.month - 1) // 3 + 1}" if freq == "Q"
+                    else f"{today.year}{today.month:02d}")
+        return f"{y}04" if freq == "Q" else f"{y}12"
+
+    base_params = {
         "method": "getList",
         "apiKey": _api_key(),
         "format": "json",
         "jsonVD": "Y",
         "prdSe": freq,
-        "startPrdDe": start,
-        "endPrdDe": end,
         "outputFields": OUTPUT_FIELDS,
         **indicator["params"],
     }
-    resp = requests.get(BASE_URL, params=params, timeout=60)
-    resp.raise_for_status()
-    rows = resp.json()
 
-    # KOSIS는 오류 시 dict({"err": ..., "errMsg": ...})를 반환
-    if isinstance(rows, dict):
-        raise KosisError(f"KOSIS API 오류: {rows}")
+    def get_range(y0, y1):
+        """y0~y1 구간 수집. 40,000셀 초과(err 31)면 반으로 쪼개 재귀."""
+        resp = requests.get(BASE_URL, params={
+            **base_params, "startPrdDe": prd(y0, False), "endPrdDe": prd(y1, True),
+        }, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict):
+            if str(data.get("err", "")).strip() == "31" and y1 > y0:
+                mid = (y0 + y1) // 2
+                print(f"  [kosis {indicator['id']}] 셀 한도 초과 → {y0}~{mid} / {mid+1}~{y1} 분할")
+                return get_range(y0, mid) + get_range(mid + 1, y1)
+            raise KosisError(f"KOSIS API 오류: {data}")
+        return data
+
+    rows = get_range(start_year, today.year)
 
     # 시리즈명 = 가장 깊은 분류명 (objL2 를 쓰면 C2_NM, 없으면 C1_NM)
     def deepest(r, suffix="_NM"):

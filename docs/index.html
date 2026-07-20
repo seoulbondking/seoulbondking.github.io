@@ -138,6 +138,11 @@
         <button data-view="table">표</button>
         <button data-view="chart" class="active">차트</button>
       </div>
+      <div id="cpiTabs" class="mode" style="display:none">
+        <button data-ct="main" class="active">종합</button>
+        <button data-ct="contrib">기여도</button>
+        <button data-ct="items">구성 품목</button>
+      </div>
       <div class="mode" id="modeButtons">
         <button data-mode="level" class="active">원자료</button>
         <button data-mode="pop">전기비 %</button>
@@ -403,6 +408,9 @@ function refresh() {
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
+  document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
+  document.querySelectorAll('#cpiTabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
     (view === 'chart' || isCmp) ? '' : 'none';
   document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
@@ -713,12 +721,13 @@ async function addCompare() {
 // ── 소비자물가 종합 (총지수·근원·생활물가 + 품목성질별) ────────
 const CPI_COMBO = { id: 'cpi_all', name: '소비자물가 종합',
                     ids: ['kr_cpi', 'kr_cpi_core', 'kr_cpi_living'],
-                    extraIds: ['kr_csi', 'kr_infl_expect'] };   // 함께 불러오되 메뉴는 유지
+                    extraIds: ['kr_csi', 'kr_infl_expect', 'kr_cpi_items'] };   // 함께 불러오되 메뉴는 유지
 // [표시명, 지표, 시리즈 검색어, 들여쓰기 레벨, 'level'=원지수 블록에만 표시]
 const CPI_ROWS = [
   ['Headline CPI (총지수)', 'kr_cpi', '총지수', 0],
   ['Core CPI (식료품·에너지 제외)', 'kr_cpi_core', '식료품 및 에너지제외', 0],
   ['생활물가지수', 'kr_cpi_living', '생활물가지수', 0],
+  ['생활물가지수(전월세포함)', 'kr_cpi_living', '월세포함', 0],
   // 'raw' = 증감률로 바꾸지 않고 원래 값(지수·%)을 모든 블록에 그대로 표시
   ['소비자심리지수', 'kr_csi', '소비자심리지수', 0, 'raw'],
   ['1년 기대인플레(%)', 'kr_infl_expect', '향후1년', 0, 'raw'],
@@ -735,6 +744,11 @@ const CPI_ROWS = [
   ['개인서비스', 'kr_cpi', '개인서비스', 2],
 ];
 let cpiData = null;
+let cpiTab = 'main';   // CPI 하위 탭: main(종합) | contrib(기여도)
+// CPI 차트 상태
+let cpiMainChartObj = null, cpiMainSel = null, cpiMainMetric = 'yoy', cpiMainType = 'line';
+let cpiCtbChartObj = null, cpiCtbChartIdx = 'H';
+let cpiCtbFocus = new Set();   // 기여도 차트에 단독 표시할 항목들 (행 클릭으로 토글)
 
 function cpiRowSeries(indKey, key) {
   const ind = cpiData && cpiData[indKey];
@@ -750,9 +764,16 @@ async function enterCpiCombo() {
   if (!inds[0]) { alert('CPI 데이터가 없습니다. fetch.py 를 먼저 실행하세요.'); return; }
   cpiData = {};
   allIds.forEach((id, i) => { cpiData[id] = inds[i]; });
-  view = 'cpicombo';
+  view = 'cpicombo'; cpiTab = 'main';
   current = { id: CPI_COMBO.id, name: CPI_COMBO.name, freq: 'M', unit: '지수',
               updated_at: inds[0].updated_at, series: [] };
+  if (!document.getElementById('cpiTabs').dataset.bound) {
+    document.getElementById('cpiTabs').addEventListener('click', e => {
+      if (!e.target.dataset.ct) return;
+      cpiTab = e.target.dataset.ct; refresh();
+    });
+    document.getElementById('cpiTabs').dataset.bound = '1';
+  }
   document.getElementById('title').textContent = CPI_COMBO.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + inds[0].updated_at;
   document.querySelectorAll('nav button').forEach(b =>
@@ -769,27 +790,420 @@ async function enterCpiCombo() {
   refresh();
 }
 
+// 품목성질별 가중치 [2020년, 2022년] — KR_Macro CPI가중치 시트에서 추출 (합=1000)
+// 실증 검증 결과: 2020 가중치 ~2023-12 · 2022 가중치 2024-01~ 가 오차 최소
+// (2025~ 는 2024년 개편 가중치가 적용 중이라 2022 가중치로는 오차 소폭 존재)
+const CPI_W = {
+  'Headline CPI (총지수)': [1000, 1000],
+  '상품': [466.6, 447.6], '농축수산물': [83.8, 75.6], '공업제품': [348.4, 338.3],
+  '전기·가스·수도': [34.4, 33.7], '서비스': [533.4, 552.4], '집세': [98.3, 99.1],
+  '공공서비스': [127.3, 120.0], '개인서비스': [307.8, 333.3],
+};
+const cpiWeight = (label, d) => {
+  const w = CPI_W[label];
+  return w ? (d <= '2023-12-31' ? w[0] : w[1]) : null;
+};
+
+// 2-부문 분해: 총지수 ≈ w×A + (1−w)×B 의 w를 최소제곱으로 추정 (가중치 개편 구간별)
+function lsW(T, A, B, dates) {
+  let n = 0, d = 0;
+  dates.forEach(x => {
+    const t = T.get(x), a = A.get(x), b = B.get(x);
+    if (t == null || a == null || b == null) return;
+    n += (a - b) * (t - b); d += (a - b) * (a - b);
+  });
+  return d ? n / d : null;
+}
+function twoWayBlocks(title, tSer, aSer, bSer, aL, bL, cols, prevD) {
+  const T = new Map(tSer.data.map(p => [p.d, p.v]));
+  const A = new Map(aSer.data.map(p => [p.d, p.v]));
+  const B = new Map(bSer.data.map(p => [p.d, p.v]));
+  const ds = tSer.data.map(p => p.d);
+  const w1 = lsW(T, A, B, ds.filter(x => x <= '2023-12-31'));
+  const w2 = lsW(T, A, B, ds.filter(x => x > '2023-12-31'));
+  const wOf = x => (x <= '2023-12-31' ? (w1 ?? w2) : (w2 ?? w1));
+  const fw = w => w == null ? '?' : (w * 100).toFixed(1) + '%';
+  let html = `<div class="block-title" style="margin-top:26px">${title}</div>`
+    + `<div style="font-size:12px;color:#8592a3;margin-bottom:4px">추정 가중치(최소제곱): `
+    + `${aL} ${fw(w1)} → ${fw(w2)} (2020→2022 구간)</div>`;
+  [['MoM 기여도 (%p)', 1], ['YoY 기여도 (%p)', 12]].forEach(([sub, lag]) => {
+    const rows = [
+      [`전체 (${lag === 1 ? 'MoM' : 'YoY'} %)`, x => {
+        const p = prevD(x, lag), t = T.get(x), tp = p && T.get(p);
+        return t != null && tp ? (t / tp - 1) * 100 : null; }],
+      [aL, x => { const p = prevD(x, lag); if (!p) return null;
+        const a = A.get(x), ap = A.get(p), tp = T.get(p);
+        return a != null && ap != null && tp ? (a - ap) / tp * wOf(x) * 100 : null; }],
+      [bL, x => { const p = prevD(x, lag); if (!p) return null;
+        const b = B.get(x), bp = B.get(p), tp = T.get(p);
+        return b != null && bp != null && tp ? (b - bp) / tp * (1 - wOf(x)) * 100 : null; }],
+    ];
+    html += `<div class="block-title" style="font-size:12.5px;color:#5a6683">${sub}</div>`
+      + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(([label, fn], ri) => {
+      html += `<tr class="${ri === 0 ? 'lv0 sep-solid' : 'lv1'}"><td>${label}</td>` + cols.map(x => {
+        const v = fn(x);
+        const txt = v == null ? ''
+          : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+      }).join('') + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  return html;
+}
+
+// 구성 품목 트리 (지출목적별 12개 대분류 → 458개 품목)
+let cpiItemsCollapsed = null;
+function renderCpiItems() {
+  const box = document.getElementById('multiWrap');
+  if (!window.__CPI_ITEMS__) {
+    box.innerHTML = '<div style="padding:24px;color:#888">품목·가중치 데이터 로딩…</div>';
+    loadScript('data/cpi_weights.js')
+      .then(() => renderCpiCombo())
+      .catch(() => { box.innerHTML =
+        '<div style="padding:24px;color:#c0392b">data/cpi_weights.js 가 없습니다.</div>'; });
+    return;
+  }
+  const cats = window.__CPI_ITEMS__;
+  if (!cpiItemsCollapsed) cpiItemsCollapsed = new Set(cats.map(c => c.name));
+  const itemsInd = cpiData.kr_cpi_items;
+  const im = new Map();
+  if (itemsInd) itemsInd.series.forEach(s => im.set(baseName(s.name), s));
+  const hasVals = !!itemsInd;
+  const momOf = s => { const d = s.data;
+    return d.length > 1 ? (d[d.length - 1].v / d[d.length - 2].v - 1) * 100 : null; };
+  const yoyOf = s => { const d = s.data;
+    return d.length > 12 ? (d[d.length - 1].v / d[d.length - 13].v - 1) * 100 : null; };
+  let html = '<div style="font-size:12.5px;color:#555;margin-bottom:8px">'
+    + 'Headline CPI 구성 458개 품목 · 가중치 합=1000 · ✓ = 생활물가지수 포함(144개) · △ = 전월세(전·월세포함 생활물가에만)'
+    + (hasVals ? '' : ' · <b>품목별 MoM/YoY를 보려면 fetch.py 로 kr_cpi_items 수집</b>') + '</div>';
+  html += '<div class="grpbar" style="position:static;padding:0">'
+    + '<button id="ciExpand">전체 펼치기</button><button id="ciCollapse">전체 접기</button></div>';
+  html += '<div class="tscroll"><table class="data vlines"><thead><tr><th>품목</th>'
+    + '<th>가중치(2022)</th><th>가중치(2020)</th><th>생활물가</th>'
+    + (hasVals ? '<th>MoM %</th><th>YoY %</th><th>지수</th>' : '') + '</tr></thead><tbody>';
+  cats.forEach(c => {
+    const open = !cpiItemsCollapsed.has(c.name);
+    html += `<tr class="p1 parent" data-cat="${c.name}">`
+      + `<td><span class="tcaret">${open ? '－' : '＋'}</span>${c.name} `
+      + `<span style="color:#8592a3;font-weight:400">(${c.items.length})</span></td>`
+      + `<td>${c.w22.toFixed(1)}</td><td>${c.w20.toFixed(1)}</td><td></td>`
+      + (hasVals ? '<td></td><td></td><td></td>' : '') + '</tr>';
+    if (!open) return;
+    c.items.forEach(i => {
+      const s = im.get(i.n);
+      let vcells = '';
+      if (hasVals) {
+        const m = s ? momOf(s) : null, y = s ? yoyOf(s) : null;
+        const lv = s && s.data.length ? s.data[s.data.length - 1].v : null;
+        vcells = [m, y, lv].map(v =>
+          `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(2)}</td>`).join('');
+      }
+      const livMark = i.liv ? '✓' : (i.n === '전세' || i.n === '월세') ? '△' : '';
+      html += `<tr><td style="padding-left:28px">${i.n}</td>`
+        + `<td>${i.w22 ?? ''}</td><td>${i.w20 ?? ''}</td><td>${livMark}</td>`
+        + vcells + '</tr>';
+    });
+  });
+  html += '</tbody></table></div>';
+  box.innerHTML = html;
+  box.querySelectorAll('tr.parent').forEach(tr => {
+    tr.onclick = () => {
+      const k = tr.dataset.cat;
+      cpiItemsCollapsed.has(k) ? cpiItemsCollapsed.delete(k) : cpiItemsCollapsed.add(k);
+      renderCpiCombo();
+    };
+  });
+  box.querySelector('#ciExpand').onclick = () => { cpiItemsCollapsed = new Set(); renderCpiCombo(); };
+  box.querySelector('#ciCollapse').onclick = () => {
+    cpiItemsCollapsed = new Set(cats.map(c => c.name)); renderCpiCombo(); };
+}
+
+// 기여도 탭: 품목 단위 기여도 트리 — 품목 합 = 각 지수의 MoM/YoY (CPI상세 계층)
+let cpiCtbLag = 1, cpiCtbCollapsed = {};
+function renderCpiContrib() {
+  const box = document.getElementById('multiWrap');
+  if (!window.__CPI_STRUCT__) {
+    box.innerHTML = '<div style="padding:24px;color:#888">품목 구조 로딩…</div>';
+    loadScript('data/cpi_struct.js').then(() => renderCpiCombo())
+      .catch(() => { box.innerHTML =
+        '<div style="padding:24px;color:#c0392b">data/cpi_struct.js 가 없습니다.</div>'; });
+    return;
+  }
+  const itemsInd = cpiData.kr_cpi_items;
+  if (!itemsInd) {
+    box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.8">'
+      + '품목 단위 기여도를 계산하려면 품목별 지수(458개)가 필요합니다.<br>'
+      + 'PC에서 <b>python fetch.py --full kr_cpi_items</b> 실행 후 새로고침해 주세요.</div>';
+    return;
+  }
+  const S = window.__CPI_STRUCT__;
+  const im = new Map();
+  itemsInd.series.forEach(s => im.set(baseName(s.name), new Map(s.data.map(p => [p.d, p.v]))));
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevOf = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const cols = periodDates.filter(inRange);
+  const lag = cpiCtbLag;
+  const fmt = v => v == null ? ''
+    : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cell = v => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`;
+
+  const IDX = [
+    ['H', 'Headline CPI', cpiRowSeries('kr_cpi', '총지수'), nd => 1],
+    ['C', 'Core CPI (식료품·에너지 제외, 309품목)', cpiRowSeries('kr_cpi_core', '식료품 및 에너지제외'), nd => nd.core],
+    ['L', '생활물가지수 (144품목)', cpiRowSeries('kr_cpi_living', '생활물가지수'), nd => nd.liv],
+    ['R', '생활물가지수(전월세포함, 146품목)', cpiRowSeries('kr_cpi_living', '월세포함'),
+      nd => nd.liv || nd.jw],
+  ];
+  let chartCap = null;   // 누적막대 차트용 데이터 (선택된 지수)
+  const CATS6 = ['농축수산물', '공업제품', '전기 · 가스 · 수도', '집세', '공공서비스', '개인서비스'];
+  let out = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">`
+    + `<div class="mode"><button id="ctbM" class="${lag === 1 ? 'active' : ''}">MoM</button>`
+    + `<button id="ctbY" class="${lag === 12 ? 'active' : ''}">YoY</button></div>`
+    + `<div class="mode" id="ctbIdxBtns">` + [['H', 'Headline'], ['C', 'Core'], ['L', '생활물가'], ['R', '전월세포함']]
+      .map(([k, t]) => `<button data-ci="${k}" class="${cpiCtbChartIdx === k ? 'active' : ''}">${t}</button>`).join('')
+    + `</div><span style="font-size:12px;color:#8592a3">누적막대=카테고리 기여도 · 선=실제 변화율 · <b>표에서 행 클릭=해당 항목만 차트 표시</b> (± 는 접기)</span>`
+    + `<span id="ctbFocusChips" style="display:flex;gap:5px;flex-wrap:wrap"></span></div>`
+    + `<div class="cchart" style="height:330px;margin-bottom:18px"><canvas id="cpiCtbChart"></canvas></div>`;
+
+  // ≤2021-12: 2020가중치·원지수(2020평균=100 그대로)
+  // 2022-01~: 2022가중치 + "2022년 연평균=100" 리레이팅 (KR_Macro 방식 — 검증 결과 오차 최소)
+  const LINK = '2021-12-31';
+  const MON22 = ['2022-01-31','2022-02-28','2022-03-31','2022-04-30','2022-05-31','2022-06-30',
+                 '2022-07-31','2022-08-31','2022-09-30','2022-10-31','2022-11-30','2022-12-31'];
+  const avg22 = m => { let s = 0;
+    for (const d of MON22) { const v = m.get(d); if (v == null) return null; s += v; }
+    return s / 12; };
+  IDX.forEach(([key, label, tSer, memb]) => {
+    if (!tSer) return;
+    const T = new Map(tSer.data.map(p => [p.d, p.v]));
+    const TA = avg22(T);
+    let W20 = 0, W22 = 0;
+    S.forEach(nd => { if (!nd.agg && memb(nd)) { W20 += nd.w20 || 0; W22 += nd.w22 || 0; } });
+    // 리레이팅 계수 f_i = 지수총(2022평균) / 품목지수(2022평균) — 신규 품목은 첫 관측월 연결
+    const contribs = new Map();
+    S.forEach(nd => {
+      if (nd.agg || !memb(nd)) return;
+      const m = im.get(nd.n);
+      let f = null;
+      if (m && TA) {
+        const pa = avg22(m);
+        if (pa) f = TA / pa;
+        else {
+          for (const d0 of periodDates) {
+            if (d0 > LINK && m.get(d0) != null && T.get(d0)) { f = T.get(d0) / m.get(d0); break; }
+          }
+        }
+      }
+      contribs.set(nd.n, cols.map(d => {
+        if (!m) return null;
+        const p = prevOf(d, lag); if (!p) return null;
+        const a = m.get(d), b = m.get(p), t = T.get(p);
+        if (a == null || b == null || !t) return null;
+        if (d <= LINK) {
+          const w = nd.w20;
+          return w != null && W20 ? (a - b) / t * (w / W20) * 100 : null;
+        }
+        const w = nd.w22;
+        return w != null && W22 && f ? (a - b) * f / t * (w / W22) * 100 : null;
+      }));
+    });
+    // 집계행 = 하위 품목 기여도의 합 (가법성 보장)
+    const aggArr = new Map();
+    for (let i = 0; i < S.length; i++) {
+      const nd = S[i]; if (!nd.agg) continue;
+      const sum = cols.map(() => 0), has = cols.map(() => false);
+      for (let j = i + 1; j < S.length; j++) {
+        const x = S[j]; if (x.lv <= nd.lv) break;
+        if (x.agg || !memb(x)) continue;
+        contribs.get(x.n).forEach((v, k) => { if (v != null) { sum[k] += v; has[k] = true; } });
+      }
+      aggArr.set(nd.n, sum.map((v, k) => has[k] ? v : null));
+    }
+    const totRow = cols.map(d => { const p = prevOf(d, lag);
+      const t = T.get(d), tp = p && T.get(p);
+      return t != null && tp ? (t / tp - 1) * 100 : null; });
+    const sumRow = aggArr.get('총지수') || cols.map(() => null);
+    if (key === cpiCtbChartIdx)   // 차트 데이터 캡처 (카테고리 파티션 + 전체 행별 배열)
+      chartCap = { label, cats: CATS6.map(n => [n, aggArr.get(n)])
+        .filter(([, a]) => a && a.some(v => v != null)), totRow, contribs, aggArr };
+    if (!cpiCtbCollapsed[key])
+      cpiCtbCollapsed[key] = new Set(S.filter(n => n.agg && n.lv >= 2).map(n => n.n));
+    const colSet = cpiCtbCollapsed[key];
+
+    out += `<div class="block-title" style="margin-top:24px">${label} — 품목 기여도 `
+      + `(${lag === 1 ? 'MoM' : 'YoY'}, %p) · 가중치합 ${W22.toFixed(1)}</div>`
+      + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    out += `<tr class="lv0 sep-solid"><td>실제 ${lag === 1 ? 'MoM' : 'YoY'} (%)</td>`
+      + totRow.map(cell).join('') + '</tr>';
+    out += `<tr class="lv0"><td>품목 기여도 합 (%p)</td>` + sumRow.map(cell).join('') + '</tr>';
+    out += `<tr class="lv0 sep-solid"><td>차이</td>` + totRow.map((v, k) =>
+      cell(v != null && sumRow[k] != null ? v - sumRow[k] : null)).join('') + '</tr>';
+    let hide = null;
+    for (let i = 1; i < S.length; i++) {   // 0 = 총지수 (합 행으로 이미 표시)
+      const nd = S[i];
+      if (hide != null) { if (nd.lv > hide) continue; hide = null; }
+      const fsel = key === cpiCtbChartIdx && cpiCtbFocus.has(nd.n) ? ' hl' : '';
+      if (nd.agg) {
+        const arr = aggArr.get(nd.n);
+        if (!arr || arr.every(v => v == null)) { hide = nd.lv; continue; }   // 멤버 없음 → 통째 숨김
+        const isCol = colSet.has(nd.n);
+        out += `<tr class="parent${fsel}" data-ctb="${key}|${nd.n}" data-fc="${key}|${nd.n}">`
+          + `<td style="padding-left:${6 + nd.lv * 14}px;cursor:pointer">`
+          + `<span class="tcaret">${isCol ? '＋' : '－'}</span><b>${nd.n}</b></td>`
+          + arr.map(cell).join('') + '</tr>';
+        if (isCol) hide = nd.lv;
+      } else {
+        if (!memb(nd)) continue;
+        out += `<tr class="fcrow${fsel}" data-fc="${key}|${nd.n}">`
+          + `<td style="padding-left:${6 + nd.lv * 14}px;cursor:pointer">${nd.n}</td>`
+          + contribs.get(nd.n).map(cell).join('') + '</tr>';
+      }
+    }
+    out += '</tbody></table></div>';
+  });
+  box.innerHTML = out;
+  box.querySelector('#ctbM').onclick = () => { cpiCtbLag = 1; renderCpiCombo(); };
+  box.querySelector('#ctbY').onclick = () => { cpiCtbLag = 12; renderCpiCombo(); };
+  // 행 클릭 = 차트에 해당 항목 표시(토글) · ± 클릭 = 접기/펴기
+  const focusToggle = kn => {
+    const [k, n] = kn.split('|');
+    if (cpiCtbChartIdx !== k) { cpiCtbChartIdx = k; cpiCtbFocus = new Set([n]); }
+    else cpiCtbFocus.has(n) ? cpiCtbFocus.delete(n) : cpiCtbFocus.add(n);
+    renderCpiCombo();
+  };
+  box.querySelectorAll('tr.parent').forEach(tr => {
+    tr.querySelector('.tcaret').onclick = e => {
+      e.stopPropagation();
+      const [k, n] = tr.dataset.ctb.split('|');
+      const st = cpiCtbCollapsed[k];
+      st.has(n) ? st.delete(n) : st.add(n);
+      renderCpiCombo();
+    };
+    tr.onclick = () => focusToggle(tr.dataset.fc);
+  });
+  box.querySelectorAll('tr.fcrow').forEach(tr => {
+    tr.onclick = () => focusToggle(tr.dataset.fc);
+  });
+  box.querySelectorAll('#ctbIdxBtns button').forEach(b => {
+    b.onclick = () => { cpiCtbChartIdx = b.dataset.ci; cpiCtbFocus = new Set(); renderCpiCombo(); };
+  });
+  // 선택 칩 (× 로 제거, 없으면 기본 누적막대)
+  const fchips = box.querySelector('#ctbFocusChips');
+  [...cpiCtbFocus].forEach((n, i) => {
+    const c = document.createElement('span');
+    c.style.cssText = 'font-size:12px;padding:2px 8px;border:1px solid #d7dde8;border-radius:10px;'
+      + 'background:#fff;color:' + PALETTE[i % PALETTE.length];
+    c.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+    c.querySelector('b').onclick = () => { cpiCtbFocus.delete(n); renderCpiCombo(); };
+    fchips.appendChild(c);
+  });
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+
+  // 누적 막대 차트 (엑셀 방식: 카테고리 기여도 스택 + 실제 변화율 선)
+  if (cpiCtbChartObj) { cpiCtbChartObj.destroy(); cpiCtbChartObj = null; }
+  if (chartCap) {
+    let datasets;
+    const focused = [...cpiCtbFocus].filter(n =>
+      chartCap.aggArr.get(n) || chartCap.contribs.get(n));
+    if (focused.length) {
+      // 선택 항목만 막대로 (스택 없이)
+      datasets = focused.map((n, i) => ({
+        label: n, data: chartCap.aggArr.get(n) || chartCap.contribs.get(n),
+        backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 0,
+      }));
+    } else {
+      datasets = chartCap.cats.map(([n, arr], i) => ({
+        label: n, data: arr, backgroundColor: PALETTE[i % PALETTE.length],
+        stack: 's', borderWidth: 0,
+      }));
+    }
+    datasets.push({
+      label: `실제 ${lag === 1 ? 'MoM' : 'YoY'} (%)`, data: chartCap.totRow,
+      type: 'line', borderColor: '#1a2b4a', backgroundColor: '#1a2b4a',
+      borderWidth: 2, pointRadius: 2, tension: 0.1, order: -1,
+    });
+    const stk = !focused.length;   // 선택 항목이 있으면 스택 해제
+    cpiCtbChartObj = new Chart(document.getElementById('cpiCtbChart'), {
+      type: 'bar',
+      data: { labels: cols, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+          title: { display: true, font: { size: 13 },
+            text: chartCap.label + (focused.length
+              ? ' 기여도 — ' + focused.join(' · ') : ' 기여도 분해') },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: {
+          x: { stacked: stk, ticks: { maxTicksLimit: 12, font: { size: 10 },
+               callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { stacked: stk, ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+}
+
 function renderCpiCombo() {
+  if (cpiTab === 'items') { renderCpiItems(); return; }
+  if (cpiTab === 'contrib') { renderCpiContrib(); return; }
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
-  const metrics = [
-    { id: 'mom', title: '전월비 MoM (%)', dec: 2,
+  const totalSer = cpiRowSeries('kr_cpi', '총지수');
+  const totalMap = totalSer ? new Map(totalSer.data.map(p => [p.d, p.v])) : new Map();
+  // 기여도 = 가중치/10 × (P_t − P_{t−lag}) / 총지수_{t−lag}   (라스파이레스 분해)
+  const contribFn = lag => (m, d, label) => {
+    const w = cpiWeight(label, d);
+    if (w == null) return null;
+    const p = prevD(d, lag);
+    if (!p) return null;
+    const a = m.get(d), b = m.get(p), t = totalMap.get(p);
+    return a != null && b != null && t ? (a - b) / t * w / 10 : null;
+  };
+  const allMetrics = [
+    { id: 'mom', tab: 'main', title: '전월비 MoM (%)', dec: 2,
       fn: (m, d) => { const p = prevD(d, 1), a = m.get(d), b = p && m.get(p);
         return a != null && b ? (a / b - 1) * 100 : null; } },
-    { id: 'yoy', title: '전년동월비 YoY (%)', dec: 2,
+    { id: 'yoy', tab: 'main', title: '전년동월비 YoY (%)', dec: 2,
       fn: (m, d) => { const p = prevD(d, 12), a = m.get(d), b = p && m.get(p);
         return a != null && b ? (a / b - 1) * 100 : null; } },
-    { id: 'level', title: '원지수 · 수준', dec: 2,
+    { id: 'cmom', tab: 'contrib', title: 'MoM 기여도 (%p) — 구간별 가중치(2020/2022)', dec: 2,
+      contrib: true, fn: contribFn(1) },
+    { id: 'cyoy', tab: 'contrib', title: 'YoY 기여도 (%p) — 구간별 가중치(2020/2022)', dec: 2,
+      contrib: true, fn: contribFn(12) },
+    { id: 'level', tab: 'main', title: '원지수 · 수준', dec: 2,
       fn: (m, d) => { const a = m.get(d); return a == null ? null : a; } },
   ];
-  const rows = CPI_ROWS.map(([label, indKey, key, lv, flag]) => {
+  const metrics = allMetrics.filter(m => m.tab === cpiTab);
+  let rows = CPI_ROWS.map(([label, indKey, key, lv, flag]) => {
     if (!indKey) return { label, lv, sect: true, map: new Map() };   // 구분 헤더
     const s = cpiRowSeries(indKey, key);
     return { label, lv, raw: flag === 'raw',
              map: s ? new Map(s.data.map(p => [p.d, p.v])) : new Map() };
   });
-  let out = '';
+  // 기여도 탭: 가중치가 있는 행(Headline·주요품목)만 표시
+  if (cpiTab === 'contrib') rows = rows.filter(r => r.sect || CPI_W[r.label]);
+
+  // ── 종합 탭 차트 (항목 선택 + 선/막대 + 지표 전환) ──────────
+  if (cpiMainSel == null)
+    cpiMainSel = new Set(['Headline CPI (총지수)', 'Core CPI (식료품·에너지 제외)', '생활물가지수']);
+  const chartItems = rows.filter(r => !r.sect);
+  let out = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'
+    + '<div class="mode" id="cmMetric">'
+    + [['mom', 'MoM'], ['yoy', 'YoY'], ['level', '원지수']].map(([v, t]) =>
+        `<button data-cm="${v}" class="${cpiMainMetric === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><div class="mode" id="cmType">'
+    + [['line', '선'], ['bar', '막대']].map(([v, t]) =>
+        `<button data-cy="${v}" class="${cpiMainType === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div></div>'
+    + '<div id="cmChips" style="display:flex;gap:5px 10px;flex-wrap:wrap;font-size:12px;margin-bottom:6px"></div>'
+    + '<div class="cchart" style="height:320px;margin-bottom:18px"><canvas id="cpiMainChart"></canvas></div>';
   metrics.forEach(met => {
     let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
       + '<table class="data vlines"><thead><tr><th>항목</th>'
@@ -803,8 +1217,10 @@ function renderCpiCombo() {
       const hl = hlRows.has(r.label) ? ' hl' : '';
       html += `<tr class="lv${r.lv}${r.lv === 0 ? ' sep-solid' : ''}${hl}">${nameCell(r.label)}`
         + cols.map(d => {
-          // raw 행(심리지수·기대인플레)은 모든 블록에서 원래 값 그대로
-          const v = r.raw ? (r.map.get(d) ?? null) : met.fn(r.map, d);
+          // raw 행(심리지수·기대인플레)은 원래 값 그대로 (기여도 블록에선 빈칸)
+          const v = met.contrib
+            ? met.fn(r.map, d, r.label)
+            : r.raw ? (r.map.get(d) ?? null) : met.fn(r.map, d);
           const txt = v == null ? ''
             : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
           return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
@@ -812,9 +1228,77 @@ function renderCpiCombo() {
     });
     out += html + '</tbody></table></div>';
   });
+  // 기여도 탭: Core CPI · 생활물가지수 2-부문 분해 추가
+  if (cpiTab === 'contrib') {
+    const t = cpiRowSeries('kr_cpi', '총지수');
+    const core = cpiRowSeries('kr_cpi_core', '식료품 및 에너지제외');
+    const fe = cpiRowSeries('kr_cpi_core', '식료품 및 에너지');
+    if (t && core && fe)
+      out += twoWayBlocks('Core CPI 분해 — Headline = 식료품·에너지 제외 + 식료품·에너지',
+        t, core, fe, 'Core CPI (제외지수)', '식료품 및 에너지', cols, prevD);
+    const lt = cpiRowSeries('kr_cpi_living', '생활물가지수');
+    const fd = cpiRowSeries('kr_cpi_living', '식품');
+    const nf = cpiRowSeries('kr_cpi_living', '식품 이외');
+    if (lt && fd && nf)
+      out += twoWayBlocks('생활물가지수 분해 — 식품 + 식품 이외',
+        lt, fd, nf, '식품', '식품 이외', cols, prevD);
+  }
   const w = document.getElementById('multiWrap');
   w.innerHTML = out;
   w.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+
+  // 종합 탭 차트 렌더 + 컨트롤
+  if (cpiTab === 'main') {
+    const chips = w.querySelector('#cmChips');
+    chartItems.forEach((r, i) => {
+      const lb = document.createElement('label');
+      lb.style.cssText = 'cursor:pointer;user-select:none';
+      lb.innerHTML = `<input type="checkbox" ${cpiMainSel.has(r.label) ? 'checked' : ''}>`
+        + `<span style="color:${PALETTE[i % PALETTE.length]}">■</span> ${r.label}`;
+      lb.querySelector('input').onchange = e => {
+        e.target.checked ? cpiMainSel.add(r.label) : cpiMainSel.delete(r.label);
+        renderCpiCombo();
+      };
+      chips.appendChild(lb);
+    });
+    w.querySelectorAll('#cmMetric button').forEach(b =>
+      b.onclick = () => { cpiMainMetric = b.dataset.cm; renderCpiCombo(); });
+    w.querySelectorAll('#cmType button').forEach(b =>
+      b.onclick = () => { cpiMainType = b.dataset.cy; renderCpiCombo(); });
+
+    const mval = (r, d) => {
+      if (r.raw || cpiMainMetric === 'level') return r.map.get(d) ?? null;
+      const lagN = cpiMainMetric === 'mom' ? 1 : 12;
+      const p = prevD(d, lagN);
+      const a = r.map.get(d), b = p && r.map.get(p);
+      return a != null && b ? (a / b - 1) * 100 : null;
+    };
+    if (cpiMainChartObj) { cpiMainChartObj.destroy(); cpiMainChartObj = null; }
+    const datasets = chartItems.filter(r => cpiMainSel.has(r.label)).map(r => {
+      const i = chartItems.indexOf(r);
+      return {
+        label: r.label, data: cols.map(d => mval(r, d)),
+        borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
+        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15,
+      };
+    });
+    cpiMainChartObj = new Chart(w.querySelector('#cpiMainChart'), {
+      type: cpiMainType,
+      data: { labels: cols, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
+               callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
 }
 
 // ── 주간 아파트 매매&전세 동향 (매매·전세·수급 종합) ──────────
@@ -1773,6 +2257,7 @@ document.getElementById('endSel').onchange = e => {
     const nav = document.getElementById('nav');
     let comboInserted = false, cpiInserted = false;
     catalog.forEach(item => {
+      if (item.id === 'kr_cpi_items') return;   // 품목상세는 구성품목 탭 전용 (메뉴 숨김)
       if (CPI_COMBO.ids.includes(item.id)) {
         // CPI 3종은 "소비자물가 종합" 하나로 묶음
         if (!cpiInserted) {

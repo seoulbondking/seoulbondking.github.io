@@ -86,6 +86,21 @@ indicators:
       itmId: "T "
       objL1: "ALL"
 
+  # 품목별 상세 지수 (458개 품목 — 구성 품목 탭에서 사용)
+  - id: kr_cpi_items
+    name: 소비자물가지수 (품목별 상세)
+    source: kosis
+    unit: 지수
+    freq: M
+    start_year: 2015
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1J22112"
+      itmId: "T "
+      objL1: "T10 "
+      objL2: "ALL"
+
   # 생활물가지수 (체감물가 — 자주 사는 품목 위주)
   - id: kr_cpi_living
     name: 생활물가지수

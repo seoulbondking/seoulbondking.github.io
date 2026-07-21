@@ -116,6 +116,34 @@ indicators:
       objL1: "T10 "
       objL2: "ALL"
 
+  # ── 소매판매액지수 (통계청) ──────────────────────────────────
+  - id: kr_retail
+    name: 소매판매액지수 (상품군별)
+    source: kosis
+    unit: 지수(2020=100)
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    series_first: ["소매판매액지수", "총지수"]
+    params:
+      orgId: "101"
+      tblId: "DT_1K41012"
+      itmId: "T1 "
+      objL1: "ALL"
+
+  - id: kr_retail_type
+    name: 소매판매액지수 (업태별)
+    source: kosis
+    unit: 지수(2020=100)
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1K41013"
+      itmId: "T1 "
+      objL1: "ALL"
+
   # ── 부동산원 R-ONE (주간 아파트 지수, 전국·수도권·서울·서울권역) ──
   # cls_ids 를 생략하면 통계표의 모든 지역(전국·수도권·서울권역·경기 시별·
   # 인천·지방·세종·5대광역시·8개도 등)을 한 번에 수집한다.

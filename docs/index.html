@@ -143,6 +143,11 @@
         <button data-ct="contrib">기여도</button>
         <button data-ct="items">구성 품목</button>
       </div>
+      <div id="retTabs" class="mode" style="display:none">
+        <button data-rt="goods" class="active">상품군별</button>
+        <button data-rt="type">업태별</button>
+        <button data-rt="card">카드사용액</button>
+      </div>
       <div class="mode" id="modeButtons">
         <button data-mode="level" class="active">원자료</button>
         <button data-mode="pop">전기비 %</button>
@@ -179,6 +184,7 @@
       <div id="chartWrap"><canvas id="chart"></canvas></div>
       <div id="tableWrap" style="display:none"></div>
       <div id="multiWrap" style="display:none"></div>
+      <div id="retailWrap" style="display:none"></div>
       <div id="aptTabs" class="mode" style="display:none;margin-bottom:12px">
         <button data-at="chart" class="active">차트</button>
         <button data-at="map">지도</button>
@@ -406,9 +412,12 @@ function updateMeta() {
 function refresh() {
   updateMeta();
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
+  const isRet = view === 'retail';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
+  document.getElementById('retTabs').style.display = isRet ? '' : 'none';
+  document.getElementById('retailWrap').style.display = isRet ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -420,15 +429,16 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isCpiC) renderCpiCombo();
+  if (isRet) renderRetail();
+  else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
     else if (tab === 'map') showMapTab();
@@ -716,6 +726,345 @@ async function addCompare() {
   if (!s || compareList.some(c => c.indId === indId && c.sName === s.name)) return;
   compareList.push({ indId, indName: ind.name, sName: s.name, freq: ind.freq, data: s.data });
   renderChips(); updateComparePeriods(); refresh();
+}
+
+// ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────
+const RETAIL = { id: 'retail_all', name: '소매판매',
+                 ids: ['kr_retail', 'kr_retail_type'] };
+// 소매판매 계층 (통계청 소매판매액지수 분류) — 항목명 → 들여쓰기 레벨
+const RETAIL_LV = {
+  goods: {   // 상품군별
+    '총지수': 0, '합계(승용차 제외)': 0,
+    '내구재': 1,
+      '승용차': 2, '국내 승용차': 3, '수입 승용차': 3,
+      '가전제품': 2, '통신기기 및 컴퓨터': 2, '통신기기': 3, '컴퓨터': 3,
+      '가구': 2, '기타내구재': 2,
+    '준내구재': 1,
+      '의복': 2, '신발 및 가방': 2, '신발': 3, '가방': 3,
+      '오락 취미 경기용품': 2, '기타준내구재': 2,
+    '비내구재': 1,
+      '음식료품': 2, '의약품': 2, '화장품': 2, '서적 문구': 2, '차량연료': 2, '기타비내구재': 2,
+  },
+  type: {    // 업태별
+    '총지수': 0,
+    '백화점': 1, '대형마트': 1, '면세점': 1,
+    '슈퍼마켓 및 잡화점': 1, '체인 슈퍼마켓': 2, '일반 슈퍼마켓 및 잡화점': 2,
+    '편의점': 1,
+    '승용차 및 연료 소매점': 1, '승용차 소매점': 2, '연료 소매점': 2,
+    '전문소매점': 1,
+      '가전·컴퓨터·통신기기 소매점': 2, '의복·신발·가방 소매점': 2,
+      '음식·가정· 문화상품 소매점': 2, '음식·가정·문화상품 소매점': 2,
+      '의약품·화장품·기타상품 소매점': 2,
+    '무점포 소매': 1, '인터넷 쇼핑': 2, '홈쇼핑': 2, '방문 및 배달 소매점': 2,
+  },
+};
+function retailLevel(tab, name) {
+  const lv = RETAIL_LV[tab][name.trim()];
+  return lv === undefined ? 1 : lv;
+}
+let retailData = null, retailTab = 'goods';
+let retMainSel = null, retMainMetric = 'yoy', retMainType = 'line', retMainChart = null;
+let retCollapsed = { goods: null, type: null };   // 분류별 접힘 상태
+
+async function enterRetail() {
+  const inds = await Promise.all(RETAIL.ids.map(id => loadIndicator(id).catch(() => null)));
+  retailData = { goods: inds[0], type: inds[1] };
+  view = 'retail'; retailTab = 'goods'; retMainSel = null;
+  current = { id: RETAIL.id, name: RETAIL.name, freq: 'M', unit: '지수',
+              updated_at: (inds[0] || {}).updated_at || '-', series: [] };
+  document.getElementById('title').textContent = RETAIL.name;
+  document.getElementById('updatedAt').textContent = inds[0] ? '데이터 갱신: ' + inds[0].updated_at : '';
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'retailBtn'));
+  if (!document.getElementById('retTabs').dataset.bound) {
+    document.getElementById('retTabs').addEventListener('click', e => {
+      if (!e.target.dataset.rt) return; retailTab = e.target.dataset.rt; retMainSel = null; refresh();
+    });
+    document.getElementById('retTabs').dataset.bound = '1';
+  }
+  // 기간: 소매판매 날짜 기준 (카드도 월별이라 공통)
+  const ind = inds[0] || inds[1];
+  const ds = new Set();
+  if (ind) ind.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  await loadCardData();
+  Object.keys(cardData).forEach(m => ds.add(monthEnd(m)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+function monthEnd(ym) {   // 'YYYY-MM' → 'YYYY-MM-DD'(월말)
+  const [y, m] = ym.split('-').map(Number);
+  return `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`;
+}
+
+function renderRetail() {
+  document.querySelectorAll('#retTabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.rt === retailTab));
+  if (retailTab === 'card') { renderCard(); return; }
+  const ind = retailTab === 'goods' ? retailData.goods : retailData.type;
+  const box = document.getElementById('retailWrap');
+  if (!ind) { box.innerHTML = '<div style="padding:24px;color:#888">소매판매 데이터가 없습니다. fetch.py 실행 필요.</div>'; return; }
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  // 업태별은 총지수가 없으므로 상품군별의 총지수를 맨 위에 붙임
+  let items = ind.series;
+  if (retailTab === 'type' && retailData.goods) {
+    const tot = retailData.goods.series.find(s => s.name.trim() === '총지수');
+    if (tot && !items.some(s => s.name.trim() === '총지수')) items = [tot, ...items];
+  }
+  // 계층·자식여부 계산 (트리 접기용)
+  const nodes = items.map(s => ({ s, name: s.name, lv: retailLevel(retailTab, s.name) }));
+  nodes.forEach((nd, i) => nd.hasChildren = i + 1 < nodes.length && nodes[i + 1].lv > nd.lv);
+  const colSet = (retCollapsed[retailTab] ||= new Set());
+  if (retMainSel == null) retMainSel = new Set(items.slice(0, 4).map(s => s.name));
+  const metrics = [
+    ['yoy', '전년동월비 YoY (%)', 12], ['mom', '전월비 MoM (%)', 1], ['level', '원지수', 0],
+  ];
+  const mval = (map, d, mode, lag) => {
+    if (mode === 'level') return map.get(d) ?? null;
+    const p = prevD(d, lag); const a = map.get(d), b = p && map.get(p);
+    return a != null && b ? (a / b - 1) * 100 : null;
+  };
+  // 차트 컨트롤
+  let out = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'
+    + '<div class="mode" id="rmMetric">' + [['yoy', 'YoY'], ['mom', 'MoM'], ['level', '원지수']]
+      .map(([v, t]) => `<button data-rm="${v}" class="${retMainMetric === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
+    + '<div class="mode" id="rmType">' + [['line', '선'], ['bar', '막대']]
+      .map(([v, t]) => `<button data-ry="${v}" class="${retMainType === v ? 'active' : ''}">${t}</button>`).join('') + '</div></div>'
+    + '<div id="rmChips" style="display:flex;gap:5px 10px;flex-wrap:wrap;font-size:12px;margin-bottom:6px"></div>'
+    + '<div class="cchart" style="height:320px;margin-bottom:18px"><canvas id="retMainChart"></canvas></div>'
+    + '<div class="grpbar" style="position:static;padding:0;margin-bottom:6px">'
+    + '<button id="retExpand">전체 펼치기</button><button id="retCollapse">전체 접기</button></div>';
+  // 3개 블록 표 (트리 접기 지원)
+  metrics.forEach(([mode, title, lag]) => {
+    out += `<div class="block-title">${title}</div><div class="tscroll">`
+      + '<table class="data vlines"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    let hide = null;
+    nodes.forEach(nd => {
+      if (hide != null) { if (nd.lv > hide) return; hide = null; }
+      const isCol = colSet.has(nd.name);
+      const m = new Map(nd.s.data.map(p => [p.d, p.v]));
+      const cls = nd.lv === 0 ? 'lv0 sep-solid' : `lv${nd.lv}`;
+      const caret = nd.hasChildren ? `<span class="tcaret">${isCol ? '＋' : '－'}</span>` : '';
+      const cellsHtml = cols.map(d => {
+        const v = mval(m, d, mode, lag);
+        const txt = v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: mode === 'level' ? 1 : 2, maximumFractionDigits: mode === 'level' ? 1 : 2 });
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+      }).join('');
+      out += `<tr class="${cls}${nd.hasChildren ? ' parent' : ''}"${nd.hasChildren ? ` data-rc="${nd.name}"` : ''}>`
+        + `<td style="padding-left:${8 + nd.lv * 16}px${nd.hasChildren ? ';cursor:pointer' : ''}">${caret}${nd.name}</td>`
+        + cellsHtml + '</tr>';
+      if (isCol && nd.hasChildren) hide = nd.lv;
+    });
+    out += '</tbody></table></div>';
+  });
+  box.innerHTML = out;
+  // 트리 접기/펴기
+  box.querySelectorAll('tr.parent').forEach(tr => {
+    tr.querySelector('td:first-child').onclick = () => {
+      const n = tr.dataset.rc;
+      colSet.has(n) ? colSet.delete(n) : colSet.add(n);
+      renderRetail();
+    };
+  });
+  box.querySelector('#retExpand').onclick = () => { retCollapsed[retailTab] = new Set(); renderRetail(); };
+  box.querySelector('#retCollapse').onclick = () => {
+    retCollapsed[retailTab] = new Set(nodes.filter(n => n.hasChildren).map(n => n.name)); renderRetail();
+  };
+  // 차트
+  const chips = box.querySelector('#rmChips');
+  const allBtn = document.createElement('button');
+  allBtn.textContent = retMainSel.size === items.length ? '전체 해제' : '전체 선택';
+  allBtn.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid #d7dde8;background:#fff;cursor:pointer;border-radius:8px';
+  allBtn.onclick = () => { retMainSel = retMainSel.size === items.length ? new Set() : new Set(items.map(s => s.name)); renderRetail(); };
+  chips.appendChild(allBtn);
+  items.forEach((s, i) => {
+    const lb = document.createElement('label'); lb.style.cssText = 'cursor:pointer';
+    lb.innerHTML = `<input type="checkbox" ${retMainSel.has(s.name) ? 'checked' : ''}><span style="color:${PALETTE[i % PALETTE.length]}">■</span> ${s.name}`;
+    lb.querySelector('input').onchange = e => { e.target.checked ? retMainSel.add(s.name) : retMainSel.delete(s.name); renderRetail(); };
+    chips.appendChild(lb);
+  });
+  box.querySelectorAll('#rmMetric button').forEach(b => b.onclick = () => { retMainMetric = b.dataset.rm; renderRetail(); });
+  box.querySelectorAll('#rmType button').forEach(b => b.onclick = () => { retMainType = b.dataset.ry; renderRetail(); });
+  const lag = retMainMetric === 'mom' ? 1 : 12;
+  if (retMainChart) { retMainChart.destroy(); retMainChart = null; }
+  const datasets = items.filter(s => retMainSel.has(s.name)).map(s => {
+    const i = items.indexOf(s); const m = new Map(s.data.map(p => [p.d, p.v]));
+    return { label: s.name, data: cols.map(d => mval(m, d, retMainMetric, lag)),
+      borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15 };
+  });
+  retMainChart = new Chart(box.querySelector('#retMainChart'), {
+    type: retMainType, data: { labels: cols, datasets },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 11 } } } } },
+  });
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+}
+
+// ── 카드사용액 (직접 입력 → 3개월 이동평균·연누계·증감률 자동계산) ──
+let cardData = {};   // { 'YYYY-MM': 금액 } — 현재 편집중 데이터
+let cardChart = null;
+// 공유 원본 = 커밋된 docs/data/card_data.js (window.__CARD__)
+// 로컬 편집 = localStorage. 로컬 편집이 있으면 그것을, 없으면 커밋 파일을 사용.
+async function loadCardData() {
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem('cardData') || 'null'); } catch (e) {}
+  if (local && Object.keys(local).length) { cardData = local; return; }
+  if (!window.__CARD__) await loadScript('data/card_data.js').catch(() => {});
+  cardData = window.__CARD__ ? { ...window.__CARD__ } : {};
+}
+function saveCardData() { try { localStorage.setItem('cardData', JSON.stringify(cardData)); } catch (e) {} }
+function resetCardToFile() {   // 로컬 편집 버리고 커밋 파일 값으로 되돌리기
+  localStorage.removeItem('cardData');
+  cardData = window.__CARD__ ? { ...window.__CARD__ } : {};
+  renderCard();
+}
+
+function cardComputed() {
+  const months = Object.keys(cardData).sort();
+  const amt = months.map(m => cardData[m]);
+  const ma3 = months.map((m, i) => i >= 2 ? (amt[i] + amt[i - 1] + amt[i - 2]) / 3 : null);
+  // 연누계: 같은 해 1월~당월 누적
+  const ytd = months.map((m, i) => {
+    const y = m.slice(0, 4); let s = 0;
+    for (let j = 0; j <= i; j++) if (months[j].slice(0, 4) === y) s += amt[j];
+    return s;
+  });
+  const mi = new Map(months.map((m, i) => [m, i]));
+  const ma3mom = months.map((m, i) => { const j = i - 1; return j >= 0 && ma3[i] != null && ma3[j] != null ? (ma3[i] / ma3[j] - 1) * 100 : null; });
+  const prevYearIdx = m => { const [y, mm] = m.split('-'); return mi.get(`${+y - 1}-${mm}`); };
+  const ma3yoy = months.map((m, i) => { const j = prevYearIdx(m); return j != null && ma3[i] != null && ma3[j] != null ? (ma3[i] / ma3[j] - 1) * 100 : null; });
+  const ytdyoy = months.map((m, i) => { const j = prevYearIdx(m); return j != null && ytd[j] ? (ytd[i] / ytd[j] - 1) * 100 : null; });
+  return { months, amt, ma3, ytd, ma3mom, ma3yoy, ytdyoy };
+}
+
+function renderCard() {
+  const box = document.getElementById('retailWrap');
+  const c = cardComputed();
+  const fmtN = v => v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+  const fmtP = v => v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let out = '<div style="background:#f6f8fc;border:1px solid #e0e5ec;border-radius:10px;padding:12px;margin-bottom:14px">'
+    + '<b style="font-size:13px">카드사용액 입력 (개인카드지출액, 신용+체크 합계)</b>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'
+    + '<input type="month" id="cardMonth" style="padding:6px 10px;border:1px solid #d7dde8;border-radius:8px">'
+    + '<input type="number" id="cardAmt" placeholder="금액 (예: 억원 단위 등 자유)" style="padding:6px 10px;border:1px solid #d7dde8;border-radius:8px;width:220px">'
+    + '<button id="cardAdd" style="padding:7px 16px;border:1px solid #1a4fa0;background:#1a4fa0;color:#fff;border-radius:9px;cursor:pointer">입력/수정</button>'
+    + '<span style="flex:1"></span>'
+    + '<button id="cardSaveFile" style="padding:6px 12px;border:1px solid #1a4fa0;background:#eaf1fd;color:#1a4fa0;border-radius:8px;cursor:pointer;font-weight:600">💾 저장파일 만들기 (git)</button>'
+    + '<button id="cardExport" style="padding:6px 12px;border:1px solid #d7dde8;background:#fff;border-radius:8px;cursor:pointer">CSV</button>'
+    + '<label style="padding:6px 12px;border:1px solid #d7dde8;background:#fff;border-radius:8px;cursor:pointer">CSV 불러오기<input type="file" id="cardImport" accept=".csv" style="display:none"></label>'
+    + '<button id="cardReset" style="padding:6px 12px;border:1px solid #d7dde8;background:#fff;border-radius:8px;cursor:pointer" title="로컬 편집 버리고 커밋 파일 값으로">↺ 파일값</button>'
+    + '</div><div id="cardHint" style="font-size:11.5px;color:#8592a3;margin-top:6px"></div></div>';
+
+  out += '<div class="cchart" style="height:300px;margin-bottom:16px"><canvas id="cardChart"></canvas></div>';
+  // 표 (KR_Macro CPI 시트 구성: 지출액·3MA·연누계·3MA MoM·3MA YoY·연누계 YoY)
+  const rows = [
+    ['개인카드지출액(신용+체크)', c.amt, fmtN], ['카드지출 3개월 이동평균', c.ma3, fmtN],
+    ['카드지출 연누계', c.ytd, fmtN], ['3개월 이동평균 MoM (%)', c.ma3mom, fmtP],
+    ['3개월 이동평균 YoY (%)', c.ma3yoy, fmtP], ['연누계 YoY (%)', c.ytdyoy, fmtP],
+  ];
+  out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + c.months.map(m => `<th>${"'" + m.slice(2)}</th>`).join('') + '<th></th></tr></thead><tbody>';
+  rows.forEach(([label, arr, fmt], ri) => {
+    out += `<tr class="${ri === 0 ? 'lv0 sep-solid' : ''}"><td>${label}</td>`
+      + arr.map(v => `<td${(typeof v === 'number' && v < 0) ? ' class="neg"' : ''}>${fmt(v)}</td>`).join('') + '<td></td></tr>';
+  });
+  // 삭제 버튼 행
+  out += '<tr><td style="color:#98a3b6;font-size:11px">삭제</td>'
+    + c.months.map(m => `<td><span class="cardDel" data-m="${m}" style="cursor:pointer;color:#c0392b">✕</span></td>`).join('') + '<td></td></tr>';
+  out += '</tbody></table></div>';
+  if (!c.months.length) out += '<div style="padding:20px;color:#888">위에서 월과 금액을 입력하면 3개월 이동평균·연누계·증감률이 자동 계산됩니다.</div>';
+  box.innerHTML = out;
+
+  const add = () => {
+    const m = document.getElementById('cardMonth').value;
+    const a = parseFloat(document.getElementById('cardAmt').value);
+    if (!m || isNaN(a)) { alert('월과 금액을 입력하세요.'); return; }
+    cardData[m] = a; saveCardData(); renderCard();
+  };
+  box.querySelector('#cardAdd').onclick = add;
+  box.querySelectorAll('.cardDel').forEach(x => x.onclick = () => { delete cardData[x.dataset.m]; saveCardData(); renderCard(); });
+  // 로컬 편집이 커밋 파일과 다른지 표시
+  const baseStr = JSON.stringify(window.__CARD__ || {}), curStr = JSON.stringify(cardData);
+  const dirty = baseStr !== curStr;
+  box.querySelector('#cardHint').innerHTML = dirty
+    ? '⚠ 로컬에 저장된 편집분이 있습니다. 모든 기기에서 공유하려면 <b>💾 저장파일 만들기</b> → 내려받은 <code>card_data.js</code>를 <code>docs/data/</code>에 덮어쓰고 push 하세요.'
+    : '커밋된 파일 값과 동일합니다. (모든 기기 공유 상태)';
+  box.querySelector('#cardSaveFile').onclick = () => {
+    const ordered = {}; Object.keys(cardData).sort().forEach(m => ordered[m] = cardData[m]);
+    const js = 'window.__CARD__=' + JSON.stringify(ordered) + ';\n';
+    const a = document.createElement('a');
+    a.href = 'data:text/javascript;charset=utf-8,' + encodeURIComponent(js);
+    a.download = 'card_data.js'; a.click();
+  };
+  box.querySelector('#cardReset').onclick = () => {
+    if (confirm('로컬 편집분을 버리고 커밋된 파일 값으로 되돌릴까요?')) resetCardToFile();
+  };
+  box.querySelector('#cardExport').onclick = () => {
+    const csv = '월,금액\n' + Object.keys(cardData).sort().map(m => `${m},${cardData[m]}`).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
+    a.download = 'card_usage.csv'; a.click();
+  };
+  box.querySelector('#cardImport').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      let n = 0;
+      rd.result.split(/\r?\n/).forEach(line => {
+        // 첫 구분자까지가 날짜, 나머지가 금액 (금액에 쉼표가 있어도 안전)
+        const cut = line.search(/[,\t;]/);
+        if (cut < 0) return;
+        const raw = line.slice(0, cut).trim();
+        const rest = line.slice(cut + 1);
+        // 날짜에서 연-월 추출: 2022-01, 2022-01-31, 2022.01, 2022/1, 202201 모두 허용
+        const mt = raw.match(/(\d{4})[-./]?\s*(\d{1,2})/);
+        const amt = parseFloat(rest.replace(/[^\d.-]/g, ''));   // 쉼표·원·따옴표 제거
+        if (mt && !isNaN(amt)) {
+          cardData[`${mt[1]}-${String(+mt[2]).padStart(2, '0')}`] = amt; n++;
+        }
+      });
+      saveCardData(); renderCard();
+      alert(n ? `${n}개월 불러왔습니다.` : '인식된 행이 없습니다. (첫 열=날짜, 둘째 열=금액)');
+    };
+    rd.readAsText(f);
+  };
+  // 표를 최신월(오른쪽 끝)로 스크롤
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  // 차트: 3개월 이동평균 + 연누계 YoY
+  if (cardChart) { cardChart.destroy(); cardChart = null; }
+  if (c.months.length) {
+    // 막대 y축: 데이터 범위에 맞춰 0이 아닌 구간으로 확대
+    const vals = c.amt.concat(c.ma3).filter(v => v != null);
+    const lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.15 || hi * 0.05;
+    cardChart = new Chart(box.querySelector('#cardChart'), {
+      data: { labels: c.months, datasets: [
+        { type: 'bar', label: '개인카드지출액', data: c.amt, backgroundColor: '#c3d5f0',
+          yAxisID: 'y', order: 3 },
+        { type: 'line', label: '3개월 이동평균', data: c.ma3, borderColor: '#1a4fa0', backgroundColor: '#1a4fa0',
+          borderWidth: 2.5, pointRadius: 0, tension: 0.15, yAxisID: 'y', order: 1 },
+        { type: 'line', label: '연누계 YoY (%)', data: c.ytdyoy, borderColor: '#c0392b', backgroundColor: '#c0392b',
+          borderWidth: 2.5, pointRadius: 0, tension: 0.15, yAxisID: 'y1', order: 0 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } },
+        scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 }, callback: function (v) { return "'" + this.getLabelForValue(v).slice(2); } } },
+          y: { position: 'left', beginAtZero: false, min: Math.floor((lo - pad) / 1000) * 1000,
+               max: Math.ceil((hi + pad) / 1000) * 1000,
+               ticks: { font: { size: 10 }, callback: v => v.toLocaleString('ko-KR') } },
+          y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, callback: v => v + '%' } } } },
+    });
+  }
 }
 
 // ── 소비자물가 종합 (총지수·근원·생활물가 + 품목성질별) ────────
@@ -2083,7 +2432,7 @@ function exportExcel() {
 }
 
 async function select(id) {
-  if (['compare', 'combo', 'map', 'cpicombo'].includes(view)) view = 'chart';
+  if (['compare', 'combo', 'map', 'cpicombo', 'retail'].includes(view)) view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
@@ -2266,10 +2615,18 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false;
     catalog.forEach(item => {
-      // 메뉴 숨김: 품목상세(구성품목 탭 전용) + CPI 종합에 흡수된 지표들 (지표 비교에서는 사용 가능)
+      // 메뉴 숨김: 품목상세·CPI 흡수 지표
       if (['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate'].includes(item.id)) return;
+      if (RETAIL.ids.includes(item.id)) {   // 소매판매 2종 → "소매판매" 하나로
+        if (!retInserted) {
+          const b = document.createElement('button');
+          b.id = 'retailBtn'; b.textContent = RETAIL.name; b.onclick = enterRetail;
+          nav.appendChild(b); retInserted = true;
+        }
+        return;
+      }
       if (CPI_COMBO.ids.includes(item.id)) {
         // CPI 3종은 "소비자물가 종합" 하나로 묶음
         if (!cpiInserted) {

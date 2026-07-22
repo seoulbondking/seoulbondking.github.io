@@ -20,6 +20,7 @@ from datetime import date
 import requests
 
 BASE_URL = "https://ecos.bok.or.kr/api/StatisticSearch"
+ITEM_URL = "https://ecos.bok.or.kr/api/StatisticItemList"
 PAGE_SIZE = 1000
 
 
@@ -89,15 +90,100 @@ def _fetch_rows(key: str, stat_code: str, cycle: str,
     return rows
 
 
+def fetch_item_meta(key: str, stat_code: str) -> dict:
+    """StatisticItemList 로 항목 가중치·계층 수집.
+
+    반환: {"weights": {항목명: 가중치}, "top_level": [총지수 직속 대분류명, ...]}
+    가중치는 매년 개편되며 최신 공표 가중치를 그대로 사용한다(하드코딩 불필요).
+    실패해도 데이터 수집을 막지 않도록 호출부에서 예외를 흡수한다.
+    """
+    rows = []
+    base = f"{ITEM_URL}/{key}/json/kr"
+    first = requests.get(f"{base}/1/1/{stat_code}", timeout=60).json()
+    if "StatisticItemList" not in first:
+        raise EcosError(f"ECOS 항목목록 오류 ({stat_code}): {first}")
+    total = int(first["StatisticItemList"]["list_total_count"])
+    for s in range(1, total + 1, PAGE_SIZE):
+        e = min(s + PAGE_SIZE - 1, total)
+        chunk = requests.get(f"{base}/{s}/{e}/{stat_code}", timeout=60).json()
+        if "StatisticItemList" in chunk:
+            rows.extend(chunk["StatisticItemList"]["row"])
+
+    weights, by_code, parent = {}, {}, {}
+    for r in rows:
+        nm = (r.get("ITEM_NAME") or "").strip()
+        code = (r.get("ITEM_CODE") or "").strip()
+        if not nm or not code:
+            continue
+        by_code[code] = nm
+        parent[code] = (r.get("P_ITEM_CODE") or "").strip()
+        try:
+            weights[nm] = float(r["WGT"])
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    # 총지수(가중치 최대·최상위) 직속 자식 = 대분류
+    total_code = None
+    for code, nm in by_code.items():
+        if nm == "총지수":
+            total_code = code
+            break
+    if total_code is None and weights:
+        # 이름이 '총지수'가 아니면 가중치 최대 항목을 총계로 간주
+        top_nm = max(weights, key=weights.get)
+        total_code = next((c for c, n in by_code.items() if n == top_nm), None)
+    top_codes = [c for c, p in parent.items()
+                 if p == total_code and by_code[c] != "총지수"]
+    top_level = [by_code[c] for c in top_codes]
+    children: dict[str, list] = {}
+    for c, p in parent.items():
+        if c != total_code:
+            children.setdefault(p, []).append(c)
+    return {"weights": weights, "top_level": top_level,
+            "total_code": total_code, "top_codes": top_codes,
+            "name_of": by_code, "children": children}
+
+
 def fetch(indicator: dict) -> list[dict]:
     """indicators.yaml 지표 정의 하나 → 시리즈 목록 (kosis.fetch 와 동일 형식)."""
     key = _api_key()
+    meta = None
+    if indicator.get("with_weights"):
+        try:
+            meta = fetch_item_meta(key, indicator["params"]["stat_code"])
+            indicator["_weights_meta"] = meta
+        except Exception as e:  # 가중치 실패는 무시 (데이터는 계속 수집)
+            print(f"  [ecos {indicator['id']}] 가중치 수집 실패(무시): {e}")
     cycle = indicator["freq"]
     start_year = indicator.get("_start_year") \
         or date.today().year - indicator.get("lookback_years", 10)
     start, end = _period_range(cycle, start_year)
     p = indicator["params"]
     item_codes = p.get("item_codes") or [None]
+    # 기본분류(수백 품목)는 계층 레벨(levels)만큼만 수집 — 총지수 + 대분류(+중분류)
+    #   levels=1: 총지수+대분류 / levels=2: +중분류. (top_level_only == levels=1)
+    levels = indicator.get("levels") or (1 if indicator.get("top_level_only") else 0)
+    if levels and meta and meta.get("children"):
+        name_of = meta["name_of"]; children = meta["children"]; tc = meta["total_code"]
+        codes = [tc]
+        parents = {}                      # 항목명 → 상위 항목명 (트리 구성용)
+        level_of = {"총지수": 0}
+        l1 = children.get(tc, [])
+        for c in l1:
+            codes.append(c); parents[name_of[c]] = "총지수"; level_of[name_of[c]] = 1
+        if levels >= 2:
+            for c1 in l1:
+                for c2 in children.get(c1, []):
+                    codes.append(c2); parents[name_of[c2]] = name_of[c1]; level_of[name_of[c2]] = 2
+        item_codes = codes
+        keep = {name_of[c] for c in codes}
+        meta["weights"] = {n: w for n, w in (meta.get("weights") or {}).items() if n in keep}
+        meta["parents"] = parents
+        meta["level_of"] = level_of
+    # 대용량 메타(name_of/children)는 payload에 싣지 않도록 제거
+    if meta:
+        meta.pop("name_of", None); meta.pop("children", None)
+        meta.pop("total_code", None); meta.pop("top_codes", None)
 
     all_rows = []
     for code in item_codes:

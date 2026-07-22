@@ -148,6 +148,10 @@
         <button data-rt="type">업태별</button>
         <button data-rt="card">카드사용액</button>
       </div>
+      <div id="ppiTabs" class="mode" style="display:none">
+        <button data-pt="main" class="active">종합</button>
+        <button data-pt="contrib">기여도</button>
+      </div>
       <div class="mode" id="modeButtons">
         <button data-mode="level" class="active">원자료</button>
         <button data-mode="pop">전기비 %</button>
@@ -412,12 +416,13 @@ function updateMeta() {
 function refresh() {
   updateMeta();
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
-  const isRet = view === 'retail';
+  const isRet = view === 'retail', isPpi = view === 'ppi';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
   document.getElementById('retTabs').style.display = isRet ? '' : 'none';
-  document.getElementById('retailWrap').style.display = isRet ? '' : 'none';
+  document.getElementById('ppiTabs').style.display = isPpi ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -429,15 +434,16 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isRet) renderRetail();
+  if (isPpi) renderPpi();
+  else if (isRet) renderRetail();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -726,6 +732,434 @@ async function addCompare() {
   if (!s || compareList.some(c => c.indId === indId && c.sName === s.name)) return;
   compareList.push({ indId, indName: ind.name, sName: s.name, freq: ind.freq, data: s.data });
   renderChips(); updateComparePeriods(); refresh();
+}
+
+// ── 생산자물가 종합 (특수분류) — 차트 2개 + MoM/YoY/원지수 표 ──
+const PPI = { id: 'ppi_all', name: '생산자물가 종합', src: 'kr_ppi_special' };
+let ppiData = null, ppiBasicData = null, ppiCharts = [null, null];
+let ppiTab = 'main', ppiCtbCharts = [null, null], ppiCtbPair = 'all';
+let ppiIndOpen = null, ppiIndSel = null, ppiIndCharts = [null, null, null, null];  // 산업 상세: 펼침·차트선택
+let ppiMainSel = null, ppiCtbHidden = null;  // 종합 차트 선택 · 기여도 차트 숨김
+let ppiMainMode = 'sector';                  // 종합 하위: sector(부문별)/industry(산업별)
+const PPI_LV = {   // 계층 (총지수 하위 특수분류)
+  '총지수': 0, '식료품': 1, '식료품이외': 1, '신선식품': 1, '신선식품이외': 1,
+  '에너지': 1, '에너지이외': 1, 'IT': 1, 'IT이외': 1,
+  '식료품에너지이외': 1, '신선식품에너지이외': 1,
+};
+// PPI 특수분류 가중치 (2020 기준, 합=1000) — ECOS StatisticItemList WEIGHT
+const PPI_W = {
+  '총지수': 1000, '식료품': 68.1, '식료품이외': 931.9, '신선식품': 12.2, '신선식품이외': 987.8,
+  '에너지': 78.3, '에너지이외': 921.7, 'IT': 104.7, 'IT이외': 895.3,
+  '식료품에너지이외': 853.6, '신선식품에너지이외': 909.5,
+};
+// 진짜 분할(구성 합 = 총지수). 각 부문 = terms 합 (음수 가중치로 차감 부문 표현).
+// terms: [[시리즈명, 부호(±1)], ...] — 가중치는 데이터에서 연도별로 복원(아래 ppiYearWeights)
+// PPI는 매년 가중치를 개편(연쇄지수)하므로 고정가중치로는 기여합이 총지수와 어긋난다.
+const PPI_PARTS = {
+  all: { label: '전체 (5부문)', members: [
+    { label: '신선식품', terms: [['신선식품', 1]] },
+    { label: '가공식료품', terms: [['식료품', 1], ['신선식품', -1]] },
+    { label: '에너지', terms: [['에너지', 1]] },
+    { label: 'IT', terms: [['IT', 1]] },
+    { label: '기타', terms: [['식료품에너지이외', 1], ['IT', -1]] },
+  ] },
+  core: { label: '식료품·에너지·근원', members: [
+    { label: '식료품', terms: [['식료품', 1]] },
+    { label: '에너지', terms: [['에너지', 1]] },
+    { label: '근원(식료품에너지이외)', terms: [['식료품에너지이외', 1]] },
+  ] },
+  it: { label: 'IT·IT이외', members: [
+    { label: 'IT', terms: [['IT', 1]] }, { label: 'IT이외', terms: [['IT이외', 1]] },
+  ] },
+  food: { label: '식료품·식료품이외', members: [
+    { label: '식료품', terms: [['식료품', 1]] }, { label: '식료품이외', terms: [['식료품이외', 1]] },
+  ] },
+  // 산업별(기본분류): 농림수산품·광산품·공산품·전력가스수도·서비스 — 멤버·가중치는 데이터에서 동적 생성
+  industry: { label: '산업별', src: 'basic' },
+};
+// 연도별 유효가중치 복원용 배타적 완전분할 그룹 (특수분류)
+const PPI_WGROUPS = [
+  ['신선식품', '신선식품이외'],
+  ['IT', 'IT이외'],
+  ['식료품', '식료품이외'],
+  ['식료품', '에너지', '식료품에너지이외'],   // 마지막이 우선(식료품·에너지·근원 확정)
+];
+
+// 최소제곱 정규방정식 풀이 (k×k 가우스 소거)
+function olsSolve(X, y) {
+  const k = X[0].length;
+  const A = Array.from({ length: k }, () => new Array(k).fill(0));
+  const b = new Array(k).fill(0);
+  for (let r = 0; r < X.length; r++)
+    for (let i = 0; i < k; i++) {
+      b[i] += X[r][i] * y[r];
+      for (let j = 0; j < k; j++) A[i][j] += X[r][i] * X[r][j];
+    }
+  for (let i = 0; i < k; i++) {
+    let piv = i;
+    for (let r = i + 1; r < k; r++) if (Math.abs(A[r][i]) > Math.abs(A[piv][i])) piv = r;
+    if (Math.abs(A[piv][i]) < 1e-12) return null;
+    [A[i], A[piv]] = [A[piv], A[i]]; [b[i], b[piv]] = [b[piv], b[i]];
+    for (let r = 0; r < k; r++) {
+      if (r === i) continue;
+      const f = A[r][i] / A[i][i];
+      for (let j = i; j < k; j++) A[r][j] -= f * A[i][j];
+      b[r] -= f * b[i];
+    }
+  }
+  return b.map((v, i) => v / A[i][i]);
+}
+
+// 연도별 유효가중치(천분비): ΔT = Σ (w_j/1000)·Δg_j 를 연도별 회귀. 부분연도(관측<11개월)는 직전 완전연도.
+function ppiYearWeights(seriesOf, groups) {
+  const tot = seriesOf('총지수'); if (!tot) return {};
+  const T = new Map(tot.data.map(p => [p.d, p.v]));
+  const dts = [...T.keys()].sort();
+  const iOf = new Map(dts.map((d, i) => [d, i]));
+  const years = [...new Set(dts.map(d => d.slice(0, 4)))].sort();
+  const out = {};
+  groups.forEach(g => {
+    const maps = g.map(n => new Map((seriesOf(n) || { data: [] }).data.map(p => [p.d, p.v])));
+    let last = null;
+    years.forEach(yr => {
+      const X = [], Y = [];
+      dts.filter(d => d.slice(0, 4) === yr).forEach(d => {
+        const i = iOf.get(d); if (i < 1) return; const p = dts[i - 1];
+        const tp = T.get(p), td = T.get(d); if (tp == null || td == null) return;
+        const row = g.map((n, j) => { const a = maps[j].get(d), b = maps[j].get(p); return (a != null && b != null) ? a - b : null; });
+        if (row.some(v => v == null)) return;
+        X.push(row); Y.push(td - tp);
+      });
+      let w = X.length >= g.length + 1 ? olsSolve(X, Y) : null;
+      if (w && X.length >= 11) last = w; else w = last;   // 부분연도는 직전 완전연도 가중치
+      if (w) { (out[yr] ||= {}); g.forEach((n, j) => out[yr][n] = w[j] * 1000); }
+    });
+  });
+  return out;
+}
+
+async function enterPpi() {
+  ppiData = await loadIndicator(PPI.src).catch(() => null);
+  ppiBasicData = await loadIndicator('kr_ppi_basic').catch(() => null);
+  view = 'ppi'; ppiTab = 'main';
+  if (!document.getElementById('ppiTabs').dataset.bound) {
+    document.getElementById('ppiTabs').addEventListener('click', e => {
+      if (!e.target.dataset.pt) return; ppiTab = e.target.dataset.pt; refresh();
+    });
+    document.getElementById('ppiTabs').dataset.bound = '1';
+  }
+  current = { id: PPI.id, name: PPI.name, freq: 'M', unit: '지수',
+              updated_at: (ppiData || {}).updated_at || '-', series: [] };
+  document.getElementById('title').textContent = PPI.name;
+  document.getElementById('updatedAt').textContent = ppiData ? '데이터 갱신: ' + ppiData.updated_at : '';
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'ppiBtn'));
+  const ds = new Set();
+  if (ppiData) ppiData.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+function ppiSeriesOf(name) { return ppiData ? ppiData.series.find(s => baseName(s.name) === name) : null; }
+function ppiTransform(data, tf, cols, idx) {
+  const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const m = new Map(data.map(p => [p.d, p.v]));
+  return cols.map(d => {
+    if (tf === 'level') return m.get(d) ?? null;
+    const p = prevD(d, tf === 'mom' ? 1 : 12);
+    const a = m.get(d), b = p && m.get(p);
+    return a != null && b ? (a / b - 1) * 100 : null;
+  });
+}
+
+function renderPpi() {
+  const box = document.getElementById('retailWrap');
+  if (!ppiData) { box.innerHTML = '<div style="padding:24px;color:#888">생산자물가 데이터가 없습니다. <b>python fetch.py --full kr_ppi_special</b> 실행 필요.</div>'; return; }
+  document.querySelectorAll('#ppiTabs button').forEach(b => b.classList.toggle('active', b.dataset.pt === ppiTab));
+  if (ppiTab === 'contrib') { renderPpiContrib(); return; }
+  // 종합: 부문별(특수분류) / 산업별(기본분류) 하위 모드
+  const modeBtnsHtml = '<div class="mode" id="ppiMainModeBtns" style="margin-bottom:8px">'
+    + [['sector', '부문별'], ['industry', '산업별']].map(([v, t]) => `<button data-pm="${v}" class="${ppiMainMode === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div>';
+  if (ppiMainMode === 'industry') { renderPpiMainIndustry(modeBtnsHtml); return; }
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  if (ppiMainSel === null) ppiMainSel = new Set(['총지수']);
+  // 차트 2개: 좌 전월비 · 우 전년동월비 (표 우클릭으로 항목 선택)
+  const chartDefs = [['mom', '전월비 (%)'], ['yoy', '전년동월비 (%)']];
+  let out = modeBtnsHtml + '<div id="ppiMainChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;min-height:22px"></div>'
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ppiChart${i}"></canvas></div></div>`).join('')
+    + '</div><div style="font-size:12px;color:#8592a3;margin-bottom:8px">표 항목을 <b>우클릭</b>하면 좌(전월비)·우(전년동월비) 차트에 추가/제거됩니다.</div>';
+  // 표 3개: MoM, YoY, 원지수
+  [['mom', '전월비 MoM (%)'], ['yoy', '전년동월비 YoY (%)'], ['level', '원지수']].forEach(([tf, title]) => {
+    out += `<div class="block-title">${title}</div><div class="tscroll">`
+      + '<table class="data vlines"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    ppiData.series.forEach(s => {
+      const nm = baseName(s.name), lv = PPI_LV[nm] ?? 1;
+      const arr = ppiTransform(s.data, tf, cols, idx);
+      const sel = ppiMainSel.has(nm) ? '● ' : '';
+      out += `<tr class="${lv === 0 ? 'lv0 sep-solid' : 'lv1'}" data-sel="${nm}" style="cursor:context-menu"><td style="padding-left:${8 + lv * 16}px">${sel}${nm}</td>`
+        + arr.map(v => { const txt = v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`; }).join('') + '</tr>';
+    });
+    out += '</tbody></table></div>';
+  });
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  // 선택 칩
+  const chips = box.querySelector('#ppiMainChips');
+  chips.innerHTML = ppiMainSel.size ? '' : '<span style="color:#aaa;font-size:12px">표에서 우클릭으로 항목 선택</span>';
+  [...ppiMainSel].forEach((n, j) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+    el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+    el.querySelector('b').onclick = () => { ppiMainSel.delete(n); renderPpi(); };
+    chips.appendChild(el);
+  });
+  box.querySelectorAll('[data-sel]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.sel;
+    if (ppiMainSel.has(n)) ppiMainSel.delete(n); else ppiMainSel.add(n); renderPpi();
+  });
+  box.querySelectorAll('#ppiMainModeBtns button').forEach(b => b.onclick = () => { ppiMainMode = b.dataset.pm; renderPpi(); });
+  // 차트 렌더
+  const selList = [...ppiMainSel];
+  chartDefs.forEach(([mode, title], i) => {
+    if (ppiCharts[i]) { ppiCharts[i].destroy(); ppiCharts[i] = null; }
+    const datasets = selList.map((n, j) => { const s = ppiSeriesOf(n);
+      return { label: n, data: s ? ppiTransform(s.data, mode, cols, idx) : [],
+        borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true }; });
+    ppiCharts[i] = new Chart(box.querySelector(`#ppiChart${i}`), {
+      type: 'line', data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 11 } } } } },
+    });
+  });
+}
+
+// PPI 기여도: 총지수 = 구성부문 합 (라스파이레스, 2020=100 고정가중치). 구성 합 = 총지수 변화율.
+function renderPpiContrib() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevOf = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const parts = Object.keys(PPI_PARTS);
+  if (!PPI_PARTS[ppiCtbPair]) ppiCtbPair = 'all';
+  const part = PPI_PARTS[ppiCtbPair];
+  // 파티션이 참조하는 데이터셋 (특수분류 기본 / 기본분류 산업별) + 가중치
+  const dset = part.src === 'basic' ? ppiBasicData : ppiData;
+  const seriesOf = n => dset ? dset.series.find(s => baseName(s.name) === n) : null;
+  // 멤버 확정: 정적 정의가 없으면(산업별) 데이터의 대분류로 동적 생성
+  const members = part.members
+    || ((dset && dset.top_level) || []).map(n => ({ label: n, terms: [[n, 1]] }));
+
+  const pairBtns = '<div class="mode" id="ppiPairBtns" style="margin-bottom:6px">'
+    + parts.map(k => `<button data-pp="${k}" class="${ppiCtbPair === k ? 'active' : ''}">${PPI_PARTS[k].label}</button>`).join('')
+    + '</div>';
+  if (!dset || !members.length) {
+    box.innerHTML = pairBtns + '<div style="padding:20px;color:#888">산업별(기본분류) 데이터가 없습니다. <b>python fetch.py --full kr_ppi_basic</b> 실행 필요.</div>';
+    box.querySelectorAll('#ppiPairBtns button').forEach(b => b.onclick = () => { ppiCtbPair = b.dataset.pp; renderPpi(); });
+    return;
+  }
+  // 연도별 유효가중치(데이터에서 복원) — PPI 연간 가중치 개편 반영
+  const groups = part.src === 'basic' ? [(dset.top_level || [])] : PPI_WGROUPS;
+  const AW = ppiYearWeights(seriesOf, groups);
+  const wYears = Object.keys(AW).sort();
+  const weightAt = (name, yr) => {
+    if (AW[yr] && AW[yr][name] != null) return AW[yr][name];
+    let best = null;
+    for (const y of wYears) if (AW[y][name] != null &&
+      (best === null || Math.abs(+y - +yr) < Math.abs(+best - +yr))) best = y;
+    return best !== null ? AW[best][name] : 0;
+  };
+  const termW = (term, yr) => (term[1] || 1) * weightAt(term[0], yr);
+  const latestYr = (periodDates[periodDates.length - 1] || '').slice(0, 4);
+  const wSum = members.reduce((s, m) => s + m.terms.reduce((a, t) => a + termW(t, latestYr), 0), 0);
+
+  let out = pairBtns
+    + `<div style="font-size:12px;color:#8592a3;margin-bottom:8px">구성부문 기여도 + 조정 = 총지수 변화율 (연도별 데이터 가중치 · ${latestYr}년 합 ${wSum.toFixed(0)}/1000)</div>`
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:16px">'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:320px"><canvas id="ppiCtbChart0"></canvas></div></div>'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:320px"><canvas id="ppiCtbChart1"></canvas></div></div>'
+    + '</div>';
+
+  const T = new Map((seriesOf('총지수') || { data: [] }).data.map(p => [p.d, p.v]));
+  const mapCache = {};
+  const M = n => (mapCache[n] ||= new Map((seriesOf(n) || { data: [] }).data.map(p => [p.d, p.v])));
+  // 부문 기여도 = Σ term (ΔP/총지수_{t-1} × w_{연도(t)}/1000 × 100)
+  const memberContrib = (member, d, lag) => {
+    const p = prevOf(d, lag); if (!p) return null;
+    const t = T.get(p); if (!t) return null;
+    const yr = d.slice(0, 4);
+    let s = 0, ok = false;
+    for (const term of member.terms) {
+      const n = term[0], w = termW(term, yr);
+      const mp = M(n), a = mp.get(d), b = mp.get(p);
+      if (a == null || b == null) return null;
+      s += (a - b) / t * (w / 1000) * 100; ok = true;
+    }
+    return ok ? s : null;
+  };
+  const actual = (d, lag) => { const p = prevOf(d, lag), a = T.get(d), b = p && T.get(p);
+    return a != null && b ? (a / b - 1) * 100 : null; };
+  const memberSum = (d, lag) => {
+    let s = 0, ok = false;
+    members.forEach(m => { const v = memberContrib(m, d, lag); if (v != null) { s += v; ok = true; } });
+    return ok ? s : null;
+  };
+  // 조정 = 실제 − 부문합 (가중치 개편·반올림에서 오는 잔차, 대개 0.0~0.2%p)
+  const adjust = (d, lag) => { const a = actual(d, lag), s = memberSum(d, lag); return (a != null && s != null) ? a - s : null; };
+
+  if (ppiCtbHidden === null) ppiCtbHidden = new Set();
+  [['전월비 MoM', 1], ['전년동월비 YoY', 12]].forEach(([title, lag]) => {
+    out += `<div class="block-title">${title} 기여도 (%p)</div><div class="tscroll">`
+      + '<table class="data vlines"><thead><tr><th>항목</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    const rows = [[`총지수 실제 ${lag === 1 ? 'MoM' : 'YoY'} (%)`, cols.map(d => actual(d, lag)), 'lv0 sep-solid', null]];
+    members.forEach(m => rows.push([`${m.label} 기여`, cols.map(d => memberContrib(m, d, lag)), 'lv1', m.label]));
+    rows.push(['조정(가중치개편·반올림)', cols.map(d => adjust(d, lag)), 'lv1', null]);
+    rows.push(['기여 합', cols.map(d => actual(d, lag)), 'lv0', null]);
+    rows.forEach(([label, arr, cls, selKey]) => {
+      const hid = selKey && ppiCtbHidden.has(selKey);
+      out += `<tr class="${cls}"${selKey ? ` data-selc="${selKey}" style="cursor:context-menu${hid ? ';opacity:.4' : ''}"` : ''}><td>${label}${hid ? ' (숨김)' : ''}</td>` + arr.map(v => {
+        const txt = v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
+      }).join('') + '</tr>';
+    });
+    out += '</tbody></table></div>';
+  });
+  out += '<div style="font-size:12px;color:#8592a3;margin:2px 0 8px">부문 행을 <b>우클릭</b>하면 차트에서 숨기거나 다시 표시합니다.</div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  box.querySelectorAll('#ppiPairBtns button').forEach(b =>
+    b.onclick = () => { ppiCtbPair = b.dataset.pp; renderPpi(); });
+  box.querySelectorAll('[data-selc]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.selc;
+    if (ppiCtbHidden.has(n)) ppiCtbHidden.delete(n); else ppiCtbHidden.add(n); renderPpi();
+  });
+  // 차트 2개: 왼쪽 MoM, 오른쪽 YoY (스택 막대 = 구성부문, 선 = 총지수 실제)
+  const shownMembers = members.filter(m => !ppiCtbHidden.has(m.label));
+  [['MoM', 1], ['YoY', 12]].forEach(([name, lag], ci) => {
+    if (ppiCtbCharts[ci]) { ppiCtbCharts[ci].destroy(); ppiCtbCharts[ci] = null; }
+    const ds = shownMembers.map((m, k) => ({
+      type: 'bar', label: m.label, data: cols.map(d => memberContrib(m, d, lag)),
+      backgroundColor: PALETTE[members.indexOf(m) % PALETTE.length], stack: 's', order: 2,
+    }));
+    ds.push({ type: 'bar', label: '조정', data: cols.map(d => adjust(d, lag)),
+      backgroundColor: '#c9ced6', stack: 's', order: 2 });
+    ds.push({ type: 'line', label: `총지수 ${name} (%)`, data: cols.map(d => actual(d, lag)),
+      borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, order: 0 });
+    ppiCtbCharts[ci] = new Chart(box.querySelector(`#ppiCtbChart${ci}`), {
+      data: { labels: cols, datasets: ds },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+          title: { display: true, text: `${part.label} 기여도 (${name}, %p)`, font: { size: 13 } } },
+        scales: { x: { stacked: true, ticks: { maxTicksLimit: 12, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { stacked: true, ticks: { font: { size: 11 } } } } },
+    });
+  });
+}
+
+// PPI 종합 > 산업별: 기본분류 대분류 > 중분류 접기/펴기 트리 (석유·화학·반도체·금융보험 등)
+function renderPpiMainIndustry(modeBtnsHtml) {
+  const box = document.getElementById('retailWrap');
+  const d = ppiBasicData;
+  const wireMode = () => box.querySelectorAll('#ppiMainModeBtns button').forEach(b => b.onclick = () => { ppiMainMode = b.dataset.pm; renderPpi(); });
+  if (!d || !d.series) {
+    box.innerHTML = modeBtnsHtml + '<div style="padding:24px;color:#888">산업별(기본분류) 데이터가 없습니다. <b>python fetch.py --full kr_ppi_basic</b> 실행 필요.</div>';
+    wireMode(); return;
+  }
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((x, i) => [x, i]));
+  const parents = d.parents || {};
+  const levelOf = d.level_of || {};
+  const smap = new Map(d.series.map(s => [baseName(s.name), s]));
+  const kids = {};
+  Object.entries(parents).forEach(([c, p]) => { (kids[p] ||= []).push(c); });
+  const order = [];
+  (function walk(n) { order.push(n); (kids[n] || []).forEach(walk); })('총지수');
+  d.series.forEach(s => { const n = baseName(s.name); if (!order.includes(n)) order.push(n); });
+  if (ppiIndOpen === null) ppiIndOpen = new Set(['총지수']);   // 기본: 대분류까지 펼침
+  if (ppiIndSel === null) ppiIndSel = new Set(['총지수']);
+  const visible = n => { let p = parents[n]; while (p) { if (!ppiIndOpen.has(p)) return false; p = parents[p]; } return true; };
+  const seriesVals = (n, mode) => { const s = smap.get(n); return s ? ppiTransform(s.data, mode, cols, idx) : cols.map(() => null); };
+
+  // ── 차트 2개 : 전월비 · 전년동월비 (표 우클릭으로 항목 선택) ──
+  const chartDefs = [['mom', '전월비 (%)'], ['yoy', '전년동월비 (%)']];
+  let out = modeBtnsHtml
+    + '<div id="ppiIndChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;min-height:22px"></div>'
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ppiIndC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="font-size:12px;color:#8592a3;margin-bottom:8px">표 항목을 <b>우클릭</b>하면 좌(전월비)·우(전년동월비) 차트에 추가/제거됩니다. 대분류 이름 클릭(＋/－)으로 중분류(석탄석유·화학·반도체·금융보험 등)를 펼칩니다.</div>';
+
+  // ── 표 3개 : 전월비 · 전년동월비 · 원지수 (대분류>중분류 트리) ──
+  const tableDefs = [['mom', '전월비 (%)'], ['yoy', '전년동월비 (%)'], ['level', '원지수']];
+  tableDefs.forEach(([mode, title]) => {
+    out += `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+      + cols.map(x => `<th>${dateLabel(x)}</th>`).join('') + '</tr></thead><tbody>';
+    order.forEach(n => {
+      if (!visible(n)) return;
+      const lv = levelOf[n] ?? 0;
+      const arr = seriesVals(n, mode);
+      const hasKids = (kids[n] || []).length > 0;
+      const mark = hasKids ? (ppiIndOpen.has(n) ? '－ ' : '＋ ') : '';
+      const sel = ppiIndSel.has(n) ? '● ' : '';
+      const cls = lv === 0 ? 'lv0 sep-solid' : (lv === 1 ? 'lv1' : 'lv2');
+      out += `<tr class="${cls}" data-sel="${n}" style="cursor:context-menu"><td style="padding-left:${8 + lv * 16}px;cursor:${hasKids ? 'pointer' : 'context-menu'}"${hasKids ? ` data-tog="${n}"` : ''}>${mark}${sel}${n}</td>`
+        + arr.map(v => { const t = v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
+    });
+    out += '</tbody></table></div>';
+  });
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  wireMode();
+
+  // 선택 칩
+  const chips = box.querySelector('#ppiIndChips');
+  chips.innerHTML = ppiIndSel.size ? '' : '<span style="color:#aaa;font-size:12px">표에서 우클릭으로 항목 선택</span>';
+  [...ppiIndSel].forEach((n, j) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+    el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+    el.querySelector('b').onclick = () => { ppiIndSel.delete(n); renderPpi(); };
+    chips.appendChild(el);
+  });
+  // 접기/펴기(왼클릭) · 선택/해제(우클릭)
+  box.querySelectorAll('[data-tog]').forEach(td => td.onclick = () => {
+    const n = td.dataset.tog; if (ppiIndOpen.has(n)) ppiIndOpen.delete(n); else ppiIndOpen.add(n); renderPpi();
+  });
+  box.querySelectorAll('[data-sel]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.sel;
+    if (ppiIndSel.has(n)) ppiIndSel.delete(n); else ppiIndSel.add(n); renderPpi();
+  });
+  // 차트 렌더
+  const selList = [...ppiIndSel];
+  chartDefs.forEach(([mode, title], ci) => {
+    if (ppiIndCharts[ci]) { ppiIndCharts[ci].destroy(); ppiIndCharts[ci] = null; }
+    const datasets = selList.map((n, j) => ({
+      label: n, data: seriesVals(n, mode),
+      borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true,
+    }));
+    ppiIndCharts[ci] = new Chart(box.querySelector(`#ppiIndC${ci}`), {
+      type: 'line', data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 11 } } } } },
+    });
+  });
 }
 
 // ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────
@@ -2432,7 +2866,7 @@ function exportExcel() {
 }
 
 async function select(id) {
-  if (['compare', 'combo', 'map', 'cpicombo', 'retail'].includes(view)) view = 'chart';
+  if (['compare', 'combo', 'map', 'cpicombo', 'retail', 'ppi'].includes(view)) view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
@@ -2619,6 +3053,11 @@ document.getElementById('endSel').onchange = e => {
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표
       if (['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate'].includes(item.id)) return;
+      if (item.id === PPI.src) {   // 생산자물가 → 종합 페이지 하나로
+        const b = document.createElement('button');
+        b.id = 'ppiBtn'; b.textContent = PPI.name; b.onclick = enterPpi;
+        nav.appendChild(b); return;
+      }
       if (RETAIL.ids.includes(item.id)) {   // 소매판매 2종 → "소매판매" 하나로
         if (!retInserted) {
           const b = document.createElement('button');

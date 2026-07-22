@@ -171,6 +171,15 @@ def main():
             "updated_at": datetime.now(KST).strftime("%Y-%m-%d %H:%M KST"),
             "series": series,
         }
+        # ECOS 가중치·대분류 (with_weights 지표) — 대시보드 기여도 계산용
+        meta = ind.get("_weights_meta")
+        if meta:
+            payload["weights"] = meta.get("weights")
+            payload["top_level"] = meta.get("top_level")
+            if meta.get("parents"):
+                payload["parents"] = meta["parents"]      # 항목명 → 상위 항목명 (트리)
+            if meta.get("level_of"):
+                payload["level_of"] = meta["level_of"]     # 항목명 → 계층 레벨
         body = json.dumps(payload, ensure_ascii=False)
         out_path.write_text(body, encoding="utf-8")
         # 더블클릭(file://)으로도 대시보드가 열리도록 JS 버전도 함께 저장

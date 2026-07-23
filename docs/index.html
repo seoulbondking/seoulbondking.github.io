@@ -155,6 +155,7 @@
       <div id="usEmpTabs" class="mode" style="display:none">
         <button data-ue="main" class="active">종합</button>
         <button data-ue="industry">산업별 증감</button>
+        <button data-ue="lf">노동력 상세</button>
       </div>
       <div class="mode" id="modeButtons">
         <button data-mode="level" class="active">원자료</button>
@@ -1250,7 +1251,7 @@ function renderPpiMainIndustry(modeBtnsHtml) {
 }
 
 // ── 미국 고용상황 (BLS: 비농업 산업별 + 실업률 + 임금) ──────────
-const US_EMP = { id: 'us_emp', name: '미국 고용상황', ids: ['us_nfp', 'us_labor', 'us_ahe'] };
+const US_EMP = { id: 'us_emp', name: '미국 고용상황', ids: ['us_nfp', 'us_labor', 'us_ahe', 'us_lf'] };
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
 let usEmpSel = null, usIndChart = null;
 // 비농업 트리 [이름, 레벨]. 14개 말단(레벨3 + 정부)이 배타적 분할 → 합 = 총 비농업 증감
@@ -1265,9 +1266,9 @@ const NFP_LEAVES = ['광업·벌목', '건설', '제조업', '도매', '소매',
   '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스', '정부'];
 
 async function enterUsEmp() {
-  const [nfp, labor, ahe] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
-  if (!nfp || !labor) { alert('미국 고용 데이터가 없습니다. python fetch.py us_nfp us_labor us_ahe 실행 필요.'); return; }
-  usEmpData = { nfp, labor, ahe };
+  const [nfp, labor, ahe, lf] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  if (!nfp || !labor) { alert('미국 고용 데이터가 없습니다. python fetch.py us_nfp us_labor us_ahe us_lf 실행 필요.'); return; }
+  usEmpData = { nfp, labor, ahe, lf };
   current = { id: US_EMP.id, name: US_EMP.name, freq: 'M', unit: '', updated_at: nfp.updated_at, series: [] };
   view = 'usemp'; usEmpTab = 'main';
   document.getElementById('title').textContent = US_EMP.name;
@@ -1294,7 +1295,62 @@ async function enterUsEmp() {
 function renderUsEmp() {
   document.querySelectorAll('#usEmpTabs button').forEach(b => b.classList.toggle('active', b.dataset.ue === usEmpTab));
   if (usEmpTab === 'industry') { renderUsNfpIndustry(); return; }
+  if (usEmpTab === 'lf') { renderUsLf(); return; }
   renderUsEmpMain();
+}
+
+// 노동력 상세 (가계조사): 전일제/시간제 · 경제적사유 시간제 등
+function renderUsLf() {
+  const box = document.getElementById('retailWrap');
+  const lf = usEmpData.lf;
+  if (!lf) { box.innerHTML = '<div style="padding:24px;color:#888">노동력 상세 데이터가 없습니다. <b>python fetch.py us_lf</b> 실행 필요.</div>'; return; }
+  const M = name => { const s = lf.series.find(x => x.name === name); return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const lvl = (m, d) => m.get(d) ?? null;
+  const yoy = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+  const ptEcon = M('시간제 (경제적 사유)'), ft = M('전일제 취업자'), pt = M('시간제 취업자');
+  const emp = M('취업자'), unemp = M('실업자'), lfPop = M('경제활동인구');
+  // 시간제 비중 = 시간제 / 취업자
+  const ratio = (a, b, d) => { const x = a.get(d), y = b.get(d); return x != null && y ? x / y * 100 : null; };
+
+  let out = '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:6px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:320px"><div class="cchart" style="height:250px"><canvas id="usL${i}"></canvas></div></div>`).join('')
+    + '</div>';
+  const rows = [
+    ['생산가능인구', M('생산가능인구'), lvl, 'lv0 sep-solid'],
+    ['경제활동인구', lfPop, lvl, 'lv1'],
+    ['취업자', emp, lvl, 'lv1'],
+    ['· 전일제', ft, lvl, 'lv2'],
+    ['· 시간제', pt, lvl, 'lv2'],
+    ['· · 경제적 사유', ptEcon, lvl, 'lv3'],
+    ['· · · 경기부진·업황', M('· 경기부진·업황'), lvl, 'lv3'],
+    ['· · · 전일제 일자리 부족', M('· 전일제 일자리 부족'), lvl, 'lv3'],
+    ['· · 비경제적 사유', M('시간제 (비경제적 사유)'), lvl, 'lv3'],
+    ['실업자', unemp, lvl, 'lv1'],
+  ];
+  out += '<div class="block-title">노동력 상세 (천명)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(([nm, m, fn, cls]) => {
+    out += `<tr class="${cls}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d); return `<td>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  const mk = (i, title, datasets) => {
+    if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
+    usEmpCharts[i] = new Chart(box.querySelector('#usL' + i), {
+      data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } }, title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+    });
+  };
+  mk(0, '경제적 사유 시간제 취업자 (천명) — 경기 둔화 신호', [{ type: 'line', label: '경제적 사유 시간제', data: cols.map(d => lvl(ptEcon, d)), borderColor: PALETTE[1], backgroundColor: PALETTE[1], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true }]);
+  mk(1, '시간제 비중 (시간제/취업자, %)', [{ type: 'line', label: '시간제 비중', data: cols.map(d => ratio(pt, emp, d)), borderColor: PALETTE[3], backgroundColor: PALETTE[3], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true }]);
 }
 
 function renderUsEmpMain() {
@@ -1317,15 +1373,24 @@ function renderUsEmpMain() {
   const tbl = (title, rows, fmt) => {
     let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-    rows.forEach(([nm, m, fn, cls]) => {
-      h += `<tr class="${cls || 'lv1'}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d); const t = v == null ? '' : fmt(v);
+    rows.forEach(([nm, m, fn, cls, rowFmt]) => {
+      const f = rowFmt || fmt;
+      h += `<tr class="${cls || 'lv1'}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d); const t = v == null ? '' : f(v);
         return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
     });
     return h + '</tbody></table></div>';
   };
+  const k0 = v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
   out += tbl('고용 비율 지표 (%)', [['실업률', un, lvl], ['U-6 실업률', u6, lvl], ['경제활동참가율', part, lvl], ['고용률', epop, lvl]], v => v.toFixed(1));
-  out += tbl('비농업 취업자 전월 증감 (천명)', [['비농업 전체', nfpTot, delta, 'lv0 sep-solid'], ['민간', M(nfp, '민간'), delta], ['정부', M(nfp, '정부'), delta]], v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 }));
-  out += tbl('시간당임금 전년동월비 (%)', [['시간당임금 (전체)', wage, yoy], ['시간당임금 (생산·비관리직)', M(ahe, '시간당임금 (생산·비관리직)'), yoy]], v => v.toFixed(2));
+  out += tbl('비농업 취업자 전월 증감 (천명)', [
+    ['비농업 전체', nfpTot, delta, 'lv0 sep-solid'], ['민간', M(nfp, '민간'), delta], ['정부', M(nfp, '정부'), delta],
+    ['임시직알선 (선행)', M(nfp, '임시직알선'), delta], ['트럭운송 (선행)', M(nfp, '트럭운송'), delta],
+  ], k0);
+  out += tbl('임금·근로시간 (민간)', [
+    ['시간당임금 (전체) YoY %', wage, yoy, 'lv1', v => v.toFixed(2)],
+    ['시간당임금 (생산·비관리직) YoY %', M(ahe, '시간당임금 (생산·비관리직)'), yoy, 'lv1', v => v.toFixed(2)],
+    ['주당근로시간 (전체, 시간)', M(ahe, '주당근로시간 (전체)'), lvl, 'lv1', v => v.toFixed(1)],
+  ], v => v.toFixed(2));
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
 

@@ -1,9 +1,10 @@
 name: 데이터 자동 갱신
 
 on:
-  schedule:
-    - cron: "0 23 * * *"   # 매일 KST 08:00 (UTC 23:00)
-  workflow_dispatch:        # Actions 탭에서 수동 실행 버튼
+  # 매일 자동 커밋을 끔 — 로컬 fetch와 충돌 방지 (다시 켜려면 아래 2줄 주석 해제)
+  # schedule:
+  #   - cron: "0 23 * * *"   # 매일 KST 08:00 (UTC 23:00)
+  workflow_dispatch:        # Actions 탭에서 수동 실행 버튼 (필요할 때만)
 
 permissions:
   contents: write

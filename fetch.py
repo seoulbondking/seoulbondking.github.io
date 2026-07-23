@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import kosis, ecos, reb
+from fetchers import kosis, ecos, reb, bls
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -30,13 +30,18 @@ SOURCES = {
     "kosis": kosis.fetch,
     "ecos": ecos.fetch,
     "reb": reb.fetch,
+    "bls": bls.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
 
 
 def load_dotenv():
-    """같은 폴더의 .env 파일을 환경변수로 로드 (이미 있으면 유지)."""
+    """같은 폴더의 .env 파일을 환경변수로 로드.
+
+    .env 값이 항상 우선한다(기존 OS 환경변수에 옛 키가 남아 있어도 .env로 덮어씀).
+    단, 따옴표는 벗겨낸다. GitHub Actions엔 .env가 없어 Secrets 환경변수가 그대로 쓰인다.
+    """
     env_file = ROOT / ".env"
     if not env_file.exists():
         return
@@ -45,7 +50,7 @@ def load_dotenv():
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, _, v = line.partition("=")
-        os.environ.setdefault(k.strip(), v.strip())
+        os.environ[k.strip()] = v.strip().strip('"').strip("'")
 
 
 def merge_series(old_series: list, new_series: list) -> list:

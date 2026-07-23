@@ -255,3 +255,89 @@ indicators:
     params:
       stat_code: "722Y001"
       item_codes: ["0101000"]
+
+  # ══════════════════════════════════════════════════════════════
+  # 🇺🇸 미국 (BLS·BEA·Census·FRED) — 미국 정부 API라 Actions에서도 수집 가능
+  # ══════════════════════════════════════════════════════════════
+
+  # 고용상황 — 비농업 취업자 (산업별, 천명·계절조정) : 산업별 증감 분해용
+  - id: us_nfp
+    name: 미국 비농업 취업자 (산업별)
+    source: bls
+    unit: 천명
+    freq: M
+    start_year: 2005
+    refetch_years: 2
+    series_first: ["비농업 전체"]
+    params:
+      series:
+        CES0000000001: 비농업 전체
+        CES0500000001: 민간
+        CES0600000001: 재화생산
+        CES1000000001: 광업·벌목
+        CES2000000001: 건설
+        CES3000000001: 제조업
+        CES0800000001: 민간 서비스업
+        CES4142000001: 도매
+        CES4200000001: 소매
+        CES4300000001: 운송·창고
+        CES4422000001: 유틸리티
+        CES5000000001: 정보
+        CES5500000001: 금융
+        CES6000000001: 전문·비즈니스
+        CES6500000001: 교육·보건
+        CES7000000001: 레저·접객
+        CES8000000001: 기타 서비스
+        CES9000000001: 정부
+
+  # 고용상황 — 비율 지표 (실업률·U-6·참가율·고용률)
+  - id: us_labor
+    name: 미국 고용지표 (비율)
+    source: bls
+    unit: '%'
+    freq: M
+    start_year: 2000
+    refetch_years: 2
+    series_first: ["실업률"]
+    params:
+      series:
+        LNS14000000: 실업률
+        LNS13327709: U-6 실업률
+        LNS11300000: 경제활동참가율
+        LNS12300000: 고용률
+
+  # 시간당 임금 (민간, 달러) — YoY = 임금 인플레
+  - id: us_ahe
+    name: 미국 시간당임금 (민간)
+    source: bls
+    unit: 달러
+    freq: M
+    start_year: 2007
+    refetch_years: 2
+    series_first: ["시간당임금 (전체)"]
+    params:
+      series:
+        CES0500000003: 시간당임금 (전체)
+        CES0500000008: 시간당임금 (생산·비관리직)
+
+  # JOLTS — 구인·채용·이직·해고 (전산업, 천건 및 %)
+  - id: us_jolts
+    name: 미국 JOLTS (구인·이직)
+    source: bls
+    unit: 천건·%
+    freq: M
+    start_year: 2001
+    refetch_years: 2
+    series_first: ["구인"]
+    params:
+      series:
+        JTS000000000000000JOL: 구인
+        JTS000000000000000JOR: 구인율
+        JTS000000000000000HIL: 채용
+        JTS000000000000000HIR: 채용률
+        JTS000000000000000QUL: 자발적 이직
+        JTS000000000000000QUR: 이직률
+        JTS000000000000000LDL: 해고·감원
+        JTS000000000000000LDR: 해고율
+        JTS000000000000000TSL: 총 이직
+        JTS000000000000000TSR: 총 이직률

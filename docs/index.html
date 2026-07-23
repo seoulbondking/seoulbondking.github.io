@@ -3154,10 +3154,17 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
+      // 미국 지표 앞에 구분 헤더
+      if (item.id.startsWith('us_') && !usInserted) {
+        const h = document.createElement('div');
+        h.textContent = '🇺🇸 미국';
+        h.style.cssText = 'font-size:11px;color:#98a3b6;font-weight:700;margin:14px 0 4px;padding-left:4px;border-top:1px solid #e0e4ea;padding-top:10px';
+        nav.appendChild(h); usInserted = true;
+      }
       if (item.id === PPI.src) {   // 생산자물가 → 종합 페이지 하나로
         const b = document.createElement('button');
         b.id = 'ppiBtn'; b.textContent = PPI.name; b.onclick = enterPpi;

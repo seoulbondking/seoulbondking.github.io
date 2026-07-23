@@ -169,12 +169,23 @@ def fetch(indicator: dict) -> list[dict]:
         parents = {}                      # 항목명 → 상위 항목명 (트리 구성용)
         level_of = {"총지수": 0}
         l1 = children.get(tc, [])
+        l1_names = {name_of[c] for c in l1}
         for c in l1:
             codes.append(c); parents[name_of[c]] = "총지수"; level_of[name_of[c]] = 1
         if levels >= 2:
             for c1 in l1:
+                # 중분류 후보: 대분류의 자식. 단 동명 패스스루 노드는 그 자식으로 대체(평탄화)
+                mid = []
                 for c2 in children.get(c1, []):
-                    codes.append(c2); parents[name_of[c2]] = name_of[c1]; level_of[name_of[c2]] = 2
+                    if name_of[c2] == name_of[c1]:      # 동명 패스스루 → 한 단계 내려감
+                        mid.extend(children.get(c2, []))
+                    else:
+                        mid.append(c2)
+                for c3 in mid:
+                    nm3 = name_of[c3]
+                    if nm3 == name_of[c1] or nm3 == "총지수" or nm3 in l1_names:
+                        continue
+                    codes.append(c3); parents[nm3] = name_of[c1]; level_of[nm3] = 2
         item_codes = codes
         keep = {name_of[c] for c in codes}
         meta["weights"] = {n: w for n, w in (meta.get("weights") or {}).items() if n in keep}

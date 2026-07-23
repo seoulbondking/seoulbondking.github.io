@@ -57,7 +57,7 @@
   .series-picker { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
   .series-picker label { cursor: pointer; user-select: none; }
   .empty { color: #888; padding: 60px; text-align: center; }
-  #tableWrap { overflow-x: auto; max-height: 560px; overflow-y: auto; }
+  #tableWrap { overflow-x: auto; max-height: calc(100vh - 200px); overflow-y: auto; }
   table.data { border-collapse: collapse; font-size: 12.5px; white-space: nowrap; width: 100%; }
   table.data th, table.data td { padding: 5px 10px; text-align: right; border-bottom: 1px solid #eef1f5; }
   table.data thead th { background: #f0f3f8; position: sticky; top: 0; font-weight: 700; }
@@ -135,7 +135,7 @@
     <div class="toolbar">
       <div class="mode" id="viewButtons">
         <button data-view="multi" id="multiBtn" style="display:none">종합</button>
-        <button data-view="table">표</button>
+        <button data-view="table">원자료</button>
         <button data-view="chart" class="active">차트</button>
       </div>
       <div id="cpiTabs" class="mode" style="display:none">
@@ -186,6 +186,7 @@
       <h2 id="title">불러오는 중…</h2>
       <div class="meta" id="metaLine"></div>
       <div id="chartWrap"><canvas id="chart"></canvas></div>
+      <div id="genChartWrap" style="display:none"></div>
       <div id="tableWrap" style="display:none"></div>
       <div id="multiWrap" style="display:none"></div>
       <div id="retailWrap" style="display:none"></div>
@@ -229,9 +230,13 @@
 const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
                  '#b0486e','#5c6b7a','#8aa832','#c26b1d','#4666d1','#9e3fbf'];
 let catalog = [], current = null, chart = null;
+// 메뉴·비교에서 숨길 지표 (기본분류는 PPI 산업별이 내부적으로 사용하므로 수집은 유지, 메뉴만 숨김)
+const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
+                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic'];
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
+let genSel = null, genCharts = [null, null, null, null];   // 원자료·종합 차트: 우클릭 선택 항목
 
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
 const lagYoY = () =>
@@ -430,6 +435,7 @@ function refresh() {
   document.getElementById('seriesPicker').style.display = view === 'chart' ? '' : 'none';
   document.getElementById('tableWrap').style.display = view === 'table' ? '' : 'none';
   document.getElementById('multiWrap').style.display = (view === 'multi' || isCpiC) ? '' : 'none';
+  document.getElementById('genChartWrap').style.display = (view === 'table' || view === 'multi') ? '' : 'none';
   document.getElementById('comboWrap').style.display = (isCombo && tab === 'chart') ? '' : 'none';
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
@@ -539,7 +545,8 @@ function renderMulti() {
       const attr = cpi
         ? (cpiRowAttr(s.name) || (hl ? ` class="${hl}"` : ''))
         : gdpRowAttr(itemNames, si, hl);
-      html += `<tr${attr}>${nameCell(s.name)}` + cols.map(d => {
+      const gs = genSel && genSel.has(s.name) ? ' style="background:#eef4ff"' : '';
+      html += `<tr${attr} data-sel="${s.name}"${gs}>${nameCell(s.name)}` + cols.map(d => {
         const v = nog ? null : met.fn(m, d, ded);
         const txt = v == null ? ''
           : v.toLocaleString('ko-KR', { minimumFractionDigits: met.dec, maximumFractionDigits: met.dec });
@@ -548,8 +555,10 @@ function renderMulti() {
     });
     out += html + '</tbody></table></div>';
   });
-  document.getElementById('multiWrap').innerHTML = out;
-  document.querySelectorAll('#multiWrap .tscroll').forEach(w => { w.scrollLeft = w.scrollWidth; });
+  const mwrap = document.getElementById('multiWrap');
+  mwrap.innerHTML = out;
+  mwrap.querySelectorAll('.tscroll').forEach(w => { w.scrollLeft = w.scrollWidth; });
+  renderGenCharts();
 }
 
 // 엑셀처럼 항목(행) × 기간(열) 수치 표
@@ -577,15 +586,84 @@ function renderTable() {
   rows.forEach((r, ri) => {
     const hl = hlRows.has(r.name) ? 'hl' : '';
     const attr = isGdp() ? gdpRowAttr(rowNames, ri, hl) : (hl ? ` class="${hl}"` : '');
-    html += `<tr${attr}>${nameCell(r.name)}` + dates.map(d => {
+    const gs = genSel && genSel.has(r.name) ? ' style="background:#eef4ff"' : '';
+    html += `<tr${attr} data-sel="${r.name}"${gs}>${nameCell(r.name)}` + dates.map(d => {
       const v = r.map.get(d);
       return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`;
     }).join('') + '</tr>';
   });
-  document.getElementById('tableWrap').innerHTML = html + '</tbody></table>';
-  // 최신 기간이 보이도록 오른쪽 끝으로 스크롤
   const wrap = document.getElementById('tableWrap');
+  wrap.innerHTML = html + '</tbody></table>';
+  renderGenCharts();
+  // 최신 기간이 보이도록 오른쪽 끝으로 스크롤
   wrap.scrollLeft = wrap.scrollWidth;
+}
+
+// 원자료·종합 뷰 상단 차트 (전기비·전년동기비 [+ GDP는 성장기여도 2개], 표 우클릭으로 선택) ──
+function genChartBlockHTML(n) {
+  const cell = i => `<div style="flex:1;min-width:320px"><div class="cchart" style="height:250px"><canvas class="genC" data-gi="${i}"></canvas></div></div>`;
+  let rows = '';
+  for (let i = 0; i < n; i += 2) rows += `<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px">${cell(i)}${i + 1 < n ? cell(i + 1) : ''}</div>`;
+  return '<div class="genChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;min-height:22px"></div>'
+    + rows + '<div style="font-size:12px;color:#8592a3;margin:2px 0 10px">표 항목을 <b>우클릭</b>하면 차트에 추가/제거됩니다.</div>';
+}
+// GDP 성장 기여도 = (X_t − X_{t−lag}) / GDP_{t−lag} × 100  (공제 항목은 부호 반전)
+function gdpContribData(s, lag) {
+  const total = current.series[0];
+  const gmap = new Map(total.data.map(p => [p.d, p.v]));
+  const dts = total.data.map(p => p.d);
+  const iOf = new Map(dts.map((d, i) => [d, i]));
+  const m = new Map(s.data.map(p => [p.d, p.v]));
+  const sign = s.name.startsWith('(공제)') ? -1 : 1;
+  const out = [];
+  dts.forEach(d => { const i = iOf.get(d); if (i < lag) return; const p = dts[i - lag];
+    const a = m.get(d), b = m.get(p), g = gmap.get(p);
+    if (a != null && b != null && g) out.push({ d, v: (a - b) / g * 100 * sign }); });
+  return out;
+}
+function renderGenCharts() {
+  const wrap = document.getElementById('genChartWrap');
+  const gdp = isGdp();
+  wrap.innerHTML = genChartBlockHTML(gdp ? 4 : 2);
+  if (!genSel) genSel = new Set(current.series.length ? [current.series[0].name] : []);
+  const smap = new Map(current.series.map(s => [s.name, s]));
+  const sel = [...genSel].filter(n => smap.has(n));
+  const chips = wrap.querySelector('.genChips');
+  chips.innerHTML = sel.length ? '' : '<span style="color:#aaa;font-size:12px">표에서 우클릭으로 항목 선택</span>';
+  sel.forEach((n, j) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+    el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+    el.querySelector('b').onclick = () => { genSel.delete(n); refresh(); };
+    chips.appendChild(el);
+  });
+  const defs = [['전기비 (%)', 'g', 1], ['전년동기비 (%)', 'g', lagYoY()]];
+  if (gdp) defs.push(['성장기여도 전기비 (%p)', 'c', 1], ['성장기여도 전년동기비 (%p)', 'c', lagYoY()]);
+  wrap.querySelectorAll('canvas.genC').forEach(cv => {
+    const i = +cv.dataset.gi; const [title, kind, lag] = defs[i];
+    if (genCharts[i]) { genCharts[i].destroy(); genCharts[i] = null; }
+    const labelSet = new Set();
+    const datasets = sel.map((n, j) => {
+      const s = smap.get(n);
+      let data = [];
+      if (kind === 'c') data = gdpContribData(s, lag).filter(p => inRange(p.d));
+      else if (!NO_GROWTH.has(stripCode(n))) data = popChange(s.data, lag).filter(p => inRange(p.d));
+      data.forEach(p => labelSet.add(p.d));
+      return { label: n, data: data.map(p => ({ x: p.d, y: p.v })),
+        borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true };
+    });
+    const labels = [...labelSet].sort();
+    genCharts[i] = new Chart(cv, {
+      type: 'line', data: { labels, datasets },
+      options: { responsive: true, maintainAspectRatio: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 11 } } } } },
+    });
+  });
 }
 
 function draw() {
@@ -711,7 +789,7 @@ async function enterCompare() {
   // 지표 드롭다운 구성
   const indSel = document.getElementById('cmpInd');
   if (!indSel.options.length) {
-    indSel.innerHTML = catalog.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    indSel.innerHTML = catalog.filter(c => !NAV_HIDE.includes(c.id)).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     await fillCmpSeries();
     indSel.onchange = fillCmpSeries;
     document.getElementById('cmpAdd').onclick = addCompare;
@@ -1081,8 +1159,11 @@ function renderPpiMainIndustry(modeBtnsHtml) {
   }
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((x, i) => [x, i]));
-  const parents = d.parents || {};
-  const levelOf = d.level_of || {};
+  const parents = { ...(d.parents || {}) };
+  const levelOf = { ...(d.level_of || {}) };
+  // 정규화: 대분류(top_level)는 총지수 직속·레벨1로 강제 (일부 대분류가 동명 패스스루로 self-parent 되는 버그 보정)
+  (d.top_level || []).forEach(n => { parents[n] = '총지수'; levelOf[n] = 1; });
+  Object.keys(parents).forEach(n => { if (parents[n] === n) delete parents[n]; });   // 남은 자기참조 제거
   const smap = new Map(d.series.map(s => [baseName(s.name), s]));
   const kids = {};
   Object.entries(parents).forEach(([c, p]) => { (kids[p] ||= []).push(c); });
@@ -1292,7 +1373,8 @@ function renderRetail() {
         const txt = v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: mode === 'level' ? 1 : 2, maximumFractionDigits: mode === 'level' ? 1 : 2 });
         return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${txt}</td>`;
       }).join('');
-      out += `<tr class="${cls}${nd.hasChildren ? ' parent' : ''}"${nd.hasChildren ? ` data-rc="${nd.name}"` : ''}>`
+      const selStyle = retMainSel.has(nd.name) ? ' style="background:#eef4ff"' : '';
+      out += `<tr class="${cls}${nd.hasChildren ? ' parent' : ''}" data-sel="${nd.name}"${nd.hasChildren ? ` data-rc="${nd.name}"` : ''}${selStyle}>`
         + `<td style="padding-left:${8 + nd.lv * 16}px${nd.hasChildren ? ';cursor:pointer' : ''}">${caret}${nd.name}</td>`
         + cellsHtml + '</tr>';
       if (isCol && nd.hasChildren) hide = nd.lv;
@@ -1312,6 +1394,11 @@ function renderRetail() {
   box.querySelector('#retCollapse').onclick = () => {
     retCollapsed[retailTab] = new Set(nodes.filter(n => n.hasChildren).map(n => n.name)); renderRetail();
   };
+  // 표 우클릭 → 차트에 항목 추가/제거
+  box.querySelectorAll('tr[data-sel]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.sel;
+    retMainSel.has(n) ? retMainSel.delete(n) : retMainSel.add(n); renderRetail();
+  });
   // 차트
   const chips = box.querySelector('#rmChips');
   const allBtn = document.createElement('button');
@@ -1998,7 +2085,9 @@ function renderCpiCombo() {
         return;
       }
       const hl = hlRows.has(r.label) ? ' hl' : '';
-      html += `<tr class="lv${r.lv}${r.lv === 0 ? ' sep-solid' : ''}${hl}">${nameCell(r.label)}`
+      const gsel = cpiTab === 'main' && cpiMainSel && cpiMainSel.has(r.label);
+      const gattr = cpiTab === 'main' ? ` data-selm="${r.label}"${gsel ? ' style="background:#eef4ff"' : ''}` : '';
+      html += `<tr class="lv${r.lv}${r.lv === 0 ? ' sep-solid' : ''}${hl}"${gattr}>${nameCell(r.label)}`
         + cols.map(d => {
           // raw 행(심리지수·기대인플레)은 원래 값 그대로 (기여도 블록에선 빈칸)
           const v = met.contrib
@@ -2029,6 +2118,11 @@ function renderCpiCombo() {
   const w = document.getElementById('multiWrap');
   w.innerHTML = out;
   w.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  // 표 우클릭 → 종합 차트에 항목 추가/제거
+  w.querySelectorAll('tr[data-selm]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.selm;
+    cpiMainSel.has(n) ? cpiMainSel.delete(n) : cpiMainSel.add(n); renderCpiCombo();
+  });
 
   // 종합 탭 차트 렌더 + 컨트롤
   if (cpiTab === 'main') {
@@ -2899,6 +2993,7 @@ async function select(id) {
   startSel.value = startD; endSel.value = endD;
   // 기본으로 첫 3개 시리즈 표시
   visible = new Set(current.series.slice(0, 3).map(s => s.name));
+  genSel = new Set(current.series.length ? [current.series[0].name] : []);   // 차트 기본: 총계
   loadRowPrefs();   // 이 지표의 숨김/강조 설정 복원
   render();
 }
@@ -2926,6 +3021,16 @@ document.getElementById('viewButtons').addEventListener('click', e => {
     if (t.dataset.act === 'hide') hiddenRows.add(name);
     else hlRows.has(name) ? hlRows.delete(name) : hlRows.add(name);
     saveRowPrefs();
+    refresh();
+  });
+  // 우클릭 → 상단 차트에 항목 추가/제거
+  document.getElementById(id).addEventListener('contextmenu', e => {
+    const tr = e.target.closest && e.target.closest('tr[data-sel]');
+    if (!tr) return;
+    e.preventDefault();
+    if (!genSel) genSel = new Set();
+    const n = tr.dataset.sel;
+    if (genSel.has(n)) genSel.delete(n); else genSel.add(n);
     refresh();
   });
 });
@@ -3051,8 +3156,8 @@ document.getElementById('endSel').onchange = e => {
     const nav = document.getElementById('nav');
     let comboInserted = false, cpiInserted = false, retInserted = false;
     catalog.forEach(item => {
-      // 메뉴 숨김: 품목상세·CPI 흡수 지표
-      if (['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate'].includes(item.id)) return;
+      // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
+      if (NAV_HIDE.includes(item.id)) return;
       if (item.id === PPI.src) {   // 생산자물가 → 종합 페이지 하나로
         const b = document.createElement('button');
         b.id = 'ppiBtn'; b.textContent = PPI.name; b.onclick = enterPpi;
@@ -3096,6 +3201,9 @@ document.getElementById('endSel').onchange = e => {
       btn.onclick = () => select(item.id);
       nav.appendChild(btn);
     });
+    // 생산자물가 종합을 소매판매 바로 위로 이동
+    const ppiB = document.getElementById('ppiBtn'), retB = document.getElementById('retailBtn');
+    if (ppiB && retB) nav.insertBefore(ppiB, retB);
     // 지표 비교 메뉴 (구분선 + 버튼)
     const hr = document.createElement('div');
     hr.style.cssText = 'border-top:1px solid #e0e4ea;margin:10px 0';

@@ -161,7 +161,7 @@ def fetch(indicator: dict) -> list[dict]:
         if v is not None:
             dep.append({"d": d, "v": v})
     if dep:
-        series.append({"name": "투자자예탁금", "data": sorted(dep, key=lambda p: p["d"])})
+        series.append({"name": "고객예탁금", "data": sorted(dep, key=lambda p: p["d"])})
 
     if not series:
         raise FreesisError("FREESIS 응답에서 데이터를 얻지 못했습니다 (엔드포인트/파라미터 확인)")

@@ -238,7 +238,7 @@ const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
 let catalog = [], current = null, chart = null;
 // 메뉴·비교에서 숨길 지표 (기본분류는 PPI 산업별이 내부적으로 사용하므로 수집은 유지, 메뉴만 숨김)
 const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
-                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic'];
+                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow'];
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
@@ -1253,19 +1253,44 @@ function renderPpiMainIndustry(modeBtnsHtml) {
 }
 
 // ── 자금흐름 (FREESIS: 펀드·투자일임·투자자예탁금) — 카테고리 히트맵 + 추이 ──
-const FUND = { id: 'kr_fund_flow', name: '자금흐름' };
-let fundData = null, fundSel = null, fundChart = null, fundMode = 'change';
-// [카테고리, [하위 항목…]] — 하위가 비면 단독 항목(합계 없음)
-const FUND_TREE = [
-  ['채권형', ['공모 국내 채권', '사모 국내 채권', '일임 국내 채권']],
-  ['MMF', ['공모 국내 MMF', '사모 국내 MMF']],
-  ['주식형', ['공모 국내 주식', '공모 해외 주식', '사모 국내 주식', '사모 해외 주식', '일임 국내 주식', '일임 해외 주식']],
-  ['투자자예탁금', []],
+const FUND = { id: 'kr_fund_flow', name: '자금흐름', ids: ['kr_fund_flow', 'kr_bank_flow'] };
+let fundData = null, fundSel = null, fundChart = null, fundMode = 'change', fundCollapsed = null;
+// 펀드플로우 대시보드와 동일한 섹터·계층 (레벨: 섹터0 > 유형1 > 소분류2 > 항목3)
+// leaves 가 있으면 합계 행(하위 잎 시리즈의 합), 없으면 실제 시리즈 행.
+const EQ_DOM = ['공모 국내 주식', '사모 국내 주식'];
+const EQ_OVS = ['공모 해외 주식', '사모 해외 주식'];
+const EQ_ALL = [...EQ_DOM, ...EQ_OVS, '일임 국내 주식', '일임 해외 주식'];
+const BOND = ['공모 국내 채권', '사모 국내 채권', '일임 국내 채권'];
+const MMF = ['공모 국내 MMF', '사모 국내 MMF'];
+const FUND_ROWS = [
+  { name: '투신', lv: 0, leaves: [...BOND, ...MMF, ...EQ_ALL] },
+  { name: '채권형', lv: 1, leaves: BOND },
+  { name: '공모 국내 채권', lv: 2 }, { name: '사모 국내 채권', lv: 2 }, { name: '일임 국내 채권', lv: 2 },
+  { name: 'MMF', lv: 1, leaves: MMF },
+  { name: '공모 국내 MMF', lv: 2 }, { name: '사모 국내 MMF', lv: 2 },
+  { name: '주식형', lv: 1, leaves: EQ_ALL },
+  { name: '시가형 국내 주식', lv: 2, leaves: EQ_DOM },
+  { name: '공모 국내 주식', lv: 3 }, { name: '사모 국내 주식', lv: 3 },
+  { name: '시가형 해외 주식', lv: 2, leaves: EQ_OVS },
+  { name: '공모 해외 주식', lv: 3 }, { name: '사모 해외 주식', lv: 3 },
+  { name: '일임 국내 주식', lv: 2 }, { name: '일임 해외 주식', lv: 2 },
+  { name: '증권', lv: 0, leaves: ['고객예탁금', '고객RP', 'CMA'] },
+  { name: '고객예탁금', lv: 1 }, { name: '고객RP', lv: 1 }, { name: 'CMA', lv: 1 },
+  { name: '은행', lv: 0, leaves: ['실세총예금', '금전신탁'] },
+  { name: '실세총예금', lv: 1 },
+  { name: '실세요구불', lv: 2 }, { name: '저축성', lv: 2 },
+  { name: '금전신탁', lv: 1 },
 ];
 const fundDlab = d => d.slice(2).replace(/-/g, '.');   // 2026-07-23 → 26.07.23
 
 async function enterFundFlow() {
-  fundData = await loadIndicator(FUND.id).catch(() => null);
+  const parts = await Promise.all(FUND.ids.map(id => loadIndicator(id).catch(() => null)));
+  const got = parts.filter(Boolean);
+  fundData = got.length
+    ? { unit: got[0].unit || '억원',
+        updated_at: got.map(g => g.updated_at).sort().pop(),
+        series: got.flatMap(g => g.series) }
+    : null;
   current = { id: FUND.id, name: FUND.name, freq: 'D', unit: (fundData || {}).unit || '억원',
               updated_at: (fundData || {}).updated_at || '-', series: [] };
   view = 'fund';
@@ -1297,41 +1322,51 @@ function renderFundFlow() {
   const bal = (n, d) => S[n] ? (S[n].get(d) ?? null) : null;
   const chg = (n, d) => { const p = prevOf(d); if (!p) return null; const a = bal(n, d), b = bal(n, p); return a != null && b != null ? a - b : null; };
   const rowFn = fundMode === 'balance' ? bal : chg;
-  const rows = [];
-  FUND_TREE.forEach(([cat, kids]) => {
-    if (!kids.length) { rows.push({ name: cat, lv: 0 }); return; }
-    rows.push({ name: cat, lv: 0, kids });
-    kids.forEach(k => { if (S[k]) rows.push({ name: k, lv: 1 }); });
-  });
-  const val = (r, d) => r.kids
-    ? (() => { let s = 0, ok = false; r.kids.forEach(k => { const v = rowFn(k, d); if (v != null) { s += v; ok = true; } }); return ok ? s : null; })()
+  // 실제 시리즈가 있는 행만 (집계행은 유지)
+  const rows = FUND_ROWS.filter(r => r.leaves || S[r.name]);
+  rows.forEach((r, i) => { r._kids = i + 1 < rows.length && rows[i + 1].lv > r.lv; });
+  const val = (r, d) => r.leaves
+    ? (() => { let s = 0, ok = false; r.leaves.forEach(k => { const v = rowFn(k, d); if (v != null) { s += v; ok = true; } }); return ok ? s : null; })()
     : rowFn(r.name, d);
-  if (fundSel === null) fundSel = new Set(['투자자예탁금']);
+  if (fundSel === null) fundSel = new Set(['고객예탁금']);
+  if (fundCollapsed === null) fundCollapsed = new Set();
   let mx = 1e-6;
   if (fundMode === 'change') rows.forEach(r => cols.forEach(d => { const v = val(r, d); if (v != null) mx = Math.max(mx, Math.abs(v)); }));
   const bg = v => { if (v == null || fundMode !== 'change') return ''; const t = Math.max(-1, Math.min(1, v / mx));
     if (t > 0) return `background:rgba(46,139,87,${(0.12 + 0.55 * t).toFixed(3)})`;
     if (t < 0) return `background:rgba(200,60,50,${(0.12 + 0.55 * -t).toFixed(3)})`; return ''; };
 
-  let out = '<div class="mode" id="fundModeBtns" style="margin-bottom:8px">'
+  const unit = fundData.unit || '억원';
+  let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+    + '<div class="mode" id="fundModeBtns">'
     + [['change', '전일 증감'], ['balance', '잔액']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
+    + '</div><span style="font-size:12px;color:#555">단위: <b>' + unit + '</b></span></div>'
+    + '<div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
     + '<div class="cchart" style="height:300px;margin-bottom:14px"><canvas id="fundChart"></canvas></div>'
-    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">항목 이름을 클릭하면 추이 차트에 넣고 뺍니다. 색: 초록=증가 · 빨강=감소. 단위 ' + ((fundData.unit) || '억원') + '.</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">카테고리 <b>좌클릭</b>=접기/펴기 · 항목 <b>우클릭</b>=추이 차트에 추가/제거. 색: 초록=증가 · 빨강=감소.</div>'
     + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
     + cols.map(d => `<th>${fundDlab(d)}</th>`).join('') + '</tr></thead><tbody>';
+  let hideLv = null;
   rows.forEach(r => {
+    if (hideLv != null) { if (r.lv > hideLv) return; hideLv = null; }   // 접힌 상위의 하위 숨김
+    const collapsed = fundCollapsed.has(r.name);
+    const caret = r._kids ? (collapsed ? '＋ ' : '－ ') : '';
     const sel = fundSel.has(r.name) ? '● ' : '';
-    const cls = r.lv === 0 ? 'lv0 sep-solid' : 'lv1';
-    out += `<tr class="${cls}"><td data-fs="${r.name}" style="padding-left:${8 + r.lv * 16}px;cursor:pointer">${sel}${r.name}</td>`
+    const cls = r.lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(r.lv, 3)}`;
+    out += `<tr class="${cls}"><td data-fname="${r.name}"${r._kids ? ' data-kids="1"' : ''} style="padding-left:${8 + r.lv * 15}px;cursor:${r._kids ? 'pointer' : 'context-menu'}">${caret}${sel}${r.name}</td>`
       + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
         return `<td style="${bg(v)}"${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
+    if (collapsed && r._kids) hideLv = r.lv;
   });
   out += '</tbody></table></div>';
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#fundModeBtns button').forEach(b => b.onclick = () => { fundMode = b.dataset.fm; renderFundFlow(); });
-  box.querySelectorAll('[data-fs]').forEach(td => td.onclick = () => { const n = td.dataset.fs; fundSel.has(n) ? fundSel.delete(n) : fundSel.add(n); renderFundFlow(); });
+  box.querySelectorAll('[data-fname]').forEach(td => {
+    const n = td.dataset.fname;
+    if (td.dataset.kids) td.onclick = () => { fundCollapsed.has(n) ? fundCollapsed.delete(n) : fundCollapsed.add(n); renderFundFlow(); };
+    td.oncontextmenu = e => { e.preventDefault(); fundSel.has(n) ? fundSel.delete(n) : fundSel.add(n); renderFundFlow(); };
+  });
 
   const chips = box.querySelector('#fundChips');
   const selList = [...fundSel];

@@ -265,7 +265,18 @@ indicators:
     freq: D
     lookback_days: 400          # FREESIS는 한 요청에 범위 전체 반환 → 넉넉히(누적 병합)
     merge_always: true
-    series_first: ["투자자예탁금"]
+    series_first: ["고객예탁금"]
+    params: {}
+
+  # 자금흐름 은행·증권 (한국은행 일일 금융시장지표 엑셀) — 실세총예금·금전신탁·고객RP
+  - id: kr_bank_flow
+    name: 자금흐름 은행 (BOK)
+    source: bok
+    unit: 억원
+    freq: D
+    merge_always: true
+    bok_posts: 12               # 최근 게시글 수(=날짜 수). 백필 시 크게(예: 40)
+    series_first: ["실세총예금"]
     params: {}
 
   # ══════════════════════════════════════════════════════════════

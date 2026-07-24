@@ -427,14 +427,14 @@ function updateMeta() {
 function refresh() {
   updateMeta();
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
-  const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp';
+  const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
   document.getElementById('retTabs').style.display = isRet ? '' : 'none';
   document.getElementById('ppiTabs').style.display = isPpi ? '' : 'none';
   document.getElementById('usEmpTabs').style.display = isUsE ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -447,15 +447,16 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isUsE) renderUsEmp();
+  if (isFund) renderFundFlow();
+  else if (isUsE) renderUsEmp();
   else if (isPpi) renderPpi();
   else if (isRet) renderRetail();
   else if (isCpiC) renderCpiCombo();
@@ -1251,6 +1252,112 @@ function renderPpiMainIndustry(modeBtnsHtml) {
   });
 }
 
+// ── 자금흐름 (FREESIS: 펀드·투자일임·투자자예탁금) — 카테고리 히트맵 + 추이 ──
+const FUND = { id: 'kr_fund_flow', name: '자금흐름' };
+let fundData = null, fundSel = null, fundChart = null, fundMode = 'change';
+// [카테고리, [하위 항목…]] — 하위가 비면 단독 항목(합계 없음)
+const FUND_TREE = [
+  ['채권형', ['공모 국내 채권', '사모 국내 채권', '일임 국내 채권']],
+  ['MMF', ['공모 국내 MMF', '사모 국내 MMF']],
+  ['주식형', ['공모 국내 주식', '공모 해외 주식', '사모 국내 주식', '사모 해외 주식', '일임 국내 주식', '일임 해외 주식']],
+  ['투자자예탁금', []],
+];
+const fundDlab = d => d.slice(2).replace(/-/g, '.');   // 2026-07-23 → 26.07.23
+
+async function enterFundFlow() {
+  fundData = await loadIndicator(FUND.id).catch(() => null);
+  current = { id: FUND.id, name: FUND.name, freq: 'D', unit: (fundData || {}).unit || '억원',
+              updated_at: (fundData || {}).updated_at || '-', series: [] };
+  view = 'fund';
+  document.getElementById('title').textContent = FUND.name;
+  document.getElementById('updatedAt').textContent = fundData ? '데이터 갱신: ' + fundData.updated_at : '';
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'fundBtn'));
+  const ds = new Set();
+  if (fundData) fundData.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${fundDlab(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 30)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+function renderFundFlow() {
+  const box = document.getElementById('retailWrap');
+  if (!fundData || !fundData.series || !fundData.series.length) {
+    box.innerHTML = '<div style="padding:24px;color:#888">자금흐름 데이터가 없습니다. <b>python fetch.py kr_fund_flow</b> 실행 필요.</div>';
+    return;
+  }
+  const S = {}; fundData.series.forEach(s => S[s.name] = new Map(s.data.map(p => [p.d, p.v])));
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevOf = d => { const i = idx.get(d); return i >= 1 ? periodDates[i - 1] : null; };
+  const bal = (n, d) => S[n] ? (S[n].get(d) ?? null) : null;
+  const chg = (n, d) => { const p = prevOf(d); if (!p) return null; const a = bal(n, d), b = bal(n, p); return a != null && b != null ? a - b : null; };
+  const rowFn = fundMode === 'balance' ? bal : chg;
+  const rows = [];
+  FUND_TREE.forEach(([cat, kids]) => {
+    if (!kids.length) { rows.push({ name: cat, lv: 0 }); return; }
+    rows.push({ name: cat, lv: 0, kids });
+    kids.forEach(k => { if (S[k]) rows.push({ name: k, lv: 1 }); });
+  });
+  const val = (r, d) => r.kids
+    ? (() => { let s = 0, ok = false; r.kids.forEach(k => { const v = rowFn(k, d); if (v != null) { s += v; ok = true; } }); return ok ? s : null; })()
+    : rowFn(r.name, d);
+  if (fundSel === null) fundSel = new Set(['투자자예탁금']);
+  let mx = 1e-6;
+  if (fundMode === 'change') rows.forEach(r => cols.forEach(d => { const v = val(r, d); if (v != null) mx = Math.max(mx, Math.abs(v)); }));
+  const bg = v => { if (v == null || fundMode !== 'change') return ''; const t = Math.max(-1, Math.min(1, v / mx));
+    if (t > 0) return `background:rgba(46,139,87,${(0.12 + 0.55 * t).toFixed(3)})`;
+    if (t < 0) return `background:rgba(200,60,50,${(0.12 + 0.55 * -t).toFixed(3)})`; return ''; };
+
+  let out = '<div class="mode" id="fundModeBtns" style="margin-bottom:8px">'
+    + [['change', '전일 증감'], ['balance', '잔액']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
+    + '<div class="cchart" style="height:300px;margin-bottom:14px"><canvas id="fundChart"></canvas></div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">항목 이름을 클릭하면 추이 차트에 넣고 뺍니다. 색: 초록=증가 · 빨강=감소. 단위 ' + ((fundData.unit) || '억원') + '.</div>'
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${fundDlab(d)}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(r => {
+    const sel = fundSel.has(r.name) ? '● ' : '';
+    const cls = r.lv === 0 ? 'lv0 sep-solid' : 'lv1';
+    out += `<tr class="${cls}"><td data-fs="${r.name}" style="padding-left:${8 + r.lv * 16}px;cursor:pointer">${sel}${r.name}</td>`
+      + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+        return `<td style="${bg(v)}"${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#fundModeBtns button').forEach(b => b.onclick = () => { fundMode = b.dataset.fm; renderFundFlow(); });
+  box.querySelectorAll('[data-fs]').forEach(td => td.onclick = () => { const n = td.dataset.fs; fundSel.has(n) ? fundSel.delete(n) : fundSel.add(n); renderFundFlow(); });
+
+  const chips = box.querySelector('#fundChips');
+  const selList = [...fundSel];
+  chips.innerHTML = selList.length ? '' : '<span style="color:#aaa;font-size:12px">항목 클릭해서 추이 보기</span>';
+  const rowByName = n => rows.find(r => r.name === n) || { name: n };
+  const datasets = selList.map((n, j) => {
+    const r = rowByName(n);
+    const el = document.createElement('span');
+    el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+    el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+    el.querySelector('b').onclick = () => { fundSel.delete(n); renderFundFlow(); };
+    chips.appendChild(el);
+    return { label: n, data: cols.map(d => val(r, d)), borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true };
+  });
+  if (fundChart) { fundChart.destroy(); fundChart = null; }
+  fundChart = new Chart(box.querySelector('#fundChart'), {
+    type: 'line', data: { labels: cols, datasets },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: (fundMode === 'change' ? '전일 증감' : '잔액') + ' 추이', font: { size: 12 } },
+        tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
+      scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+  });
+}
+
 // ── 미국 고용상황 (BLS: 비농업 산업별 + 실업률 + 임금) ──────────
 const US_EMP = { id: 'us_emp', name: '미국 고용상황', ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn'] };
 // 업종별 시간·급여 표시 순서 (Empsit CES 02/11 세트)
@@ -1521,24 +1628,32 @@ function renderUsNfpIndustry() {
     renderUsEmp();
   });
   const shown = NFP_LEAVES.filter(n => usEmpSel.has(n));
-  const mkStack = (cid, valFn, title, totLabel) => {
-    const dss = shown.map(n => ({ type: 'bar', label: n, data: cols.map(d => valFn(n, d)),
-      backgroundColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length], stack: 's', order: 2 }));
-    dss.push({ type: 'line', label: totLabel, data: cols.map(d => valFn('비농업 전체', d)),
-      borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, order: 0 });
+  // 증감 차트: 스택 막대(합=총계). 취업자 수 차트: 선(lines) + 총계는 우측 보조축, 좌우축 모두 자동범위(추이 부각)
+  const mkChart = (cid, valFn, title, totLabel, o) => {
+    const dss = shown.map(n => ({ type: o.lines ? 'line' : 'bar', label: n, data: cols.map(d => valFn(n, d)),
+      borderColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length], backgroundColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length],
+      borderWidth: o.lines ? 1.8 : 0, pointRadius: 0, tension: 0.15, spanGaps: true,
+      stack: o.stacked ? 's' : undefined, order: 2, yAxisID: 'y' }));
+    dss.push({ type: 'line', label: totLabel + (o.dual ? ' (우축)' : ''), data: cols.map(d => valFn('비농업 전체', d)),
+      borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, order: 0, yAxisID: o.dual ? 'y2' : 'y' });
+    const scales = {
+      x: { stacked: !!o.stacked, ticks: { maxTicksLimit: 10, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+      y: { stacked: !!o.stacked, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('ko-KR') } },
+    };
+    if (o.dual) scales.y2 = { position: 'right', grid: { drawOnChartArea: false },
+      ticks: { font: { size: 9 }, maxTicksLimit: 6, callback: v => v.toLocaleString('ko-KR') } };
     return new Chart(box.querySelector('#' + cid), {
       data: { labels: cols, datasets: dss },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 9 } },
           title: { display: true, text: title, font: { size: 12 } },
           tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
-        scales: { x: { stacked: true, ticks: { maxTicksLimit: 10, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
-          y: { stacked: true, ticks: { font: { size: 10 } } } } },
+        scales },
     });
   };
   usIndCharts.forEach((c, i) => { if (c) { c.destroy(); usIndCharts[i] = null; } });
-  usIndCharts[0] = mkStack('usNfpChart0', delta, '전월 증감 (천명)', '총 증감');
-  usIndCharts[1] = mkStack('usNfpChart1', level, '취업자 수 (천명)', '총 취업자 수');
+  usIndCharts[0] = mkChart('usNfpChart0', delta, '전월 증감 (천명)', '총 증감', { stacked: true });
+  usIndCharts[1] = mkChart('usNfpChart1', level, '취업자 수 (천명)', '총 취업자 수', { lines: true, dual: true });
 }
 
 // ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────
@@ -3473,6 +3588,11 @@ document.getElementById('endSel').onchange = e => {
       if (item.id === PPI.src) {   // 생산자물가 → 종합 페이지 하나로
         const b = document.createElement('button');
         b.id = 'ppiBtn'; b.textContent = PPI.name; b.onclick = enterPpi;
+        nav.appendChild(b); return;
+      }
+      if (item.id === FUND.id) {   // 자금흐름 → 히트맵 페이지
+        const b = document.createElement('button');
+        b.id = 'fundBtn'; b.textContent = FUND.name; b.onclick = enterFundFlow;
         nav.appendChild(b); return;
       }
       if (US_EMP.ids.includes(item.id)) {   // 미국 고용 3종 → "미국 고용상황" 하나로

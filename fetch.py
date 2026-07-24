@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import kosis, ecos, reb, bls
+from fetchers import kosis, ecos, reb, bls, freesis
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -31,6 +31,7 @@ SOURCES = {
     "ecos": ecos.fetch,
     "reb": reb.fetch,
     "bls": bls.fetch,
+    "freesis": freesis.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -158,7 +159,8 @@ def main():
                 failures.append(ind["id"])
                 continue
 
-            if incremental:
+            # merge_always: 일별 소스(FREESIS 등)는 최근치만 받아도 항상 아카이브에 병합
+            if incremental or (ind.get("merge_always") and old is not None):
                 series = merge_series(old["series"], series)
 
         # series_first 에 지정된 항목(총계 등)을 맨 앞으로 정렬

@@ -256,6 +256,18 @@ indicators:
       stat_code: "722Y001"
       item_codes: ["0101000"]
 
+  # ── 자금흐름 (금융투자협회 FREESIS) — 펀드·투자일임·투자자예탁금 잔액 (일별) ──
+  # 최근 N일만 받아 아카이브에 누적 병합. 첫 백필은 lookback_days를 크게(예: 400).
+  - id: kr_fund_flow
+    name: 자금흐름 (펀드·예탁금)
+    source: freesis
+    unit: 억원
+    freq: D
+    lookback_days: 400          # FREESIS는 한 요청에 범위 전체 반환 → 넉넉히(누적 병합)
+    merge_always: true
+    series_first: ["투자자예탁금"]
+    params: {}
+
   # ══════════════════════════════════════════════════════════════
   # 🇺🇸 미국 (BLS·BEA·Census·FRED) — 미국 정부 API라 Actions에서도 수집 가능
   # ══════════════════════════════════════════════════════════════

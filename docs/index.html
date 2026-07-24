@@ -238,7 +238,7 @@ const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
 let catalog = [], current = null, chart = null;
 // 메뉴·비교에서 숨길 지표 (기본분류는 PPI 산업별이 내부적으로 사용하므로 수집은 유지, 메뉴만 숨김)
 const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
-                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow'];
+                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow'];
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
@@ -1253,7 +1253,7 @@ function renderPpiMainIndustry(modeBtnsHtml) {
 }
 
 // ── 자금흐름 (FREESIS: 펀드·투자일임·투자자예탁금) — 카테고리 히트맵 + 추이 ──
-const FUND = { id: 'kr_fund_flow', name: '자금흐름', ids: ['kr_fund_flow', 'kr_bank_flow'] };
+const FUND = { id: 'kr_fund_flow', name: '자금흐름', ids: ['kr_fund_flow', 'kr_bank_flow', 'kr_repo_flow'] };
 let fundData = null, fundSel = null, fundChart = null, fundMode = 'change', fundCollapsed = null;
 // 펀드플로우 대시보드와 동일한 섹터·계층 (레벨: 섹터0 > 유형1 > 소분류2 > 항목3)
 // leaves 가 있으면 합계 행(하위 잎 시리즈의 합), 없으면 실제 시리즈 행.
@@ -1263,6 +1263,8 @@ const EQ_ALL = [...EQ_DOM, ...EQ_OVS, '일임 국내 주식', '일임 해외 주
 const BOND = ['공모 국내 채권', '사모 국내 채권', '일임 국내 채권'];
 const MMF = ['공모 국내 MMF', '사모 국내 MMF'];
 const FUND_ROWS = [
+  { name: 'REPO', lv: 0, leaves: ['기관RP'] },
+  { name: '기관RP', lv: 1 },
   { name: '투신', lv: 0, leaves: [...BOND, ...MMF, ...EQ_ALL] },
   { name: '채권형', lv: 1, leaves: BOND },
   { name: '공모 국내 채권', lv: 2 }, { name: '사모 국내 채권', lv: 2 }, { name: '일임 국내 채권', lv: 2 },

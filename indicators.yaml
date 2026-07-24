@@ -279,6 +279,17 @@ indicators:
     series_first: ["실세총예금"]
     params: {}
 
+  # 자금흐름 REPO (예탁결제원 SEIBro, Playwright 스크래핑) — 기관RP 잔고
+  # Node+Playwright 필요: npm install playwright && npx playwright install chromium
+  - id: kr_repo_flow
+    name: 자금흐름 REPO (SEIBro)
+    source: seibro
+    unit: 억원
+    freq: D
+    merge_always: true
+    seibro_limit: 30            # 스크랩할 최근 일수
+    params: {}
+
   # ══════════════════════════════════════════════════════════════
   # 🇺🇸 미국 (BLS·BEA·Census·FRED) — 미국 정부 API라 Actions에서도 수집 가능
   # ══════════════════════════════════════════════════════════════

@@ -1,0 +1,12 @@
+{
+  "name": "macro-dashboard-scrapers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "자금흐름 REPO(SEIBro) 스크래핑용 Node 의존성",
+  "scripts": {
+    "seibro": "node scripts/fetch_seibro_repo.js --limit 30"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

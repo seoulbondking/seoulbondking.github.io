@@ -154,7 +154,7 @@
       </div>
       <div id="usEmpTabs" class="mode" style="display:none">
         <button data-ue="main" class="active">종합</button>
-        <button data-ue="industry">산업별 증감</button>
+        <button data-ue="industry">산업별 고용상황</button>
         <button data-ue="lf">노동력 상세</button>
         <button data-ue="hrs">시간·급여</button>
       </div>
@@ -1257,17 +1257,30 @@ const US_EMP = { id: 'us_emp', name: '미국 고용상황', ids: ['us_nfp', 'us_
 const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '제조업', '민간 서비스업',
   '도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
-let usEmpSel = null, usIndChart = null;
+let usEmpSel = null, usIndCharts = [null, null];
 // 비농업 트리 [이름, 레벨]. 14개 말단(레벨3 + 정부)이 배타적 분할 → 합 = 총 비농업 증감
 const NFP_TREE = [
   ['비농업 전체', 0], ['민간', 1],
   ['재화생산', 2], ['광업·벌목', 3], ['건설', 3], ['제조업', 3],
-  ['민간 서비스업', 2], ['도매', 3], ['소매', 3], ['운송·창고', 3], ['유틸리티', 3],
-  ['정보', 3], ['금융', 3], ['전문·비즈니스', 3], ['교육·보건', 3], ['레저·접객', 3], ['기타 서비스', 3],
+  ['민간 서비스업', 2], ['도매', 3], ['소매', 3],
+  ['운송·창고', 3], ['트럭운송', 4],
+  ['유틸리티', 3], ['정보', 3], ['금융', 3],
+  ['전문·비즈니스', 3], ['임시직알선', 4],
+  ['교육·보건', 3], ['보육서비스', 4],
+  ['레저·접객', 3], ['기타 서비스', 3],
   ['정부', 1],
 ];
 const NFP_LEAVES = ['광업·벌목', '건설', '제조업', '도매', '소매', '운송·창고', '유틸리티',
   '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스', '정부'];
+// 상위 묶음 → 하위 14산업. 우클릭하면 하위를 한꺼번에 선택/해제 (스택은 14분할 유지)
+const NFP_GOODS = ['광업·벌목', '건설', '제조업'];
+const NFP_PSVC = ['도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
+const NFP_GROUPS = {
+  '재화생산': NFP_GOODS,
+  '민간 서비스업': NFP_PSVC,
+  '민간': [...NFP_GOODS, ...NFP_PSVC],
+  '비농업 전체': NFP_LEAVES,
+};
 
 async function enterUsEmp() {
   const [nfp, labor, lf, hours, earn] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -1468,41 +1481,64 @@ function renderUsNfpIndustry() {
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevOf = d => { const i = idx.get(d); return i >= 1 ? periodDates[i - 1] : null; };
   const delta = (name, d) => { const p = prevOf(d); if (!p) return null; const m = S[name]; if (!m) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
+  const level = (name, d) => { const m = S[name]; return m ? (m.get(d) ?? null) : null; };
   if (usEmpSel === null) usEmpSel = new Set(NFP_LEAVES);
 
-  let out = '<div class="block-title">비농업 취업자 전월 증감 — 산업별 분해 (천명)</div>'
-    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">14개 산업 증감의 합 = 총 비농업 증감(검은 선). 표 항목 <b>우클릭</b>으로 차트에 넣고 빼기.</div>'
-    + '<div class="cchart" style="height:340px;margin-bottom:16px"><canvas id="usNfpChart"></canvas></div>'
-    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>'
-    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-  NFP_TREE.forEach(([name, lv]) => {
-    const arr = cols.map(d => delta(name, d));
-    const isLeaf = NFP_LEAVES.includes(name);
-    const sel = usEmpSel.has(name) ? '● ' : '';
-    const cls = lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(lv, 2)}`;
-    out += `<tr class="${cls}"${isLeaf ? ` data-sel="${name}" style="cursor:context-menu"` : ''}><td style="padding-left:${8 + lv * 14}px">${isLeaf ? sel : ''}${name}</td>`
-      + arr.map(v => { const t = v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 }); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
-  });
-  out += '</tbody></table></div>';
+  const k0 = v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+  const treeTable = (title, valFn) => {
+    let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>`
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    NFP_TREE.forEach(([name, lv]) => {
+      const isLeaf = NFP_LEAVES.includes(name);
+      const grp = NFP_GROUPS[name];
+      let mark = '', attr = '';
+      if (isLeaf) { mark = usEmpSel.has(name) ? '● ' : ''; attr = ` data-sel="${name}" style="cursor:context-menu"`; }
+      else if (grp) { const sc = grp.filter(x => usEmpSel.has(x)).length; mark = sc === grp.length ? '● ' : (sc > 0 ? '◐ ' : ''); attr = ` data-agg="${name}" style="cursor:context-menu"`; }
+      const cls = lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(lv, 3)}`;
+      h += `<tr class="${cls}"${attr}><td style="padding-left:${8 + lv * 13}px">${mark}${name}</td>`
+        + cols.map(d => { const v = valFn(name, d); const t = v == null ? '' : k0(v); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  };
+
+  let out = '<div class="block-title">비농업 취업자 — 산업별 (천명)</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">14개 산업의 합 = 총 비농업(검은 선). 표 항목 <b>우클릭</b>으로 두 차트에 넣고 빼기. 들여쓴 트럭운송·임시직알선·보육서비스는 상위 업종에 포함된 참고 세부업종.</div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart0"></canvas></div></div>'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart1"></canvas></div></div>'
+    + '</div>';
+  out += treeTable('전월 증감 (천명)', delta);
+  out += treeTable('취업자 수 (천명)', level);
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('[data-sel]').forEach(tr => tr.oncontextmenu = e => {
     e.preventDefault(); const n = tr.dataset.sel; usEmpSel.has(n) ? usEmpSel.delete(n) : usEmpSel.add(n); renderUsEmp();
   });
-  const shown = NFP_LEAVES.filter(n => usEmpSel.has(n));
-  const ds = shown.map(n => ({ type: 'bar', label: n, data: cols.map(d => delta(n, d)),
-    backgroundColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length], stack: 's', order: 2 }));
-  ds.push({ type: 'line', label: '총 비농업 증감', data: cols.map(d => delta('비농업 전체', d)),
-    borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, order: 0 });
-  if (usIndChart) { usIndChart.destroy(); usIndChart = null; }
-  usIndChart = new Chart(box.querySelector('#usNfpChart'), {
-    data: { labels: cols, datasets: ds },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
-        tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
-      scales: { x: { stacked: true, ticks: { maxTicksLimit: 12, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
-        y: { stacked: true, ticks: { font: { size: 11 } } } } },
+  box.querySelectorAll('[data-agg]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const g = NFP_GROUPS[tr.dataset.agg];
+    const all = g.every(x => usEmpSel.has(x));   // 모두 선택돼 있으면 해제, 아니면 전체 선택
+    g.forEach(x => all ? usEmpSel.delete(x) : usEmpSel.add(x));
+    renderUsEmp();
   });
+  const shown = NFP_LEAVES.filter(n => usEmpSel.has(n));
+  const mkStack = (cid, valFn, title, totLabel) => {
+    const dss = shown.map(n => ({ type: 'bar', label: n, data: cols.map(d => valFn(n, d)),
+      backgroundColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length], stack: 's', order: 2 }));
+    dss.push({ type: 'line', label: totLabel, data: cols.map(d => valFn('비농업 전체', d)),
+      borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, order: 0 });
+    return new Chart(box.querySelector('#' + cid), {
+      data: { labels: cols, datasets: dss },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 9 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
+        scales: { x: { stacked: true, ticks: { maxTicksLimit: 10, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { stacked: true, ticks: { font: { size: 10 } } } } },
+    });
+  };
+  usIndCharts.forEach((c, i) => { if (c) { c.destroy(); usIndCharts[i] = null; } });
+  usIndCharts[0] = mkStack('usNfpChart0', delta, '전월 증감 (천명)', '총 증감');
+  usIndCharts[1] = mkStack('usNfpChart1', level, '취업자 수 (천명)', '총 취업자 수');
 }
 
 // ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────
@@ -3222,7 +3258,7 @@ function exportExcel() {
 }
 
 async function select(id) {
-  if (['compare', 'combo', 'map', 'cpicombo', 'retail', 'ppi'].includes(view)) view = 'chart';
+  if (['compare', 'combo', 'map', 'cpicombo', 'retail', 'ppi', 'usemp'].includes(view)) view = 'chart';
   current = await loadIndicator(id);
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;

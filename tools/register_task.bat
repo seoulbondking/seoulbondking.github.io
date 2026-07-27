@@ -1,15 +1,13 @@
 @echo off
 REM ---------------------------------------------------------------
-REM  Register "Macrobox Daily Update" in Windows Task Scheduler
-REM  Runs every day at 08:00. Just double-click this file.
+REM  Register Macrobox auto-update in Windows Task Scheduler.
+REM  Two runs per day: 09:00 and 16:00. Just double-click this file.
 REM ---------------------------------------------------------------
-set TASKNAME=MacroboxDailyUpdate
 set SCRIPT=C:\Users\infomax\Desktop\Python\macro-dashboard\tools\daily_update.bat
 
 echo.
-echo   Task name : %TASKNAME%
-echo   Script    : %SCRIPT%
-echo   Schedule  : every day 08:00
+echo   Script   : %SCRIPT%
+echo   Schedule : every day 09:00 and 16:00
 echo.
 
 if not exist "%SCRIPT%" (
@@ -18,16 +16,25 @@ if not exist "%SCRIPT%" (
     exit /b 1
 )
 
-schtasks /create /tn "%TASKNAME%" /tr "\"%SCRIPT%\"" /sc daily /st 08:00 /f
+REM remove old single 08:00 task if it exists
+schtasks /delete /tn "MacroboxDailyUpdate" /f >nul 2>&1
+
+schtasks /create /tn "MacroboxUpdateAM" /tr "\"%SCRIPT%\"" /sc daily /st 09:00 /f
+schtasks /create /tn "MacroboxUpdatePM" /tr "\"%SCRIPT%\"" /sc daily /st 16:00 /f
+
+REM run as soon as possible after a missed start (PC was off at 09:00/16:00)
+powershell -NoProfile -Command "foreach($t in 'MacroboxUpdateAM','MacroboxUpdatePM'){$x=Get-ScheduledTask -TaskName $t; $x.Settings.StartWhenAvailable=$true; Set-ScheduledTask -TaskName $t -Settings $x.Settings | Out-Null}" 2>nul
+
 if errorlevel 1 (
     echo.
-    echo [FAILED] Try again with right-click - "Run as administrator".
+    echo [FAILED] Try again: right-click this file - "Run as administrator".
 ) else (
     echo.
-    echo [DONE] Registered. Useful commands:
-    echo    check  : schtasks /query /tn "%TASKNAME%"
-    echo    run now: schtasks /run   /tn "%TASKNAME%"
-    echo    delete : schtasks /delete /tn "%TASKNAME%" /f
+    echo [DONE] Registered two tasks. Useful commands:
+    echo    check  : schtasks /query /tn "MacroboxUpdateAM"
+    echo    run now: schtasks /run   /tn "MacroboxUpdateAM"
+    echo    delete : schtasks /delete /tn "MacroboxUpdateAM" /f
+    echo             schtasks /delete /tn "MacroboxUpdatePM" /f
 )
 echo.
 pause

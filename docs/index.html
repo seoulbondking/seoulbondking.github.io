@@ -1254,7 +1254,9 @@ function renderPpiMainIndustry(modeBtnsHtml) {
 
 // ── 자금흐름 (FREESIS: 펀드·투자일임·투자자예탁금) — 카테고리 히트맵 + 추이 ──
 const FUND = { id: 'kr_fund_flow', name: '자금흐름', ids: ['kr_fund_flow', 'kr_bank_flow', 'kr_repo_flow'] };
-let fundData = null, fundSel = null, fundChart = null, fundMode = 'change', fundCollapsed = null;
+let fundData = null, fundCharts = [null, null], fundMode = 'change', fundCollapsed = null;
+// 탭(전일 증감/잔액)별로 좌·우 차트 선택을 따로 보관
+let fundSel = { change: [null, null], balance: [null, null] };
 // 펀드플로우 대시보드와 동일한 섹터·계층 (레벨: 섹터0 > 유형1 > 소분류2 > 항목3)
 // leaves 가 있으면 합계 행(하위 잎 시리즈의 합), 없으면 실제 시리즈 행.
 const EQ_DOM = ['공모 국내 주식', '사모 국내 주식'];
@@ -1330,13 +1332,22 @@ function renderFundFlow() {
   const val = (r, d) => r.leaves
     ? (() => { let s = 0, ok = false; r.leaves.forEach(k => { const v = rowFn(k, d); if (v != null) { s += v; ok = true; } }); return ok ? s : null; })()
     : rowFn(r.name, d);
-  if (fundSel === null) fundSel = new Set(['고객예탁금']);
+  const selPair = fundSel[fundMode];
+  if (selPair[0] === null) selPair[0] = new Set(['MMF']);        // 왼쪽 차트 기본
+  if (selPair[1] === null) selPair[1] = new Set(['채권형']);      // 오른쪽 차트 기본
   if (fundCollapsed === null) fundCollapsed = new Set();
+  // 셀 강조: 배경 대신 굵은 글씨 + 진하기(증감 크기에 비례) — 초록=증가 · 빨강=감소
   let mx = 1e-6;
   if (fundMode === 'change') rows.forEach(r => cols.forEach(d => { const v = val(r, d); if (v != null) mx = Math.max(mx, Math.abs(v)); }));
-  const bg = v => { if (v == null || fundMode !== 'change') return ''; const t = Math.max(-1, Math.min(1, v / mx));
-    if (t > 0) return `background:rgba(46,139,87,${(0.12 + 0.55 * t).toFixed(3)})`;
-    if (t < 0) return `background:rgba(200,60,50,${(0.12 + 0.55 * -t).toFixed(3)})`; return ''; };
+  const cellStyle = v => {
+    if (v == null || fundMode !== 'change' || !v) return '';
+    const t = Math.min(1, Math.abs(v) / mx);
+    const w = t > 0.5 ? 800 : (t > 0.15 ? 700 : 600);    // 증감 크기에 따라 600~800
+    const col = v > 0 ? [17, 105, 62] : [176, 32, 28];    // 진한 초록 / 진한 빨강
+    const light = v > 0 ? [72, 152, 116] : [200, 96, 90];
+    const mix = col.map((c, i) => Math.round(light[i] + (c - light[i]) * (0.4 + 0.6 * t)));
+    return `color:rgb(${mix.join(',')});font-weight:${w}`;
+  };
 
   const unit = fundData.unit || '억원';
   let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
@@ -1344,54 +1355,82 @@ function renderFundFlow() {
     + [['change', '전일 증감'], ['balance', '잔액']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
     + '</div><span style="font-size:12px;color:#555">단위: <b>' + unit + '</b></span></div>'
     + '<div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
-    + '<div class="cchart" style="height:300px;margin-bottom:14px"><canvas id="fundChart"></canvas></div>'
-    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">카테고리 <b>좌클릭</b>=접기/펴기 · 항목 <b>우클릭</b>=추이 차트에 추가/제거. 색: 초록=증가 · 빨강=감소.</div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="fundChart${i}"></canvas></div></div>`).join('')
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">항목 이름 <b>좌클릭</b>=왼쪽 차트 · <b>우클릭</b>=오른쪽 차트 · <b>＋/－</b> 클릭=접기/펴기. 글씨: 초록=증가 · 빨강=감소(진할수록 큼).</div>'
     + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
     + cols.map(d => `<th>${fundDlab(d)}</th>`).join('') + '</tr></thead><tbody>';
   let hideLv = null;
   rows.forEach(r => {
     if (hideLv != null) { if (r.lv > hideLv) return; hideLv = null; }   // 접힌 상위의 하위 숨김
     const collapsed = fundCollapsed.has(r.name);
-    const caret = r._kids ? (collapsed ? '＋ ' : '－ ') : '';
-    const sel = fundSel.has(r.name) ? '● ' : '';
+    const caret = r._kids
+      ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
+    const inL = selPair[0].has(r.name), inR = selPair[1].has(r.name);
+    const mark = (inL ? `<b style="color:${PALETTE[0]}">◀</b>` : '') + (inR ? `<b style="color:${PALETTE[1]}">▶</b>` : '');
     const cls = r.lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(r.lv, 3)}`;
-    out += `<tr class="${cls}"><td data-fname="${r.name}"${r._kids ? ' data-kids="1"' : ''} style="padding-left:${8 + r.lv * 15}px;cursor:${r._kids ? 'pointer' : 'context-menu'}">${caret}${sel}${r.name}</td>`
+    out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${mark ? ' ' : ''}${r.name}</td>`
       + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
-        return `<td style="${bg(v)}"${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
+        return `<td style="${cellStyle(v)}">${t}</td>`; }).join('') + '</tr>';
     if (collapsed && r._kids) hideLv = r.lv;
   });
   out += '</tbody></table></div>';
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#fundModeBtns button').forEach(b => b.onclick = () => { fundMode = b.dataset.fm; renderFundFlow(); });
+  box.querySelectorAll('.fcaret').forEach(el => el.onclick = e => {
+    e.stopPropagation(); const n = el.dataset.fcar;
+    fundCollapsed.has(n) ? fundCollapsed.delete(n) : fundCollapsed.add(n); renderFundFlow();
+  });
   box.querySelectorAll('[data-fname]').forEach(td => {
     const n = td.dataset.fname;
-    if (td.dataset.kids) td.onclick = () => { fundCollapsed.has(n) ? fundCollapsed.delete(n) : fundCollapsed.add(n); renderFundFlow(); };
-    td.oncontextmenu = e => { e.preventDefault(); fundSel.has(n) ? fundSel.delete(n) : fundSel.add(n); renderFundFlow(); };
+    td.onclick = () => { selPair[0].has(n) ? selPair[0].delete(n) : selPair[0].add(n); renderFundFlow(); };
+    td.oncontextmenu = e => { e.preventDefault(); selPair[1].has(n) ? selPair[1].delete(n) : selPair[1].add(n); renderFundFlow(); };
   });
 
-  const chips = box.querySelector('#fundChips');
-  const selList = [...fundSel];
-  chips.innerHTML = selList.length ? '' : '<span style="color:#aaa;font-size:12px">항목 클릭해서 추이 보기</span>';
   const rowByName = n => rows.find(r => r.name === n) || { name: n };
-  const datasets = selList.map((n, j) => {
-    const r = rowByName(n);
-    const el = document.createElement('span');
-    el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
-    el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
-    el.querySelector('b').onclick = () => { fundSel.delete(n); renderFundFlow(); };
-    chips.appendChild(el);
-    return { label: n, data: cols.map(d => val(r, d)), borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
-      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true };
-  });
-  if (fundChart) { fundChart.destroy(); fundChart = null; }
-  fundChart = new Chart(box.querySelector('#fundChart'), {
-    type: 'line', data: { labels: cols, datasets },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
-        title: { display: true, text: (fundMode === 'change' ? '전일 증감' : '잔액') + ' 추이', font: { size: 12 } },
-        tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
-      scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+  const metric = fundMode === 'balance' ? '잔액' : '전일 증감';
+  const chips = box.querySelector('#fundChips');
+  chips.innerHTML = '';
+  // 차트 2개 (좌: 좌클릭 선택 · 우: 우클릭 선택). 둘 다 현재 탭 지표를 표시.
+  [0, 1].forEach(ci => {
+    const list = [...selPair[ci]];
+    const wrap = document.createElement('span');
+    wrap.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-right:14px';
+    const tag = document.createElement('b');
+    tag.textContent = ci === 0 ? '◀ 왼쪽' : '▶ 오른쪽';
+    tag.style.cssText = 'font-size:11.5px;color:' + PALETTE[ci];
+    wrap.appendChild(tag);
+    if (!list.length) {
+      const s = document.createElement('span');
+      s.style.cssText = 'color:#aaa;font-size:11.5px';
+      s.textContent = ci === 0 ? '항목 좌클릭' : '항목 우클릭';
+      wrap.appendChild(s);
+    }
+    list.forEach((n, j) => {
+      const el = document.createElement('span');
+      el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+      el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+      el.querySelector('b').onclick = () => { selPair[ci].delete(n); renderFundFlow(); };
+      wrap.appendChild(el);
+    });
+    chips.appendChild(wrap);
+
+    if (fundCharts[ci]) { fundCharts[ci].destroy(); fundCharts[ci] = null; }
+    const datasets = list.map((n, j) => ({
+      label: n, data: cols.map(d => val(rowByName(n), d)),
+      borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true,
+    }));
+    fundCharts[ci] = new Chart(box.querySelector('#fundChart' + ci), {
+      type: 'line', data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: `${ci === 0 ? '◀' : '▶'} ${metric} (${unit})`, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+    });
   });
 }
 
@@ -2053,20 +2092,22 @@ const CPI_ROWS = [
   ['1년 기대인플레(%)', 'kr_infl_expect', '향후1년', 0, 'raw'],
   ['3년 기대인플레(%)', 'kr_infl_expect', '3년후', 0, 'raw'],
   ['5년 기대인플레(%)', 'kr_infl_expect', '5년후', 0, 'raw'],
-  ['주요 품목', null, null, 0],          // 구분 헤더 (데이터 없음)
-  ['상품', 'kr_cpi', '상품', 1],
-  ['농축수산물', 'kr_cpi', '농축수산물', 2],
-  ['공업제품', 'kr_cpi', '공업제품', 2],
-  ['전기·가스·수도', 'kr_cpi', '전기', 2],
-  ['서비스', 'kr_cpi', '서비스', 1],
-  ['집세', 'kr_cpi', '집세', 2],
-  ['공공서비스', 'kr_cpi', '공공서비스', 2],
-  ['개인서비스', 'kr_cpi', '개인서비스', 2],
+  ['주요 품목', null, null, 0],          // 구분 헤더 (여기부터 cpi_struct 트리로 자동 확장)
 ];
+// 주요 품목 트리: cpi_struct.js 의 집계(agg) 노드 = 대·중분류. 품목 지수는 kr_cpi_items 사용.
+function cpiItemRows() {
+  const st = window.__CPI_STRUCT__;
+  if (!st) return [];
+  // 집계 노드(대·중분류)만 노출: 총지수는 상단에 이미 있으므로 제외
+  return st.filter(nd => nd.agg && nd.n !== '총지수')
+           .map(nd => ({ label: nd.n, lv: nd.lv, item: nd.n }));
+}
 let cpiData = null;
 let cpiTab = 'main';   // CPI 하위 탭: main(종합) | contrib(기여도)
 // CPI 차트 상태
-let cpiMainChartObj = null, cpiMainSel = null, cpiMainMetric = 'yoy', cpiMainType = 'line';
+let cpiMainCharts = [null, null], cpiMainType = 'line';
+// 좌(MoM)·우(YoY) 차트 선택 + 주요품목 트리 접힘
+let cpiMainSelL = null, cpiMainSelR = null, cpiMainCollapsed = null;
 let cpiCtbChartObj = null, cpiCtbChartIdx = 'H';
 let cpiCtbFocus = new Set();   // 기여도 차트에 단독 표시할 항목들 (행 클릭으로 토글)
 
@@ -2507,23 +2548,54 @@ function renderCpiCombo() {
     return { label, lv, raw: flag === 'raw',
              map: s ? new Map(s.data.map(p => [p.d, p.v])) : new Map() };
   });
+  // 종합 탭: '주요 품목' 헤더 뒤에 cpi_struct 대·중분류 트리를 붙임 (품목 지수는 kr_cpi_items)
+  if (cpiTab === 'main') {
+    // 품목 지수: kr_cpi_items 우선, 없으면 kr_cpi(품목성질별)로 폴백
+    const itemsInd = cpiData['kr_cpi_items'];
+    const imap = new Map();
+    if (itemsInd) itemsInd.series.forEach(s => imap.set(baseName(s.name).trim(), s));
+    const findSer = nm => {
+      const key = nm.trim();
+      return imap.get(key)
+        || cpiRowSeries('kr_cpi', key)
+        || imap.get(key.replace(/\s|·/g, ''))
+        || [...imap.keys()].filter(k => k.replace(/\s|·/g, '') === key.replace(/\s|·/g, '')).map(k => imap.get(k))[0]
+        || null;
+    };
+    const extra = cpiItemRows().map(nd => {
+      const s = findSer(nd.item);
+      return { label: nd.label, lv: nd.lv, item: nd.item,
+               map: s ? new Map(s.data.map(p => [p.d, p.v])) : new Map() };
+    });
+    rows = rows.concat(extra);   // 값이 없어도 행은 유지(빈칸으로 표시)
+  }
   // 기여도 탭: 가중치가 있는 행(Headline·주요품목)만 표시
   if (cpiTab === 'contrib') rows = rows.filter(r => r.sect || CPI_W[r.label]);
+  // 접기: 자식 여부 계산 후 접힌 상위의 하위 숨김
+  rows.forEach((r, i) => { r._kids = !r.sect && i + 1 < rows.length && !rows[i + 1].sect && rows[i + 1].lv > r.lv; });
+  if (cpiMainCollapsed === null) cpiMainCollapsed = new Set(['상품', '서비스']);   // 기본: 대분류 접힘
+  if (cpiTab === 'main') {
+    const shown = []; let hideLv = null;
+    rows.forEach(r => {
+      if (hideLv != null) { if (!r.sect && r.lv > hideLv) return; hideLv = null; }
+      shown.push(r);
+      if (r._kids && cpiMainCollapsed.has(r.label)) hideLv = r.lv;
+    });
+    rows = shown;
+  }
 
-  // ── 종합 탭 차트 (항목 선택 + 선/막대 + 지표 전환) ──────────
-  if (cpiMainSel == null)
-    cpiMainSel = new Set(['Headline CPI (총지수)', 'Core CPI (식료품·에너지 제외)', '생활물가지수']);
-  const chartItems = rows.filter(r => !r.sect);
+  // ── 종합 탭 차트 2개 (좌 MoM · 우 YoY), 좌클릭=왼쪽 · 우클릭=오른쪽 ──
+  if (cpiMainSelL == null) cpiMainSelL = new Set(['Headline CPI (총지수)', 'Core CPI (식료품·에너지 제외)']);
+  if (cpiMainSelR == null) cpiMainSelR = new Set(['Headline CPI (총지수)', 'Core CPI (식료품·에너지 제외)']);
   let out = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'
-    + '<div class="mode" id="cmMetric">'
-    + [['mom', 'MoM'], ['yoy', 'YoY'], ['level', '원지수']].map(([v, t]) =>
-        `<button data-cm="${v}" class="${cpiMainMetric === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><div class="mode" id="cmType">'
+    + '<div class="mode" id="cmType">'
     + [['line', '선'], ['bar', '막대']].map(([v, t]) =>
         `<button data-cy="${v}" class="${cpiMainType === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div></div>'
-    + '<div id="cmChips" style="display:flex;gap:5px 10px;flex-wrap:wrap;font-size:12px;margin-bottom:6px"></div>'
-    + '<div class="cchart" style="height:320px;margin-bottom:18px"><canvas id="cpiMainChart"></canvas></div>';
+    + '</div><span style="font-size:12px;color:#8592a3">항목 <b>좌클릭</b>=왼쪽(MoM) · <b>우클릭</b>=오른쪽(YoY) · <b>＋/－</b>=접기/펴기</span></div>'
+    + '<div id="cmChips" style="display:flex;gap:5px 14px;flex-wrap:wrap;font-size:12px;margin-bottom:6px"></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="cpiMainChart${i}"></canvas></div></div>`).join('')
+    + '</div>';
   metrics.forEach(met => {
     let html = `<div class="block-title">${met.title}</div><div class="tscroll">`
       + '<table class="data vlines"><thead><tr><th>항목</th>'
@@ -2535,9 +2607,15 @@ function renderCpiCombo() {
         return;
       }
       const hl = hlRows.has(r.label) ? ' hl' : '';
-      const gsel = cpiTab === 'main' && cpiMainSel && cpiMainSel.has(r.label);
-      const gattr = cpiTab === 'main' ? ` data-selm="${r.label}"${gsel ? ' style="background:#eef4ff"' : ''}` : '';
-      html += `<tr class="lv${r.lv}${r.lv === 0 ? ' sep-solid' : ''}${hl}"${gattr}>${nameCell(r.label)}`
+      let nameTd = nameCell(r.label);
+      if (cpiTab === 'main') {
+        const caret = r._kids
+          ? `<span class="cmcaret" data-cmcar="${r.label}" style="cursor:pointer;color:#8592a3;user-select:none">${cpiMainCollapsed.has(r.label) ? '＋' : '－'}</span> ` : '';
+        const mk = (cpiMainSelL.has(r.label) ? `<b style="color:${PALETTE[0]}">◀</b>` : '')
+                 + (cpiMainSelR.has(r.label) ? `<b style="color:${PALETTE[1]}">▶</b>` : '');
+        nameTd = `<td data-cmname="${r.label}" style="padding-left:${8 + r.lv * 14}px;cursor:pointer">${caret}${mk}${mk ? ' ' : ''}${r.label}</td>`;
+      }
+      html += `<tr class="lv${Math.min(r.lv, 3)}${r.lv === 0 ? ' sep-solid' : ''}${hl}">${nameTd}`
         + cols.map(d => {
           // raw 행(심리지수·기대인플레)은 원래 값 그대로 (기여도 블록에선 빈칸)
           const v = met.contrib
@@ -2568,73 +2646,75 @@ function renderCpiCombo() {
   const w = document.getElementById('multiWrap');
   w.innerHTML = out;
   w.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
-  // 표 우클릭 → 종합 차트에 항목 추가/제거
-  w.querySelectorAll('tr[data-selm]').forEach(tr => tr.oncontextmenu = e => {
-    e.preventDefault(); const n = tr.dataset.selm;
-    cpiMainSel.has(n) ? cpiMainSel.delete(n) : cpiMainSel.add(n); renderCpiCombo();
-  });
-
-  // 종합 탭 차트 렌더 + 컨트롤
+  // 종합 탭: 접기/펴기(캐럿) · 좌클릭=왼쪽(MoM) · 우클릭=오른쪽(YoY) 차트
   if (cpiTab === 'main') {
-    const chips = w.querySelector('#cmChips');
-    // 전체 선택/해제 버튼
-    const allBtn = document.createElement('button');
-    allBtn.textContent = cpiMainSel.size === chartItems.length ? '전체 해제' : '전체 선택';
-    allBtn.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid #d7dde8;'
-      + 'background:#fff;cursor:pointer;border-radius:8px';
-    allBtn.onclick = () => {
-      cpiMainSel = cpiMainSel.size === chartItems.length
-        ? new Set() : new Set(chartItems.map(r => r.label));
-      renderCpiCombo();
-    };
-    chips.appendChild(allBtn);
-    chartItems.forEach((r, i) => {
-      const lb = document.createElement('label');
-      lb.style.cssText = 'cursor:pointer;user-select:none';
-      lb.innerHTML = `<input type="checkbox" ${cpiMainSel.has(r.label) ? 'checked' : ''}>`
-        + `<span style="color:${PALETTE[i % PALETTE.length]}">■</span> ${r.label}`;
-      lb.querySelector('input').onchange = e => {
-        e.target.checked ? cpiMainSel.add(r.label) : cpiMainSel.delete(r.label);
-        renderCpiCombo();
-      };
-      chips.appendChild(lb);
+    w.querySelectorAll('.cmcaret').forEach(el => el.onclick = e => {
+      e.stopPropagation(); const n = el.dataset.cmcar;
+      cpiMainCollapsed.has(n) ? cpiMainCollapsed.delete(n) : cpiMainCollapsed.add(n); renderCpiCombo();
     });
-    w.querySelectorAll('#cmMetric button').forEach(b =>
-      b.onclick = () => { cpiMainMetric = b.dataset.cm; renderCpiCombo(); });
+    w.querySelectorAll('[data-cmname]').forEach(td => {
+      const n = td.dataset.cmname;
+      td.onclick = () => { cpiMainSelL.has(n) ? cpiMainSelL.delete(n) : cpiMainSelL.add(n); renderCpiCombo(); };
+      td.oncontextmenu = e => { e.preventDefault(); cpiMainSelR.has(n) ? cpiMainSelR.delete(n) : cpiMainSelR.add(n); renderCpiCombo(); };
+    });
     w.querySelectorAll('#cmType button').forEach(b =>
-      b.onclick = () => { cpiMainType = b.dataset.cy; renderCpiCombo(); });
+      b.onclick = () => { cpiMainType = b.dataset.cy; renderCpiCombo(); });   // 선/막대 → 두 차트 모두 적용
 
-    const mval = (r, d) => {
-      if (r.raw || cpiMainMetric === 'level') return r.map.get(d) ?? null;
-      const lagN = cpiMainMetric === 'mom' ? 1 : 12;
+    const byLabel = new Map(rows.filter(r => !r.sect).map(r => [r.label, r]));
+    const mval = (r, d, lagN) => {
+      if (!r) return null;
+      if (r.raw) return r.map.get(d) ?? null;         // 심리지수·기대인플레는 원값
       const p = prevD(d, lagN);
       const a = r.map.get(d), b = p && r.map.get(p);
       return a != null && b ? (a / b - 1) * 100 : null;
     };
-    if (cpiMainChartObj) { cpiMainChartObj.destroy(); cpiMainChartObj = null; }
-    const datasets = chartItems.filter(r => cpiMainSel.has(r.label)).map(r => {
-      const i = chartItems.indexOf(r);
-      return {
-        label: r.label, data: cols.map(d => mval(r, d)),
-        borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
-        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15,
-      };
-    });
-    cpiMainChartObj = new Chart(w.querySelector('#cpiMainChart'), {
-      type: cpiMainType,
-      data: { labels: cols, datasets },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
-            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
-        scales: {
-          x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
-               callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
-          y: { ticks: { font: { size: 11 } } },
+    const chips = w.querySelector('#cmChips');
+    chips.innerHTML = '';
+    [[cpiMainSelL, 1, '◀ 왼쪽 MoM'], [cpiMainSelR, 12, '▶ 오른쪽 YoY']].forEach(([sel, lagN, title], ci) => {
+      const list = [...sel];
+      const wrap = document.createElement('span');
+      wrap.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-right:14px';
+      const tag = document.createElement('b');
+      tag.textContent = title; tag.style.cssText = 'font-size:11.5px;color:' + PALETTE[ci];
+      wrap.appendChild(tag);
+      if (!list.length) {
+        const s = document.createElement('span');
+        s.style.cssText = 'color:#aaa;font-size:11.5px';
+        s.textContent = ci === 0 ? '항목 좌클릭' : '항목 우클릭';
+        wrap.appendChild(s);
+      }
+      list.forEach((n, j) => {
+        const el = document.createElement('span');
+        el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+        el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+        el.querySelector('b').onclick = () => { sel.delete(n); renderCpiCombo(); };
+        wrap.appendChild(el);
+      });
+      chips.appendChild(wrap);
+
+      if (cpiMainCharts[ci]) { cpiMainCharts[ci].destroy(); cpiMainCharts[ci] = null; }
+      const datasets = list.map((n, j) => ({
+        label: n, data: cols.map(d => mval(byLabel.get(n), d, lagN)),
+        borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: true,
+      }));
+      cpiMainCharts[ci] = new Chart(w.querySelector('#cpiMainChart' + ci), {
+        type: cpiMainType,
+        data: { labels: cols, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+            title: { display: true, text: `${title.slice(2)} (%)`, font: { size: 12 } },
+            tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+              label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+          scales: {
+            x: { ticks: { maxTicksLimit: 10, font: { size: 9 },
+                 callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+            y: { ticks: { font: { size: 10 } } },
+          },
         },
-      },
+      });
     });
   }
 }

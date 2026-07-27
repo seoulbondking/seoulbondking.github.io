@@ -1,26 +1,25 @@
 @echo off
 REM ---------------------------------------------------------------
-REM  Macrobox daily data update
-REM  Run on this PC (domestic IP) so KOSIS / REB APIs are reachable.
-REM  Register in Task Scheduler to run every day at 08:00.
+REM  Macrobox data update (run locally; domestic IP for KOSIS/BOK/FREESIS/SEIBro)
+REM  Registered in Task Scheduler to run at 09:00 and 16:00.
+REM  Uses "python" and "node" from PATH (same as your cmd session).
 REM ---------------------------------------------------------------
 set PROJ=C:\Users\infomax\Desktop\Python\macro-dashboard
-set PY=C:\Users\infomax\Desktop\Python\pythonProject\.venv\Scripts\python.exe
-
 cd /d "%PROJ%" || exit /b 1
-echo [%date% %time%] fetch start
+echo [%date% %time%] update start
 
-REM pull remote changes first (e.g. GitHub Actions auto-commits)
-git pull --no-rebase --quiet
+REM get any remote changes first
+git pull --no-rebase --no-edit --quiet
 
-"%PY%" fetch.py
-echo [%date% %time%] fetch.py exit code: %errorlevel%
+REM fetch all indicators
+python fetch.py
+echo [%date% %time%] fetch exit code: %errorlevel%
 
-REM commit and push only when data changed
+REM commit + push only when data actually changed
 git add docs/data
 git diff --cached --quiet
 if errorlevel 1 (
-    git commit -m "data: daily update %date%"
+    git commit -m "data: auto update %date% %time%"
     git push
     echo [%date% %time%] pushed
 ) else (

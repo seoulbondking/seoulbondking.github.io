@@ -2098,8 +2098,8 @@ const CPI_ROWS = [
 function cpiItemRows() {
   const st = window.__CPI_STRUCT__;
   if (!st) return [];
-  // 집계 노드(대·중분류)만 노출: 총지수는 상단에 이미 있으므로 제외
-  return st.filter(nd => nd.agg && nd.n !== '총지수')
+  // 전체 계층(대·중분류 + 최말단 품목 458개). 총지수는 상단에 이미 있으므로 제외
+  return st.filter(nd => nd.n !== '총지수')
            .map(nd => ({ label: nd.n, lv: nd.lv, item: nd.n }));
 }
 let cpiData = null;
@@ -2513,6 +2513,12 @@ function renderCpiContrib() {
 function renderCpiCombo() {
   if (cpiTab === 'items') { renderCpiItems(); return; }
   if (cpiTab === 'contrib') { renderCpiContrib(); return; }
+  // 종합 탭도 주요 품목 트리에 품목 구조가 필요 — 없으면 한 번 로드 후 재렌더
+  if (!window.__CPI_STRUCT__ && !renderCpiCombo._structTried) {
+    renderCpiCombo._structTried = true;
+    loadScript('data/cpi_struct.js').then(() => renderCpiCombo()).catch(() => renderCpiCombo());
+    return;
+  }
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
@@ -2573,7 +2579,11 @@ function renderCpiCombo() {
   if (cpiTab === 'contrib') rows = rows.filter(r => r.sect || CPI_W[r.label]);
   // 접기: 자식 여부 계산 후 접힌 상위의 하위 숨김
   rows.forEach((r, i) => { r._kids = !r.sect && i + 1 < rows.length && !rows[i + 1].sect && rows[i + 1].lv > r.lv; });
-  if (cpiMainCollapsed === null) cpiMainCollapsed = new Set(['상품', '서비스']);   // 기본: 대분류 접힘
+  // 기본 접힘: 상품·서비스는 펼치고(lv1), 그 아래(lv2 이상) 자식 있는 노드는 모두 접어 시작
+  if (cpiMainCollapsed === null) {
+    cpiMainCollapsed = new Set();
+    rows.forEach(r => { if (r._kids && !r.sect && r.lv >= 2) cpiMainCollapsed.add(r.label); });
+  }
   if (cpiTab === 'main') {
     const shown = []; let hideLv = null;
     rows.forEach(r => {

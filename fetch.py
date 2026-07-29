@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import kosis, ecos, reb, bls, freesis, bok, seibro
+from fetchers import kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -34,6 +34,8 @@ SOURCES = {
     "freesis": freesis.fetch,
     "bok": bok.fetch,
     "seibro": seibro.fetch,
+    "fred": fred.fetch,
+    "infomax": infomax.fetch,
 }
 
 KST = timezone(timedelta(hours=9))

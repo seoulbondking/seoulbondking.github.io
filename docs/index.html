@@ -152,6 +152,13 @@
         <button data-pt="main" class="active">종합</button>
         <button data-pt="contrib">기여도</button>
       </div>
+      <div id="yieldTabs" class="mode" style="display:none">
+        <button data-yt="decomp" class="active">금리 분해</button>
+        <button data-yt="curve">일드커브</button>
+        <button data-yt="model">커브 모델</button>
+        <button data-yt="spread">스프레드</button>
+        <button data-yt="table">원자료</button>
+      </div>
       <div id="taylorTabs" class="mode" style="display:none">
         <button data-ty="chart" class="active">준칙 vs 실제</button>
         <button data-ty="table">표</button>
@@ -250,7 +257,8 @@ const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
 let catalog = [], current = null, chart = null;
 // 메뉴·비교에서 숨길 지표 (기본분류는 PPI 산업별이 내부적으로 사용하므로 수집은 유지, 메뉴만 숨김)
 const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
-                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow'];
+                  'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
+                  'kr_yield', 'kr_policy_bei', 'mkt_oil_fx'];
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
@@ -440,7 +448,7 @@ function refresh() {
   updateMeta();
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
-  const isKrE = view === 'kremp', isTay = view === 'taylor';
+  const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -449,7 +457,8 @@ function refresh() {
   document.getElementById('usEmpTabs').style.display = isUsE ? '' : 'none';
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay) ? '' : 'none';
+  document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -462,15 +471,16 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isTay) renderTaylor();
+  if (isYld) renderYield();
+  else if (isTay) renderTaylor();
   else if (isKrE) renderKrEmp();
   else if (isFund) renderFundFlow();
   else if (isUsE) renderUsEmp();
@@ -1448,6 +1458,482 @@ function renderFundFlow() {
           tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
         scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
     });
+  });
+}
+
+// ── 금리 분해 (국고채 = 정책기대 + 물가기대 + 기간프리미엄) ──────
+const YIELD = { id: 'yield', name: '금리 분해', ids: ['kr_yield', 'kr_policy_bei', 'mkt_oil_fx'] };
+let yldData = null, yldTab = 'decomp', yldCharts = [null, null, null, null];
+let yldSel = null, yldCurveDates = null;
+const TENORS = ['3월', '6월', '9월', '1년', '1.5년', '2년', '2.5년', '3년', '4년', '5년', '7년', '10년', '30년'];
+const TENOR_Y = { '3월': 0.25, '6월': 0.5, '9월': 0.75, '1년': 1, '1.5년': 1.5, '2년': 2, '2.5년': 2.5,
+                  '3년': 3, '4년': 4, '5년': 5, '7년': 7, '10년': 10, '30년': 30 };
+
+async function enterYield() {
+  const got = await Promise.all(YIELD.ids.map(id => loadIndicator(id).catch(() => null)));
+  yldData = {}; YIELD.ids.forEach((id, i) => yldData[id] = got[i]);
+  if (!yldData['kr_yield']) { alert('금리 데이터가 없습니다. python fetch.py kr_yield kr_policy_bei 실행 필요.'); return; }
+  current = { id: YIELD.id, name: YIELD.name, freq: 'D', unit: '%',
+              updated_at: yldData['kr_yield'].updated_at, series: [] };
+  view = 'yield'; yldTab = 'decomp';
+  document.getElementById('title').textContent = YIELD.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'yieldBtn'));
+  if (!document.getElementById('yieldTabs').dataset.bound) {
+    document.getElementById('yieldTabs').addEventListener('click', e => {
+      if (!e.target.dataset.yt) return; yldTab = e.target.dataset.yt; refresh();
+    });
+    document.getElementById('yieldTabs').dataset.bound = '1';
+  }
+  const ds = new Set();
+  yldData['kr_yield'].series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${d.slice(2)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 250)];   // 기본 1년
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+function yMap(id, name) {
+  const ind = yldData[id]; if (!ind) return new Map();
+  const s = ind.series.find(x => baseName(x.name) === name) || ind.series.find(x => baseName(x.name).includes(name));
+  return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map();
+}
+const yldLab = d => d.slice(2).replace(/-/g, '.');
+
+function renderYield() {
+  document.querySelectorAll('#yieldTabs button').forEach(b => b.classList.toggle('active', b.dataset.yt === yldTab));
+  if (yldTab === 'curve') { renderYieldCurve(); return; }
+  if (yldTab === 'model') { renderCurveModel(); return; }
+  if (yldTab === 'spread') { renderYieldSpread(); return; }
+  if (yldTab === 'table') { renderYieldTable(); return; }
+  renderYieldDecomp();
+}
+
+// ① 금리 분해: 국고채 = 기준금리 + 정책기대 + (BEI = 물가기대) + 잔여
+function renderYieldDecomp() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  const g3 = yMap('kr_yield', '국고채권 3년'), g10 = yMap('kr_yield', '국고채권 10년');
+  const g1 = yMap('kr_yield', '국고채권 1년'), base = yMap('kr_policy_bei', '한국:기준금리');
+  const bei = yMap('kr_policy_bei', '한국:BEI 10년');
+  const oil = yMap('mkt_oil_fx', '브렌트유'), fx = yMap('mkt_oil_fx', '원/달러 환율');
+  const us10 = yMap('mkt_oil_fx', '미국 국채 10년');
+  const v = (m, d) => m.get(d) ?? null;
+  const sub = (a, b, d) => { const x = a.get(d), y = b.get(d); return (x != null && y != null) ? x - y : null; };
+  // 실질금리(10년) = 명목 10년 − BEI 10년
+  const real10 = d => sub(g10, bei, d);
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+    + '국고채 금리는 <b>정책금리 기대 + 물가 기대 + 기간프리미엄</b>이 실시간으로 반영된 결과입니다. 무엇이 금리를 움직였는지 분해합니다.<br>'
+    + `<span style="color:${PALETTE[0]}">■</span> <b>3년 − 기준금리</b> : 향후 정책금리 경로 기대(＋면 인상 기대) &nbsp; `
+    + `<span style="color:${PALETTE[1]}">■</span> <b>BEI 10년</b> : 시장이 매기는 기대인플레(물가채 대비)<br>`
+    + `<span style="color:${PALETTE[2]}">■</span> <b>10년 실질금리</b> = 명목 10년 − BEI : 성장·수급 기대 &nbsp; `
+    + `<span style="color:${PALETTE[3]}">■</span> <b>10년 − 3년</b> : 기간프리미엄·성장 기대</div>`
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="ydC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [2, 3].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="ydC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const rows = [
+    ['국고채 3년', d => v(g3, d), 'lv0 sep-solid'],
+    ['국고채 10년', d => v(g10, d), 'lv0'],
+    ['기준금리', d => v(base, d), 'lv1'],
+    ['① 3년 − 기준금리 (정책기대)', d => sub(g3, base, d), 'lv2'],
+    ['② BEI 10년 (물가기대)', d => v(bei, d), 'lv2'],
+    ['③ 10년 실질 (= 10년 − BEI)', real10, 'lv2'],
+    ['④ 10년 − 3년 (기간프리미엄)', d => sub(g10, g3, d), 'lv2'],
+    ['미국 국채 10년', d => v(us10, d), 'lv1'],
+    ['브렌트유 ($)', d => v(oil, d), 'lv1'],
+    ['원/달러', d => v(fx, d), 'lv1'],
+  ];
+  out += '<div class="block-title">금리 분해 (%)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${yldLab(d)}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(([nm, fn, cls]) => {
+    out += `<tr class="${cls}"><td>${nm}</td>` + cols.map(d => { const x = fn(d);
+      const dec = nm.includes('브렌트') || nm.includes('원/달러') ? 1 : 3;
+      return `<td${x != null && x < 0 ? ' class="neg"' : ''}>${x == null ? '' : x.toFixed(dec)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  // 최근 시점 요약
+  const last = cols.length ? cols[cols.length - 1] : null;
+  if (last) {
+    const b = v(base, last), y3 = v(g3, last), y10 = v(g10, last), bi = v(bei, last);
+    out += `<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">`
+      + `<b>${yldLab(last)} 분해</b><br>`
+      + (y3 != null && b != null ? `국고채 3년 <b>${y3.toFixed(3)}%</b> = 기준금리 ${b.toFixed(2)} + 정책기대 <b>${(y3 - b).toFixed(3)}%p</b>`
+          + `${y3 - b > 0 ? ' <span style="color:#c0392b">(추가 인상 기대)</span>' : ' <span style="color:#2c6fbf">(인하 기대)</span>'}<br>` : '')
+      + (y10 != null && bi != null ? `국고채 10년 <b>${y10.toFixed(3)}%</b> = 물가기대(BEI) ${bi.toFixed(3)} + 실질금리 <b>${(y10 - bi).toFixed(3)}%</b><br>` : '')
+      + (y10 != null && y3 != null ? `기간프리미엄(10−3년) = <b>${(y10 - y3).toFixed(3)}%p</b>` : '')
+      + '</div>';
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  const mk = (i, title, datasets, extra) => {
+    if (yldCharts[i]) { yldCharts[i].destroy(); yldCharts[i] = null; }
+    yldCharts[i] = new Chart(box.querySelector('#ydC' + i), {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => yldLab(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 9 }, callback: function (x) { return yldLab(this.getLabelForValue(x)); } } },
+          y: { ticks: { font: { size: 10 } } } } }, extra || {}),
+    });
+  };
+  const ln = (label, fn, col, extra) => Object.assign({ type: 'line', label, data: cols.map(fn), borderColor: col,
+    backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.12, spanGaps: true }, extra || {});
+  mk(0, '국고채 금리 vs 기준금리 (%)', [
+    ln('국고채 10년', d => v(g10, d), PALETTE[2]),
+    ln('국고채 3년', d => v(g3, d), PALETTE[0]),
+    ln('국고채 1년', d => v(g1, d), PALETTE[4]),
+    ln('기준금리', d => v(base, d), '#1a2b4a', { stepped: true, borderWidth: 2.5 }),
+  ]);
+  mk(1, '정책기대 · 기간프리미엄 (%p)', [
+    ln('3년 − 기준금리', d => sub(g3, base, d), PALETTE[0]),
+    ln('10년 − 3년', d => sub(g10, g3, d), PALETTE[3]),
+  ]);
+  mk(2, '물가기대(BEI) vs 실질금리 (%)', [
+    ln('BEI 10년 (물가기대)', d => v(bei, d), PALETTE[1]),
+    ln('10년 실질금리', real10, PALETTE[2]),
+  ]);
+  mk(3, '대외요인: 미국 10년 · 유가 · 환율', [
+    ln('미국 국채 10년 (%)', d => v(us10, d), PALETTE[5]),
+    ln('국고채 10년 (%)', d => v(g10, d), PALETTE[2], { borderDash: [4, 3] }),
+    Object.assign(ln('브렌트유 ($, 우축)', d => v(oil, d), PALETTE[7]), { yAxisID: 'y2' }),
+  ], { scales: {
+    x: { ticks: { maxTicksLimit: 8, font: { size: 9 }, callback: function (x) { return yldLab(this.getLabelForValue(x)); } } },
+    y: { ticks: { font: { size: 10 } } },
+    y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 9 }, maxTicksLimit: 6 } } } });
+}
+
+// ② 일드커브: 선택 시점들의 만기별 금리 곡선
+function renderYieldCurve() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  if (!cols.length) { box.innerHTML = '<div style="padding:24px;color:#888">기간에 데이터가 없습니다.</div>'; return; }
+  const last = cols[cols.length - 1];
+  const ago = n => cols[Math.max(0, cols.length - 1 - n)];
+  if (yldCurveDates === null) yldCurveDates = [last, ago(20), ago(60), ago(250)].filter((d, i, a) => a.indexOf(d) === i);
+  const at = (tenor, d) => yMap('kr_yield', `국고채권 ${tenor}`).get(d) ?? null;
+  const labels = TENORS.filter(t => at(t, last) != null);
+
+  let out = '<div style="font-size:12.5px;color:#8592a3;margin-bottom:8px">'
+    + '만기별 금리 곡선. 표에서 <b>날짜를 클릭</b>하면 커브를 추가/제거합니다. 커브가 가팔라지면 성장·물가 기대 상승, 평평/역전은 경기둔화 신호.</div>'
+    + '<div class="cchart" style="height:340px;margin-bottom:14px"><canvas id="ydCurve"></canvas></div>';
+  // 만기별 표 (선택 날짜 + 변화)
+  out += '<div class="block-title">만기별 금리 (%)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>일자</th>'
+    + labels.map(t => `<th>${t}</th>`).join('') + '</tr></thead><tbody>';
+  cols.slice(-30).reverse().forEach(d => {
+    const sel = yldCurveDates.includes(d) ? '● ' : '';
+    out += `<tr class="lv1"><td data-ycd="${d}" style="cursor:pointer">${sel}${yldLab(d)}</td>`
+      + labels.map(t => { const x = at(t, d); return `<td>${x == null ? '' : x.toFixed(3)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = 0);
+  box.querySelectorAll('[data-ycd]').forEach(td => td.onclick = () => {
+    const d = td.dataset.ycd;
+    yldCurveDates = yldCurveDates.includes(d) ? yldCurveDates.filter(x => x !== d) : [...yldCurveDates, d];
+    renderYield();
+  });
+  if (yldCharts[0]) { yldCharts[0].destroy(); yldCharts[0] = null; }
+  yldCharts[0] = new Chart(box.querySelector('#ydCurve'), {
+    type: 'line',
+    data: { labels, datasets: yldCurveDates.map((d, j) => ({
+      label: yldLab(d), data: labels.map(t => at(t, d)),
+      borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      borderWidth: 2, pointRadius: 3, tension: 0.2, spanGaps: true })) },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: '국고채 일드커브 (%)', font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}%` } } },
+      scales: { x: { title: { display: true, text: '만기', font: { size: 10 } }, ticks: { font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 } } } } },
+  });
+}
+
+// ── NSS(Nelson-Siegel-Svensson) 커브 피팅 ───────────────────────
+// y(t) = β0 + β1·f1 + β2·f2 + β3·f3,  f1=(1−e^-x1)/x1, f2=f1−e^-x1, f3=(1−e^-x2)/x2−e^-x2
+// λ는 격자탐색, β는 선형 최소제곱(정규방정식)으로 푼다. (파이썬 검증: RMSE ≈ 2.2bp)
+function nssBasis(ts, l1, l2) {
+  return ts.map(t => {
+    const x1 = t / l1, x2 = t / l2;
+    const e1 = Math.exp(-x1), e2 = Math.exp(-x2);
+    const f1 = (1 - e1) / x1;
+    return [1, f1, f1 - e1, (1 - e2) / x2 - e2];
+  });
+}
+function lstsq(X, y) {                    // 4x4 정규방정식 (가우스 소거)
+  const k = X[0].length;
+  const A = Array.from({ length: k }, () => new Array(k).fill(0)), b = new Array(k).fill(0);
+  for (let r = 0; r < X.length; r++)
+    for (let i = 0; i < k; i++) {
+      b[i] += X[r][i] * y[r];
+      for (let j = 0; j < k; j++) A[i][j] += X[r][i] * X[r][j];
+    }
+  for (let i = 0; i < k; i++) {
+    let piv = i;
+    for (let r = i + 1; r < k; r++) if (Math.abs(A[r][i]) > Math.abs(A[piv][i])) piv = r;
+    if (Math.abs(A[piv][i]) < 1e-12) return null;
+    [A[i], A[piv]] = [A[piv], A[i]]; [b[i], b[piv]] = [b[piv], b[i]];
+    for (let r = 0; r < k; r++) {
+      if (r === i) continue;
+      const f = A[r][i] / A[i][i];
+      for (let c = i; c < k; c++) A[r][c] -= f * A[i][c];
+      b[r] -= f * b[i];
+    }
+  }
+  return b.map((v, i) => v / A[i][i]);
+}
+function fitNSS(ts, ys) {
+  if (ts.length < 6) return null;
+  let best = null;
+  for (let l1 = 0.3; l1 <= 5.001; l1 += 0.1)
+    for (let l2 = 3; l2 <= 20.001; l2 += 0.5) {
+      const X = nssBasis(ts, l1, l2), b = lstsq(X, ys);
+      if (!b) continue;
+      let sse = 0;
+      for (let i = 0; i < ts.length; i++) {
+        const f = X[i].reduce((s, v, j) => s + v * b[j], 0);
+        sse += (f - ys[i]) ** 2;
+      }
+      if (!best || sse < best.sse) best = { sse, l1, l2, b };
+    }
+  if (!best) return null;
+  best.rmse = Math.sqrt(best.sse / ts.length) * 100;   // bp
+  best.spot = T => nssBasis([T], best.l1, best.l2)[0].reduce((s, v, j) => s + v * best.b[j], 0);
+  best.fwd = (a, c) => {                                // a년 뒤 (c−a)년 선도금리
+    const ya = best.spot(a) / 100, yc = best.spot(c) / 100;
+    return (Math.pow(Math.pow(1 + yc, c) / Math.pow(1 + ya, a), 1 / (c - a)) - 1) * 100;
+  };
+  return best;
+}
+function curvePoints(d) {                 // 해당 일자의 (만기, 금리) 관측점
+  const ts = [], ys = [];
+  TENORS.forEach(t => {
+    const v = yMap('kr_yield', `국고채권 ${t}`).get(d);
+    if (v != null) { ts.push(TENOR_Y[t]); ys.push(v); }
+  });
+  return { ts, ys };
+}
+
+// ③ 커브 모델: NSS 적합 + 레벨/기울기/곡률 + 선도금리 + 기간프리미엄 근사
+function renderCurveModel() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  if (!cols.length) { box.innerHTML = '<div style="padding:24px;color:#888">기간에 데이터가 없습니다.</div>'; return; }
+  const last = cols[cols.length - 1];
+  const cur = curvePoints(last);
+  const fit = fitNSS(cur.ts, cur.ys);
+  if (!fit) { box.innerHTML = '<div style="padding:24px;color:#c0392b">관측 만기가 6개 미만이라 NSS 적합 불가.</div>'; return; }
+
+  // 시계열: 계산 부담을 줄이려 최대 120영업일만 적합
+  const step = Math.max(1, Math.ceil(cols.length / 120));
+  const hist = [];
+  for (let i = 0; i < cols.length; i += step) {
+    const d = cols[i], p = curvePoints(d), f = fitNSS(p.ts, p.ys);
+    if (f) hist.push({ d, level: f.b[0], slope: -f.b[1], curv: f.b[2],
+                       f1y1y: f.fwd(1, 2), f2y1y: f.fwd(2, 3), f5y5y: f.fwd(5, 10), rmse: f.rmse });
+  }
+  const hd = hist.map(h => h.d);
+  const neutral = tayCfg.rstar + tayCfg.target;          // 명목 중립금리 = r* + π*
+  const tp = h => h.f5y5y - neutral;                     // 기간프리미엄 근사
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:8px">'
+    + '<b>NSS(Nelson-Siegel-Svensson)</b>로 국고채 커브를 6모수 함수에 적합해 <b>레벨·기울기·곡률</b>과 <b>선도금리</b>를 뽑습니다. '
+    + '관측 안 되는 만기도 곡선에서 읽을 수 있습니다.<br>'
+    + `<b>기간프리미엄(근사)</b> = 5y5y 선도금리 − 명목 중립금리(r* ${tayCfg.rstar.toFixed(2)} + π* ${tayCfg.target.toFixed(2)} = ${neutral.toFixed(2)}%). `
+    + '<span style="color:#c0392b">ACM 모형이 아닌 <b>근사치</b>입니다 — 한국은 공개된 ACM 추정치가 없어, 장기 선도금리에서 중립금리를 뺀 값으로 대용합니다. '
+    + '중립금리 가정(테일러 준칙 탭의 슬라이더)에 따라 값이 달라집니다.</span></div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="cmC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [2, 3].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="cmC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // 최신 적합 요약
+  out += `<div style="padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9;margin-bottom:12px">`
+    + `<b>${yldLab(last)} NSS 적합</b> — RMSE <b>${fit.rmse.toFixed(2)}bp</b> (관측 ${cur.ts.length}개 만기)<br>`
+    + `β0(레벨) ${fit.b[0].toFixed(3)} · β1 ${fit.b[1].toFixed(3)} · β2 ${fit.b[2].toFixed(3)} · β3 ${fit.b[3].toFixed(3)} · λ1 ${fit.l1.toFixed(2)} · λ2 ${fit.l2.toFixed(2)}<br>`
+    + `선도금리: <b>1y1y ${fit.fwd(1, 2).toFixed(3)}%</b> · 2y1y ${fit.fwd(2, 3).toFixed(3)}% · 3y2y ${fit.fwd(3, 5).toFixed(3)}% · <b>5y5y ${fit.fwd(5, 10).toFixed(3)}%</b><br>`
+    + `기간프리미엄(근사) = 5y5y ${fit.fwd(5, 10).toFixed(3)} − 중립 ${neutral.toFixed(2)} = `
+    + `<b style="color:${fit.fwd(5, 10) - neutral > 0 ? '#c0392b' : '#2c6fbf'}">${(fit.fwd(5, 10) - neutral).toFixed(3)}%p</b>`
+    + `${fit.fwd(5, 10) - neutral > 0 ? ' (장기 보유 위험보상 확대 — 발행 확대·재정 우려 등)' : ' (프리미엄 축소)'}</div>`;
+
+  // 표: 적합 결과 + 시계열 모수
+  out += '<div class="block-title">NSS 적합 (최신, %)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>만기</th>'
+    + cur.ts.map(t => `<th>${t < 1 ? (t * 12) + '월' : t + '년'}</th>`).join('') + '</tr></thead><tbody>';
+  out += '<tr class="lv0 sep-solid"><td>실제</td>' + cur.ys.map(v => `<td>${v.toFixed(3)}</td>`).join('') + '</tr>';
+  out += '<tr class="lv1"><td>NSS 적합</td>' + cur.ts.map(t => `<td>${fit.spot(t).toFixed(3)}</td>`).join('') + '</tr>';
+  out += '<tr class="lv2"><td>오차(bp)</td>' + cur.ts.map((t, i) => { const e = (fit.spot(t) - cur.ys[i]) * 100;
+    return `<td${e < 0 ? ' class="neg"' : ''}>${e.toFixed(1)}</td>`; }).join('') + '</tr>';
+  out += '</tbody></table></div>';
+
+  out += '<div class="block-title">커브 모수·선도금리 시계열</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + hd.map(d => `<th>${yldLab(d)}</th>`).join('') + '</tr></thead><tbody>';
+  [['레벨 β0 (장기수준)', h => h.level, 'lv0 sep-solid'],
+   ['기울기 (−β1)', h => h.slope, 'lv1'],
+   ['곡률 β2', h => h.curv, 'lv2'],
+   ['1y1y 선도', h => h.f1y1y, 'lv1'],
+   ['5y5y 선도', h => h.f5y5y, 'lv1'],
+   ['기간프리미엄 근사', tp, 'lv0'],
+   ['적합 RMSE (bp)', h => h.rmse, 'lv3'],
+  ].forEach(([nm, fn, cls]) => {
+    out += `<tr class="${cls}"><td>${nm}</td>` + hist.map(h => { const v = fn(h);
+      return `<td${v < 0 ? ' class="neg"' : ''}>${v.toFixed(3)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  const mk = (i, cfg) => {
+    if (yldCharts[i]) { yldCharts[i].destroy(); yldCharts[i] = null; }
+    yldCharts[i] = new Chart(box.querySelector('#cmC' + i), cfg);
+  };
+  const lnH = (label, fn, col, extra) => Object.assign({ type: 'line', label, data: hist.map(fn),
+    borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.12, spanGaps: true }, extra || {});
+  const baseOpt = (title, fmt) => ({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+      title: { display: true, text: title, font: { size: 12 } },
+      tooltip: { callbacks: { title: it => yldLab(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}${fmt || '%'}` } } },
+    scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 9 }, callback: function (x) { return yldLab(this.getLabelForValue(x)); } } },
+      y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#c0392b55' : '#eee' } } } });
+
+  // ① 최신 커브: 관측점(산점) + NSS 적합선
+  const grid = []; for (let T = 0.25; T <= 30.001; T += 0.25) grid.push(T);
+  mk(0, { data: { labels: grid.map(t => t), datasets: [
+      { type: 'line', label: 'NSS 적합', data: grid.map(t => fit.spot(t)), borderColor: PALETTE[0],
+        backgroundColor: PALETTE[0], borderWidth: 2, pointRadius: 0, tension: 0.1 },
+      { type: 'scatter', label: '실제 관측', data: cur.ts.map((t, i) => ({ x: t, y: cur.ys[i] })),
+        borderColor: '#c0392b', backgroundColor: '#c0392b', pointRadius: 4 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: `NSS 적합 커브 (${yldLab(last)}, RMSE ${fit.rmse.toFixed(1)}bp)`, font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y.toFixed(3)}% (${it.parsed.x}y)` } } },
+      scales: { x: { type: 'linear', title: { display: true, text: '만기(년)', font: { size: 10 } }, ticks: { font: { size: 9 } } },
+        y: { ticks: { font: { size: 10 } } } } } });
+  // ② 레벨·기울기·곡률
+  mk(1, { data: { labels: hd, datasets: [
+      lnH('레벨 β0', h => h.level, PALETTE[0]),
+      lnH('기울기 (−β1)', h => h.slope, PALETTE[1]),
+      lnH('곡률 β2', h => h.curv, PALETTE[3]),
+    ] }, options: baseOpt('커브 3요인 (레벨·기울기·곡률)') });
+  // ③ 선도금리
+  mk(2, { data: { labels: hd, datasets: [
+      lnH('1y1y', h => h.f1y1y, PALETTE[0]),
+      lnH('2y1y', h => h.f2y1y, PALETTE[4]),
+      lnH('5y5y', h => h.f5y5y, PALETTE[2], { borderWidth: 2.5 }),
+    ] }, options: baseOpt('내재 선도금리 (%)') });
+  // ④ 기간프리미엄 근사
+  mk(3, { data: { labels: hd, datasets: [
+      lnH('기간프리미엄 근사 (5y5y − 중립)', tp, PALETTE[5], { borderWidth: 2.5 }),
+      lnH('5y5y 선도', h => h.f5y5y, PALETTE[2], { borderDash: [4, 3] }),
+      { type: 'line', label: `명목 중립금리 ${neutral.toFixed(2)}%`, data: hist.map(() => neutral),
+        borderColor: '#1a2b4a', borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0 },
+    ] }, options: baseOpt('기간프리미엄 근사 (%p)', '%p') });
+}
+
+// ③ 스프레드: 신용·기간 스프레드
+function renderYieldSpread() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  const M = n => yMap('kr_yield', n);
+  const g3 = M('국고채권 3년'), g10 = M('국고채권 10년'), g1 = M('국고채권 1년');
+  const aa3 = M('회사채AA-(공모/무보증) 3년'), a3 = M('회사채A-(공모/무보증) 3년');
+  const bank3 = M('금융채 은행채 AAA 3년'), cd = M('CD AAA'), cp = M('CP A1 3월');
+  const sub = (a, b, d) => { const x = a.get(d), y = b.get(d); return (x != null && y != null) ? x - y : null; };
+  const defs = [
+    ['신용스프레드 AA- (회사채AA- − 국고3년)', d => sub(aa3, g3, d), PALETTE[1]],
+    ['신용스프레드 A- (회사채A- − 국고3년)', d => sub(a3, g3, d), PALETTE[3]],
+    ['은행채 AAA − 국고3년', d => sub(bank3, g3, d), PALETTE[4]],
+    ['CP A1 − CD', d => sub(cp, cd, d), PALETTE[6]],
+    ['기간 10년−3년', d => sub(g10, g3, d), PALETTE[2]],
+    ['기간 3년−1년', d => sub(g3, g1, d), PALETTE[0]],
+  ];
+  let out = '<div style="font-size:12.5px;color:#8592a3;margin-bottom:8px">'
+    + '<b>신용스프레드</b>는 위험 선호도(벌어지면 위험회피), <b>기간스프레드</b>는 성장·정책 기대를 반영합니다.</div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="ysC${i}"></canvas></div></div>`).join('')
+    + '</div><div class="block-title">스프레드 (%p)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${yldLab(d)}</th>`).join('') + '</tr></thead><tbody>';
+  defs.forEach(([nm, fn], i) => {
+    out += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}"><td>${nm}</td>`
+      + cols.map(d => { const x = fn(d); return `<td${x != null && x < 0 ? ' class="neg"' : ''}>${x == null ? '' : x.toFixed(3)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  const mkS = (i, title, list) => {
+    if (yldCharts[i]) { yldCharts[i].destroy(); yldCharts[i] = null; }
+    yldCharts[i] = new Chart(box.querySelector('#ysC' + i), {
+      type: 'line', data: { labels: cols, datasets: list.map(([nm, fn, col]) => ({
+        label: nm, data: cols.map(fn), borderColor: col, backgroundColor: col,
+        borderWidth: 2, pointRadius: 0, tension: 0.12, spanGaps: true })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => yldLab(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}%p` } } },
+        scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 9 }, callback: function (x) { return yldLab(this.getLabelForValue(x)); } } },
+          y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#c0392b55' : '#eee' } } } },
+    });
+  };
+  mkS(0, '신용스프레드 (%p) — 위험 선호도', defs.slice(0, 4));
+  mkS(1, '기간스프레드 (%p) — 성장·정책 기대', defs.slice(4));
+}
+
+// ④ 원자료: 전체 시리즈 표 (우클릭 차트)
+function renderYieldTable() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  const all = (yldData['kr_yield'].series || []).concat(yldData['kr_policy_bei'] ? yldData['kr_policy_bei'].series : []);
+  if (yldSel === null) yldSel = new Set(['국고채권 3년', '국고채권 10년', '한국:기준금리']);
+  let out = '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">항목 <b>우클릭</b>으로 차트에 추가/제거.</div>'
+    + '<div id="ydChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
+    + '<div class="cchart" style="height:300px;margin-bottom:14px"><canvas id="ydTblChart"></canvas></div>'
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${yldLab(d)}</th>`).join('') + '</tr></thead><tbody>';
+  all.forEach(s => {
+    const nm = baseName(s.name), m = new Map(s.data.map(p => [p.d, p.v]));
+    const sel = yldSel.has(nm) ? '● ' : '';
+    out += `<tr class="lv1" data-yds="${nm}" style="cursor:context-menu"><td>${sel}${nm}</td>`
+      + cols.map(d => { const x = m.get(d); return `<td>${x == null ? '' : x.toFixed(3)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-yds]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.yds;
+    yldSel.has(n) ? yldSel.delete(n) : yldSel.add(n); renderYield();
+  });
+  const chips = box.querySelector('#ydChips');
+  const sel = [...yldSel];
+  chips.innerHTML = sel.length ? '' : '<span style="color:#aaa;font-size:12px">표에서 우클릭으로 선택</span>';
+  const smap = new Map(all.map(s => [baseName(s.name), new Map(s.data.map(p => [p.d, p.v]))]));
+  sel.forEach((n, j) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+    el.innerHTML = `${n} <b style="cursor:pointer">×</b>`;
+    el.querySelector('b').onclick = () => { yldSel.delete(n); renderYield(); };
+    chips.appendChild(el);
+  });
+  if (yldCharts[0]) { yldCharts[0].destroy(); yldCharts[0] = null; }
+  yldCharts[0] = new Chart(box.querySelector('#ydTblChart'), {
+    type: 'line', data: { labels: cols, datasets: sel.map((n, j) => {
+      const m = smap.get(n) || new Map();
+      return { label: n, data: cols.map(d => m.get(d) ?? null), borderColor: PALETTE[j % PALETTE.length],
+        backgroundColor: PALETTE[j % PALETTE.length], borderWidth: 2, pointRadius: 0, tension: 0.12, spanGaps: true }; }) },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        tooltip: { callbacks: { title: it => yldLab(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}` } } },
+      scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 9 }, callback: function (x) { return yldLab(this.getLabelForValue(x)); } } },
+        y: { ticks: { font: { size: 10 } } } } },
   });
 }
 
@@ -4480,6 +4966,11 @@ document.getElementById('endSel').onchange = e => {
     // 생산자물가 종합을 소매판매 바로 위로 이동
     const ppiB = document.getElementById('ppiBtn'), retB = document.getElementById('retailBtn');
     if (ppiB && retB) nav.insertBefore(ppiB, retB);
+    // 금리 분해 (인포맥스 금리 기반) — 미국 섹션 앞에 배치
+    const yBtn = document.createElement('button');
+    yBtn.id = 'yieldBtn'; yBtn.textContent = YIELD.name; yBtn.onclick = enterYield;
+    const usHdr0 = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
+    if (usHdr0) nav.insertBefore(yBtn, usHdr0); else nav.appendChild(yBtn);
     // 테일러 준칙 (한국 지표 기반 계산 뷰) — 미국 섹션 앞에 배치
     const tyBtn = document.createElement('button');
     tyBtn.id = 'taylorBtn'; tyBtn.textContent = TAYLOR.name; tyBtn.onclick = enterTaylor;

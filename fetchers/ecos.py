@@ -39,7 +39,7 @@ def _api_key() -> str:
 
 
 def _period_range(cycle: str, start_year: int) -> tuple[str, str]:
-    """ECOS 기간 표기: A='2024', Q='2024Q1', M='202401'."""
+    """ECOS 기간 표기: A='2024', Q='2024Q1', M='202401', D='20240131'."""
     today = date.today()
     if cycle == "Q":
         q = (today.month - 1) // 3 + 1
@@ -48,13 +48,17 @@ def _period_range(cycle: str, start_year: int) -> tuple[str, str]:
         return f"{start_year}01", f"{today.year}{today.month:02d}"
     if cycle == "A":
         return str(start_year), str(today.year)
-    raise EcosError(f"지원하지 않는 cycle: {cycle} (A/Q/M 만 지원)")
+    if cycle == "D":
+        return f"{start_year}0101", today.strftime("%Y%m%d")
+    raise EcosError(f"지원하지 않는 cycle: {cycle} (A/Q/M/D 만 지원)")
 
 
 def _to_date(time_str: str, cycle: str) -> str:
-    """ECOS TIME 코드 → 'YYYY-MM-DD' (기간 말일)."""
+    """ECOS TIME 코드 → 'YYYY-MM-DD' (일별은 그 날짜, 그 외는 기간 말일)."""
     time_str = str(time_str)
     year = int(time_str[:4])
+    if cycle == "D":                      # '20240131' → 해당 일자 그대로
+        return f"{year}-{time_str[4:6]}-{time_str[6:8]}"
     if cycle == "Q":                      # '2024Q1'
         month = int(time_str[-1]) * 3
     elif cycle == "M":                    # '202401'

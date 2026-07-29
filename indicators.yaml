@@ -393,6 +393,49 @@ indicators:
     seibro_limit: 30            # 스크랩할 최근 일수
     params: {}
 
+  # ── 시장금리 (인포맥스 엑셀) — 금리 분해용 ──────────────────────
+  # data/인포맥스 금리.xlsx 의 '금리stack'(국고채·통안·회사채 만기별)과
+  # '기준금리stack'(각국 기준금리 + 한국/미국 BEI)을 읽는다. 엑셀을 새로 저장하면 반영.
+  - id: kr_yield
+    name: 국고채 금리 (일별)
+    source: infomax
+    unit: '%'
+    freq: D
+    merge_always: true
+    series_first: ["국고채 3년"]
+    params:
+      sheet: 금리stack
+      groups: ["국고채권", "통안증권", "회사채AA-(공모/무보증)", "회사채A-(공모/무보증)",
+               "금융채 은행채 AAA", "CD AAA", "CP A1"]
+
+  - id: kr_policy_bei
+    name: 기준금리·BEI (일별)
+    source: infomax
+    unit: '%'
+    freq: D
+    merge_always: true
+    series_first: ["한국:기준금리"]
+    params:
+      sheet: 기준금리stack
+      flat: true          # 그룹명 자체가 시리즈명(만기 구분 없음)
+
+  # 국제유가·환율 (FRED 일별) — 물가 기대의 주 원인
+  - id: mkt_oil_fx
+    name: 유가·환율 (일별)
+    source: fred
+    unit: 달러·원
+    freq: D
+    start_year: 2013
+    merge_always: true
+    series_first: ["브렌트유"]
+    params:
+      series:
+        DCOILBRENTEU: 브렌트유
+        DCOILWTICO: WTI
+        DEXKOUS: 원/달러 환율
+        DGS10: 미국 국채 10년
+        DGS2: 미국 국채 2년
+
   # ══════════════════════════════════════════════════════════════
   # 🇺🇸 미국 (BLS·BEA·Census·FRED) — 미국 정부 API라 Actions에서도 수집 가능
   # ══════════════════════════════════════════════════════════════

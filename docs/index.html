@@ -152,6 +152,18 @@
         <button data-pt="main" class="active">종합</button>
         <button data-pt="contrib">기여도</button>
       </div>
+      <div id="taylorTabs" class="mode" style="display:none">
+        <button data-ty="chart" class="active">준칙 vs 실제</button>
+        <button data-ty="table">표</button>
+        <button data-ty="real">실질정책금리</button>
+        <button data-ty="help">설명</button>
+      </div>
+      <div id="krEmpTabs" class="mode" style="display:none">
+        <button data-ke="main" class="active">종합</button>
+        <button data-ke="industry">산업별</button>
+        <button data-ke="age">연령별</button>
+        <button data-ke="detail">상세</button>
+      </div>
       <div id="usEmpTabs" class="mode" style="display:none">
         <button data-ue="main" class="active">종합</button>
         <button data-ue="industry">산업별 고용상황</button>
@@ -428,13 +440,16 @@ function refresh() {
   updateMeta();
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
+  const isKrE = view === 'kremp', isTay = view === 'taylor';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
   document.getElementById('retTabs').style.display = isRet ? '' : 'none';
   document.getElementById('ppiTabs').style.display = isPpi ? '' : 'none';
   document.getElementById('usEmpTabs').style.display = isUsE ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund) ? '' : 'none';
+  document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
+  document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -447,15 +462,17 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
-  if (isFund) renderFundFlow();
+  if (isTay) renderTaylor();
+  else if (isKrE) renderKrEmp();
+  else if (isFund) renderFundFlow();
   else if (isUsE) renderUsEmp();
   else if (isPpi) renderPpi();
   else if (isRet) renderRetail();
@@ -1432,6 +1449,690 @@ function renderFundFlow() {
         scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
     });
   });
+}
+
+// ── 테일러 준칙 (Taylor rule) ─────────────────────────────────
+// i = r* + π + a(π − π*) + b(GDP갭).  한은 잠재성장률 2.0%(2024~26) 반영.
+const TAYLOR = { id: 'taylor', name: '테일러 준칙',
+                 ids: ['kr_base_rate', 'kr_cpi', 'kr_cpi_core', 'kr_cpi_living', 'kr_infl_expect', 'kr_gdp_real'] };
+let tayData = null, tayTab = 'chart', tayCharts = [null, null];
+let tayCfg = { pi: 'cpi', gap: 'hp', rstar: 1.0, target: 2.0, a: 0.5, b: 0.5, pot: 2.0 };
+
+async function enterTaylor() {
+  const got = await Promise.all(TAYLOR.ids.map(id => loadIndicator(id).catch(() => null)));
+  tayData = {}; TAYLOR.ids.forEach((id, i) => tayData[id] = got[i]);
+  if (!tayData['kr_base_rate'] || !tayData['kr_cpi']) { alert('기준금리·CPI 데이터가 필요합니다.'); return; }
+  current = { id: TAYLOR.id, name: TAYLOR.name, freq: 'M', unit: '%',
+              updated_at: tayData['kr_base_rate'].updated_at, series: [] };
+  view = 'taylor'; tayTab = 'chart';
+  document.getElementById('title').textContent = TAYLOR.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'taylorBtn'));
+  if (!document.getElementById('taylorTabs').dataset.bound) {
+    document.getElementById('taylorTabs').addEventListener('click', e => {
+      if (!e.target.dataset.ty) return; tayTab = e.target.dataset.ty; refresh();
+    });
+    document.getElementById('taylorTabs').dataset.bound = '1';
+  }
+  const ds = new Set();
+  (tayData['kr_cpi'].series[0].data || []).forEach(p => ds.add(p.d));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 60)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+// HP 필터 (λ=1600, 분기). 5중대각 정규방정식을 가우스 소거로 풀이.
+function hpFilter(y, lam) {
+  const n = y.length;
+  if (n < 5) return y.slice();
+  const A = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) A[i][i] = 1;
+  for (let i = 0; i < n - 2; i++) {          // D'D 누적 (2차 차분)
+    const c = [1, -2, 1];
+    for (let p = 0; p < 3; p++) for (let q = 0; q < 3; q++) A[i + p][i + q] += lam * c[p] * c[q];
+  }
+  const b = y.slice();
+  for (let i = 0; i < n; i++) {               // 가우스 소거(부분 피벗)
+    let piv = i;
+    for (let r = i + 1; r < n; r++) if (Math.abs(A[r][i]) > Math.abs(A[piv][i])) piv = r;
+    [A[i], A[piv]] = [A[piv], A[i]]; [b[i], b[piv]] = [b[piv], b[i]];
+    for (let r = i + 1; r < n; r++) {
+      const f = A[r][i] / A[i][i]; if (!f) continue;
+      for (let c2 = i; c2 < n; c2++) A[r][c2] -= f * A[i][c2];
+      b[r] -= f * b[i];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) {
+    let s = b[i];
+    for (let c2 = i + 1; c2 < n; c2++) s -= A[i][c2] * x[c2];
+    x[i] = s / A[i][i];
+  }
+  return x;
+}
+
+// 계산 엔진: 월별 {인플레, GDP갭, 준칙금리, 실제금리}
+function taylorSeries() {
+  const M = (id, nm) => { const ind = tayData[id]; if (!ind) return new Map();
+    const s = ind.series.find(x => baseName(x.name) === nm) || ind.series.find(x => baseName(x.name).includes(nm));
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const cpi = M('kr_cpi', '총지수'), core = M('kr_cpi_core', '식료품 및 에너지제외'), living = M('kr_cpi_living', '생활물가지수');
+  const exp1 = M('kr_infl_expect', '향후1년'), base = M('kr_base_rate', '한국은행 기준금리');
+  const yoyOf = m => { const out = new Map(); m.forEach((v, d) => { const p = `${+d.slice(0, 4) - 1}${d.slice(4)}`;
+    const b = m.get(p); if (b) out.set(d, (v / b - 1) * 100); }); return out; };
+  const piMaps = { cpi: yoyOf(cpi), core: yoyOf(core), living: yoyOf(living), exp: exp1 };
+  const piM = piMaps[tayCfg.pi] || piMaps.cpi;
+
+  // GDP갭 (분기) → 월로 확장
+  const g = tayData['kr_gdp_real'];
+  const gapQ = new Map();
+  if (g && g.series.length) {
+    const ser = g.series[0].data.filter(p => p.v > 0);
+    const dts = ser.map(p => p.d), ly = ser.map(p => Math.log(p.v));
+    if (tayCfg.gap === 'hp') {
+      const tr = hpFilter(ly, 1600);
+      dts.forEach((d, i) => gapQ.set(d, (ly[i] - tr[i]) * 100));
+    } else {
+      // 한은 잠재성장률(연 pot%) 경로. 기준시점을 표본 시작에 두면 26년 누적오차가
+      // 수십 %로 벌어지므로, 최근 8년 구간을 회귀 기준으로 삼아 갭 평균이 0이 되도록 정렬.
+      const q = Math.log(1 + tayCfg.pot / 100) / 4;      // 분기 로그성장
+      const n = ly.length, W = Math.min(32, n);          // 최근 8년(32분기)
+      let acc = 0;
+      for (let i = n - W; i < n; i++) acc += ly[i] - q * i;
+      const c = acc / W;                                  // 절편 = 최근 구간 평균 잔차
+      dts.forEach((d, i) => gapQ.set(d, (ly[i] - (c + q * i)) * 100));
+    }
+  }
+  const gapAt = d => {                        // 월 → 해당 분기 말일
+    const y = +d.slice(0, 4), m = +d.slice(5, 7), qm = Math.ceil(m / 3) * 3;
+    const last = new Date(y, qm, 0).getDate();
+    return gapQ.get(`${y}-${String(qm).padStart(2, '0')}-${last}`) ?? null;
+  };
+  const out = [];
+  [...piM.keys()].sort().forEach(d => {
+    const p = piM.get(d), gp = gapAt(d), b = base.get(d);
+    if (p == null) return;
+    const rule = (gp == null) ? null : tayCfg.rstar + p + tayCfg.a * (p - tayCfg.target) + tayCfg.b * gp;
+    out.push({ d, pi: p, gap: gp, rule, base: b ?? null });
+  });
+  return out;
+}
+
+function renderTaylor() {
+  document.querySelectorAll('#taylorTabs button').forEach(b => b.classList.toggle('active', b.dataset.ty === tayTab));
+  const box = document.getElementById('retailWrap');
+  if (tayTab === 'help') { box.innerHTML = taylorHelpHTML(); return; }
+  if (tayTab === 'real') { renderRealRate(); return; }
+  const all = taylorSeries();
+  const rows = all.filter(r => inRange(r.d));
+  const cols = rows.map(r => r.d);
+  const piLabel = { cpi: '소비자물가(총지수)', core: '근원(식료품·에너지 제외)', living: '생활물가지수', exp: '기대인플레(1년)' }[tayCfg.pi];
+
+  const ctrl = '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">인플레</span><div class="mode" id="tyPi">'
+    + [['cpi', '소비자물가'], ['core', '근원'], ['living', '생활물가'], ['exp', '기대인플레']].map(([v, t]) =>
+        `<button data-typ="${v}" class="${tayCfg.pi === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
+    + '<span style="font-size:12px;color:#555">GDP갭</span><div class="mode" id="tyGap">'
+    + [['hp', 'HP필터'], ['pot', '잠재성장률 2%']].map(([v, t]) =>
+        `<button data-tyg="${v}" class="${tayCfg.gap === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
+    + '</div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px;color:#555">'
+    + [['rstar', '중립실질금리 r*', 0, 3, 0.25], ['target', '물가목표 π*', 1, 4, 0.25],
+       ['a', '인플레 계수 a', 0, 2, 0.25], ['b', 'GDP갭 계수 b', 0, 2, 0.25]].map(([k, lab, mn, mx, st]) =>
+        `<label style="display:flex;gap:6px;align-items:center">${lab}<input type="range" id="ty_${k}" min="${mn}" max="${mx}" step="${st}" value="${tayCfg[k]}" style="width:90px">`
+        + `<b id="tyv_${k}" style="min-width:34px;display:inline-block">${tayCfg[k].toFixed(2)}</b></label>`).join('')
+    + '</div>'
+    + `<div style="font-size:12px;color:#8592a3;margin-bottom:10px">준칙금리 = r*(${tayCfg.rstar.toFixed(2)}) + π + `
+    + `${tayCfg.a.toFixed(2)}×(π − ${tayCfg.target.toFixed(2)}) + ${tayCfg.b.toFixed(2)}×GDP갭 · 인플레 기준: <b>${piLabel}</b>`
+    + (tayCfg.gap === 'pot'
+        ? ' · <span style="color:#c0392b">잠재성장률 2%는 최근 추정치라 <b>최근 8년</b>을 기준으로 정렬했습니다. 2010년 이전 구간은 해석 불가.</span>'
+        : ' · <span style="color:#c0392b">HP필터는 표본 끝에서 불안정(end-point bias)합니다.</span>') + '</div>';
+
+  let out = ctrl;
+  if (tayTab === 'chart') {
+    out += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:300px"><canvas id="tyC${i}"></canvas></div></div>`).join('')
+      + '</div>';
+  }
+  // 표 (chart 탭에서도 최근 값 요약 제공)
+  out += '<div class="block-title">계산 결과 (%)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  const line = (nm, get, cls, dec) => {
+    let h = `<tr class="${cls || 'lv1'}"><td>${nm}</td>`;
+    rows.forEach(r => { const v = get(r);
+      h += `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(dec ?? 2)}</td>`; });
+    return h + '</tr>';
+  };
+  out += line('준칙금리', r => r.rule, 'lv0 sep-solid');
+  out += line('실제 기준금리', r => r.base, 'lv1');
+  out += line('격차 (준칙−실제)', r => (r.rule != null && r.base != null) ? r.rule - r.base : null, 'lv1');
+  // 준칙금리 구성요소 (합 = 준칙금리)
+  out += line(`① r* (중립실질금리 ${tayCfg.rstar.toFixed(2)})`, r => r.rule == null ? null : tayCfg.rstar, 'lv2');
+  out += line(`② π  (${piLabel})`, r => r.pi, 'lv2');
+  out += line(`③ ${tayCfg.a.toFixed(2)}×(π − π* ${tayCfg.target.toFixed(2)})`, r => r.rule == null ? null : tayCfg.a * (r.pi - tayCfg.target), 'lv2');
+  out += line(`④ ${tayCfg.b.toFixed(2)}×GDP갭`, r => r.rule == null ? null : tayCfg.b * r.gap, 'lv2');
+  out += line('   (참고) GDP갭', r => r.gap, 'lv3');
+  out += '</tbody></table></div>';
+  // 최근 시점 계산식 풀어쓰기
+  const last = rows.length ? rows[rows.length - 1] : null;
+  if (last && last.rule != null) {
+    const t1 = tayCfg.rstar, t2 = last.pi, t3 = tayCfg.a * (last.pi - tayCfg.target), t4 = tayCfg.b * last.gap;
+    out += `<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">`
+      + `<b>${dateLabel(last.d)} 계산식</b><br>`
+      + `준칙금리 = <b>①</b> r* ${t1.toFixed(2)} <b>+ ②</b> π ${t2.toFixed(2)} `
+      + `<b>+ ③</b> ${tayCfg.a.toFixed(2)}×(${t2.toFixed(2)} − ${tayCfg.target.toFixed(2)}) = ${t3.toFixed(2)} `
+      + `<b>+ ④</b> ${tayCfg.b.toFixed(2)}×${last.gap.toFixed(2)} = ${t4.toFixed(2)}`
+      + ` &nbsp;=&nbsp; <b style="color:${PALETTE[1]}">${last.rule.toFixed(2)}%</b><br>`
+      + `격차 = 준칙 ${last.rule.toFixed(2)} − 실제 ${last.base == null ? '-' : last.base.toFixed(2)} = `
+      + `<b style="color:${last.base != null && last.rule - last.base > 0 ? '#c0392b' : '#2c6fbf'}">`
+      + `${last.base == null ? '-' : (last.rule - last.base >= 0 ? '+' : '') + (last.rule - last.base).toFixed(2)}%p</b>`
+      + `${last.base != null ? (last.rule - last.base > 0 ? ' → 준칙 대비 <b>완화적</b>(긴축 여지)' : ' → 준칙 대비 <b>긴축적</b>(완화 여지)') : ''}</div>`;
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#tyPi button').forEach(b => b.onclick = () => { tayCfg.pi = b.dataset.typ; renderTaylor(); });
+  box.querySelectorAll('#tyGap button').forEach(b => b.onclick = () => { tayCfg.gap = b.dataset.tyg; renderTaylor(); });
+  ['rstar', 'target', 'a', 'b'].forEach(k => {
+    const el = box.querySelector('#ty_' + k); if (!el) return;
+    el.oninput = e => { tayCfg[k] = +e.target.value; box.querySelector('#tyv_' + k).textContent = tayCfg[k].toFixed(2); };
+    el.onchange = () => renderTaylor();
+  });
+  if (tayTab !== 'chart') return;
+  const mk = (i, title, datasets, extra) => {
+    if (tayCharts[i]) { tayCharts[i].destroy(); tayCharts[i] = null; }
+    tayCharts[i] = new Chart(box.querySelector('#tyC' + i), {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 10 } } } } }, extra || {}),
+    });
+  };
+  mk(0, '준칙금리 vs 실제 기준금리 (%)', [
+    { type: 'line', label: '준칙금리', data: rows.map(r => r.rule), borderColor: PALETTE[1], backgroundColor: PALETTE[1], borderWidth: 2.5, pointRadius: 0, tension: 0.15, spanGaps: true },
+    { type: 'line', label: '실제 기준금리', data: rows.map(r => r.base), borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, stepped: true, spanGaps: true },
+  ]);
+  // 격차 차트 = 준칙 구성요소 누적막대(합=준칙) − 실제금리 선. 계산 과정이 그대로 보이도록.
+  mk(1, '준칙금리 분해 (%) — 막대 합 = 준칙, 선 = 실제 기준금리', [
+    { type: 'bar', label: `r* (${tayCfg.rstar.toFixed(2)})`, data: rows.map(r => r.rule == null ? null : tayCfg.rstar),
+      backgroundColor: '#8aa832cc', stack: 's', order: 3 },
+    { type: 'bar', label: 'π (인플레)', data: rows.map(r => r.rule == null ? null : r.pi),
+      backgroundColor: '#d9534fcc', stack: 's', order: 3 },
+    { type: 'bar', label: `${tayCfg.a.toFixed(2)}×(π−π*)`, data: rows.map(r => r.rule == null ? null : tayCfg.a * (r.pi - tayCfg.target)),
+      backgroundColor: '#e8930ccc', stack: 's', order: 3 },
+    { type: 'bar', label: `${tayCfg.b.toFixed(2)}×GDP갭`, data: rows.map(r => r.rule == null ? null : tayCfg.b * r.gap),
+      backgroundColor: '#17879ccc', stack: 's', order: 3 },
+    { type: 'line', label: '실제 기준금리', data: rows.map(r => r.base), borderColor: '#1a2b4a',
+      borderWidth: 2.5, pointRadius: 0, stepped: true, spanGaps: true, order: 0 },
+  ], { scales: {
+    x: { stacked: true, ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+    y: { stacked: true, ticks: { font: { size: 10 } } } } });
+}
+
+// 실질정책금리 (KR_Macro 정의)
+//   Ex-post  = 기준금리 − CPI YoY        (실현된 물가 기준, 사후적)
+//   Ex-ante  = 기준금리 − 기대인플레(1년)  (예상 물가 기준, 사전적)
+function renderRealRate() {
+  const box = document.getElementById('retailWrap');
+  const M = (id, nm) => { const ind = tayData[id]; if (!ind) return new Map();
+    const s = ind.series.find(x => baseName(x.name) === nm) || ind.series.find(x => baseName(x.name).includes(nm));
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const cpi = M('kr_cpi', '총지수'), base = M('kr_base_rate', '한국은행 기준금리'), exp1 = M('kr_infl_expect', '향후1년');
+  const piM = new Map();
+  cpi.forEach((v, d) => { const p = `${+d.slice(0, 4) - 1}${d.slice(4)}`; const b = cpi.get(p);
+    if (b) piM.set(d, (v / b - 1) * 100); });
+  const cols = periodDates.filter(inRange).filter(d => base.has(d) && (piM.has(d) || exp1.has(d)));
+  const post = d => { const b = base.get(d), p = piM.get(d); return (b != null && p != null) ? b - p : null; };
+  const ante = d => { const b = base.get(d), e = exp1.get(d); return (b != null && e != null) ? b - e : null; };
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.8;margin-bottom:10px">'
+    + '<b>실질정책금리</b> = 명목 기준금리 − 물가. 명목금리가 같아도 물가가 높으면 실질적으로는 완화적입니다.<br>'
+    + `<span style="color:${PALETTE[0]}">■</span> <b>Ex-post(사후적)</b> = 기준금리 − <b>CPI YoY</b> — 실현된 물가 기준. 지금 돈을 빌린 사람이 실제로 부담한 실질비용.<br>`
+    + `<span style="color:${PALETTE[1]}">■</span> <b>Ex-ante(사전적)</b> = 기준금리 − <b>기대인플레(1년)</b> — 앞으로의 물가 예상 기준. `
+    + '경제주체의 <b>의사결정에 실제로 영향을 주는 금리</b>라 이론적으로 더 중요합니다.<br>'
+    + '<span style="color:#8592a3">0 아래면 실질금리 마이너스 = 확장적. 기대인플레는 2016년부터 제공(ECOS).</span></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:290px"><canvas id="rrC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+  const rows = [
+    ['기준금리 (명목)', d => base.get(d) ?? null, 'lv0 sep-solid'],
+    ['CPI YoY', d => piM.get(d) ?? null, 'lv2'],
+    ['기대인플레 (1년)', d => exp1.get(d) ?? null, 'lv2'],
+    ['Ex-post 실질 (= 기준−CPI)', post, 'lv1'],
+    ['Ex-ante 실질 (= 기준−기대)', ante, 'lv1'],
+  ];
+  out += '<div class="block-title">실질정책금리 (%)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(([nm, fn, cls]) => {
+    out += `<tr class="${cls}"><td>${nm}</td>` + cols.map(d => { const v = fn(d);
+      return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(2)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  const last = cols.length ? cols[cols.length - 1] : null;
+  if (last) {
+    const b = base.get(last), p = piM.get(last), e = exp1.get(last);
+    out += `<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">`
+      + `<b>${dateLabel(last)} 계산</b><br>`
+      + `Ex-post = 기준금리 ${b?.toFixed(2)} − CPI ${p?.toFixed(2)} = <b style="color:${post(last) < 0 ? '#c0392b' : '#1a4fa0'}">${post(last)?.toFixed(2)}%</b>`
+      + (e != null ? `<br>Ex-ante = 기준금리 ${b.toFixed(2)} − 기대인플레 ${e.toFixed(2)} = <b style="color:${ante(last) < 0 ? '#c0392b' : '#1a4fa0'}">${ante(last)?.toFixed(2)}%</b>` : '')
+      + `<br><span style="color:#8592a3">실질금리가 마이너스면 물가를 감안한 실질 차입비용이 0보다 낮다는 뜻 → 완화적</span></div>`;
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  const mk = (i, title, datasets) => {
+    if (tayCharts[i]) { tayCharts[i].destroy(); tayCharts[i] = null; }
+    tayCharts[i] = new Chart(box.querySelector('#rrC' + i), {
+      data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#c0392b66' : '#eee' } } } },
+    });
+  };
+  const ln = (label, fn, col, extra) => Object.assign({ type: 'line', label, data: cols.map(fn), borderColor: col,
+    backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true }, extra || {});
+  mk(0, '실질정책금리 (%) — 0 아래 = 완화적', [
+    ln('Ex-post (기준−CPI)', post, PALETTE[0]),
+    ln('Ex-ante (기준−기대인플레)', ante, PALETTE[1]),
+  ]);
+  mk(1, '명목 기준금리 vs 물가 (%)', [
+    ln('기준금리', d => base.get(d) ?? null, '#1a2b4a', { stepped: true, borderWidth: 2.5 }),
+    ln('CPI YoY', d => piM.get(d) ?? null, PALETTE[0]),
+    ln('기대인플레(1년)', d => exp1.get(d) ?? null, PALETTE[1], { borderDash: [4, 3] }),
+  ]);
+}
+
+function taylorHelpHTML() {
+  return '<div style="max-width:900px;line-height:1.85;font-size:13.5px;color:#243043">'
+    + '<div class="block-title">테일러 준칙이란</div>'
+    + '<p>중앙은행이 <b>물가</b>와 <b>경기</b>에 반응해 정책금리를 정한다고 보는 경험식입니다(Taylor, 1993). '
+    + '실제 금리 결정을 그대로 재현하진 않지만, <b>현재 금리가 상대적으로 긴축인지 완화인지</b>를 가늠하는 기준선으로 씁니다.</p>'
+    + '<pre style="background:#f5f7fa;padding:12px;border-radius:8px;font-size:13px">준칙금리 = r*  +  π  +  a×(π − π*)  +  b×(GDP갭)</pre>'
+    + '<div class="block-title">각 항목</div>'
+    + '<ul style="padding-left:20px">'
+    + '<li><b>r* (중립실질금리)</b> — 경기를 자극도 억제도 하지 않는 실질금리. <b>관측 불가</b>라 추정치를 씁니다. 한은은 대략 실질 0.5~1.5% 범위로 보며 불확실성이 크다고 명시합니다. 기본값 1.0%.</li>'
+    + '<li><b>π (인플레)</b> — 현재 물가상승률. 소비자물가/근원/생활물가/기대인플레 중 선택.</li>'
+    + '<li><b>π* (물가안정목표)</b> — 한은이 <b>정책적으로 정한 목표 2.0%</b>. 추정값이 아니라 선언값입니다.</li>'
+    + '<li><b>GDP갭</b> — (실제GDP − 잠재GDP)/잠재GDP. 양수면 경기과열, 음수면 유휴.</li>'
+    + '<li><b>a, b</b> — 물가·경기에 얼마나 민감하게 반응하는지. 원논문은 0.5/0.5.</li>'
+    + '</ul>'
+    + '<div class="block-title">잠재성장률 · 물가목표 · 기조물가 — 헷갈리는 셋</div>'
+    + '<p>「잠재물가성장률」이라는 지표는 없습니다. 이름이 비슷한 서로 다른 개념 셋을 구분해야 합니다.</p>'
+    + '<table class="data" style="margin:8px 0"><thead><tr><th>개념</th><th>무엇</th><th>값</th></tr></thead><tbody>'
+    + '<tr><td><b>잠재성장률</b></td><td>물가를 자극하지 않고 달성 가능한 <b>GDP 성장률</b>(생산 개념). 노동·자본·생산성으로 결정</td><td>한은 추정 <b>2024~26년 약 2.0%</b> · 2025~29년 1.8% · 2030~34년 1.3% · 2040년대 0%대 전망</td></tr>'
+    + '<tr><td><b>물가안정목표 π*</b></td><td>한은이 <b>정한</b> 물가 목표(정책 선언값)</td><td><b>2.0%</b></td></tr>'
+    + '<tr><td><b>기조적 물가</b></td><td>유가·농산물 등 일시 충격을 뺀 <b>추세 물가</b></td><td>근원CPI 등</td></tr>'
+    + '</tbody></table>'
+    + '<p>즉 <b>잠재성장률은 생산 축, 물가목표는 물가 축</b>이고 테일러 준칙은 둘을 함께 씁니다. '
+    + '잠재성장률은 GDP갭을 만들 때(잠재GDP 경로), 물가목표는 (π − π*) 항에 들어갑니다.</p>'
+    + '<div class="block-title">GDP갭 두 가지 방식</div>'
+    + '<ul style="padding-left:20px">'
+    + '<li><b>HP필터</b> — 실질GDP를 추세와 순환으로 통계적으로 분해(λ=1600). 데이터만으로 자동 계산되지만, '
+    + '<b>표본 끝에서 불안정</b>합니다(최근 갭이 나중에 수정됨 — end-point bias).</li>'
+    + '<li><b>잠재성장률 2%</b> — 한은 추정 잠재성장률로 성장경로를 그려 실제 GDP와 비교. 한은 시각과 정합적이지만 <b>기준시점 선택에 민감</b>합니다.</li>'
+    + '</ul>'
+    + '<div class="block-title">해석 시 주의</div>'
+    + '<ul style="padding-left:20px">'
+    + '<li>준칙금리는 <b>참고 기준선</b>입니다. 한은은 금융안정·환율·가계부채·대외여건도 함께 봅니다.</li>'
+    + '<li>r*와 GDP갭은 <b>추정치</b>라 가정에 따라 결과가 크게 달라집니다. 슬라이더로 민감도를 확인하세요.</li>'
+    + '<li>공급충격(유가·환율) 시 헤드라인 물가가 튀어 준칙이 과잉 반응할 수 있어, <b>근원물가</b> 기준도 함께 보는 게 좋습니다.</li>'
+    + '</ul></div>';
+}
+
+// ── 한국 고용상황 (통계청 경제활동인구조사) ─────────────────────
+// 한국은행 평가 프레임: ①추세 대비 취업자 증감(이슈노트 2025-17) ②15~64세 고용률
+// ③산업별 취업자 ④실업률은 보조(2%대 저변동) — 청년고용률·확장지표 병행
+const KR_EMP = { id: 'kr_emp', name: '고용상황',
+                 ids: ['kr_emp_total', 'kr_emp_age', 'kr_emp_industry', 'kr_emp_inactive'] };
+let krEmpData = null, krEmpTab = 'main', krEmpCharts = [null, null, null, null];
+let krEmpSel = null, krEmpTrend = 12;        // 추세 계산 창(개월)
+let krIndSel = null, krIndCharts = [null, null];
+
+async function enterKrEmp() {
+  const [tot, age, ind, inact] = await Promise.all(KR_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  if (!tot && !age) { alert('고용 데이터가 없습니다. python fetch.py kr_emp_total kr_emp_age 실행 필요.'); return; }
+  krEmpData = { tot, age, ind, inact };
+  current = { id: KR_EMP.id, name: KR_EMP.name, freq: 'M', unit: '천명·%',
+              updated_at: (tot || age).updated_at, series: [] };
+  view = 'kremp'; krEmpTab = 'main';
+  document.getElementById('title').textContent = KR_EMP.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + (tot || age).updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'krEmpBtn'));
+  if (!document.getElementById('krEmpTabs').dataset.bound) {
+    document.getElementById('krEmpTabs').addEventListener('click', e => {
+      if (!e.target.dataset.ke) return; krEmpTab = e.target.dataset.ke; refresh();
+    });
+    document.getElementById('krEmpTabs').dataset.bound = '1';
+  }
+  const ds = new Set();
+  [tot, age, ind, inact].filter(Boolean).forEach(x => x.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+// 시리즈 조회: kr_emp_total 은 '계 · X', kr_emp_age 는 '<연령> · X'
+function krSer(which, name) {
+  const ind = krEmpData[which];
+  if (!ind) return null;
+  return ind.series.find(s => baseName(s.name) === name) || null;
+}
+function krMap(which, name) {
+  const s = krSer(which, name);
+  return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map();
+}
+
+function renderKrEmp() {
+  document.querySelectorAll('#krEmpTabs button').forEach(b => b.classList.toggle('active', b.dataset.ke === krEmpTab));
+  if (krEmpTab === 'industry') { renderKrEmpIndustry(); return; }
+  if (krEmpTab === 'age') { renderKrEmpAge(); return; }
+  if (krEmpTab === 'detail') { renderKrEmpDetail(); return; }
+  renderKrEmpMain();
+}
+
+// 산업별 취업자: 21개 대분류 증감 분해(합=전체 증감) + 취업자 수
+function renderKrEmpIndustry() {
+  const box = document.getElementById('retailWrap');
+  const ind = krEmpData.ind;
+  if (!ind) { box.innerHTML = '<div style="padding:24px;color:#888">산업별 데이터가 없습니다. <b>python fetch.py kr_emp_industry</b> 실행 필요.</div>'; return; }
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const S = {}; ind.series.forEach(s => S[baseName(s.name)] = new Map(s.data.map(p => [p.d, p.v])));
+  const names = Object.keys(S);
+  const short = n => n.replace(/^[A-U]\s*/, '').replace(/\s*및\s*/g, '·').slice(0, 14);
+  const lvl = (n, d) => S[n] ? (S[n].get(d) ?? null) : null;
+  const yoy = (n, d) => { const p = prevN(d, 12); if (!p || !S[n]) return null; const a = S[n].get(d), b = S[n].get(p); return a != null && b != null ? a - b : null; };
+  const totalOf = (fn, d) => { let s = 0, ok = false; names.forEach(n => { const v = fn(n, d); if (v != null) { s += v; ok = true; } }); return ok ? s : null; };
+  if (krIndSel === null) krIndSel = new Set(names.filter(n => /제조업|건설업|보건업|숙박 및 음식점업|도매 및 소매업/.test(n)));
+
+  let out = '<div style="font-size:12px;color:#8592a3;margin-bottom:8px">산업 이름을 <b>클릭</b>하면 차트에 추가/제거됩니다. 21개 대분류 증감의 합 = 전체 취업자 증감. 한국은행 통방문은 <b>제조업·건설업</b>(경기민감)과 <b>서비스업</b> 흐름을 핵심으로 봅니다.</div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="krI${i}"></canvas></div></div>`).join('')
+    + '</div>';
+  const tbl = (title, fn, isTot) => {
+    let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>`
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    h += `<tr class="lv0 sep-solid"><td>전체</td>` + cols.map(d => { const v = totalOf(fn, d);
+      return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</td>`; }).join('') + '</tr>';
+    names.forEach(n => {
+      const sel = krIndSel.has(n) ? '● ' : '';
+      h += `<tr class="lv1"><td data-kri="${n}" style="cursor:pointer">${sel}${n}</td>`
+        + cols.map(d => { const v = fn(n, d);
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</td>`; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  };
+  out += tbl('전년동월 증감 (천명)', yoy);
+  out += tbl('취업자 수 (천명)', lvl);
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-kri]').forEach(td => td.onclick = () => {
+    const n = td.dataset.kri; krIndSel.has(n) ? krIndSel.delete(n) : krIndSel.add(n); renderKrEmp();
+  });
+  const sel = [...krIndSel];
+  [['전년동월 증감 (천명)', yoy, 0, true], ['취업자 수 (천명)', lvl, 1, false]].forEach(([title, fn, ci, dual]) => {
+    if (krIndCharts[ci]) { krIndCharts[ci].destroy(); krIndCharts[ci] = null; }
+    const datasets = sel.map((n, j) => ({ type: 'line', label: short(n), data: cols.map(d => fn(n, d)),
+      borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true, yAxisID: 'y' }));
+    datasets.push({ type: 'line', label: '전체' + (dual ? '' : ' (우축)'), data: cols.map(d => totalOf(fn, d)),
+      borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, yAxisID: dual ? 'y' : 'y2' });
+    const scales = { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+                     y: { ticks: { font: { size: 10 } } } };
+    if (!dual) scales.y2 = { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 9 }, maxTicksLimit: 6 } };
+    krIndCharts[ci] = new Chart(box.querySelector('#krI' + ci), {
+      data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 9 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
+        scales },
+    });
+  });
+}
+
+// 종합: 취업자 전년동월 증감 + 추세선 / 15~64세 고용률 / 실업률·참가율
+function renderKrEmpMain() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const emp = krMap('tot', '계 · 취업자');
+  const emp1564 = krMap('age', '15 - 64세 · 취업자');
+  const er1564 = krMap('age', '15 - 64세 · 고용률');
+  const erAll = krMap('tot', '계 · 고용률');
+  const erYouth = krMap('age', '15 - 29세 · 고용률');
+  const ur = krMap('tot', '계 · 실업률'), pr = krMap('tot', '계 · 경제활동참가율');
+  const lvl = (m, d) => m.get(d) ?? null;
+  const yoyDiff = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
+  // 추세: 취업자 전년동월 증감의 후행 N개월 이동평균 (한은식 '추세 취업자수 증가규모' 근사)
+  const trend = (m, d) => {
+    const i = idx.get(d); if (i == null) return null;
+    let s = 0, n = 0;
+    for (let k = 0; k < krEmpTrend; k++) {
+      const dd = periodDates[i - k]; if (!dd) break;
+      const v = yoyDiff(m, dd); if (v != null) { s += v; n++; }
+    }
+    return n ? s / n : null;
+  };
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">추세 기준: </span><div class="mode" id="krTrendBtns">'
+    + [[12, '12개월'], [24, '24개월'], [36, '36개월']].map(([v, t]) =>
+        `<button data-kt="${v}" class="${krEmpTrend === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><span style="font-size:12px;color:#8592a3">취업자 증감이 추세선 위면 호조 · 아래면 부진 (한은 평가 방식)</span></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:6px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krE${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [2, 3].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krE${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const tbl = (title, rows, fmt) => {
+    let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(([nm, fn, cls]) => {
+      h += `<tr class="${cls || 'lv1'}"><td>${nm}</td>` + cols.map(d => { const v = fn(d);
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  };
+  const k0 = v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+  const p1 = v => v.toFixed(1);
+  const pop1564 = krMap('age', '15 - 64세 · 인구');
+  out += tbl('취업자 증감 (전년동월, 천명)', [
+    ['취업자 증감', d => yoyDiff(emp, d), 'lv0 sep-solid'],
+    [`추세 (${krEmpTrend}개월 평균)`, d => trend(emp, d)],
+    ['15~64세 취업자 증감', d => yoyDiff(emp1564, d)],
+    ['· 15~64세 인구 증감 (참고)', d => yoyDiff(pop1564, d)],
+  ], k0);
+  out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">※ 15~64세 취업자 증감이 마이너스인 것은 <b>생산가능인구가 연 30만명대 감소</b>하기 때문입니다. '
+    + '같은 기간 15~64세 <b>고용률은 사상 최고 수준(70%대)</b>이므로, 수(數)보다 <b>고용률·추세 대비 위치</b>로 판단해야 합니다.</div>';
+  out += tbl('고용률 (%)', [
+    ['15~64세 고용률 ★', d => lvl(er1564, d), 'lv0 sep-solid'],
+    ['15세이상 고용률', d => lvl(erAll, d)],
+    ['청년(15~29세) 고용률', d => lvl(erYouth, d)],
+  ], p1);
+  out += tbl('실업률·참가율 (%)', [
+    ['실업률', d => lvl(ur, d), 'lv0 sep-solid'],
+    ['경제활동참가율', d => lvl(pr, d)],
+  ], p1);
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#krTrendBtns button').forEach(b => b.onclick = () => { krEmpTrend = +b.dataset.kt; renderKrEmp(); });
+
+  const mk = (i, title, datasets, opts) => {
+    if (krEmpCharts[i]) { krEmpCharts[i].destroy(); krEmpCharts[i] = null; }
+    krEmpCharts[i] = new Chart(box.querySelector('#krE' + i), {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } }, opts || {}),
+    });
+  };
+  const ln = (label, fn, col, extra) => Object.assign({ type: 'line', label, data: cols.map(fn), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true }, extra || {});
+  mk(0, '취업자 전년동월 증감 vs 추세 (천명)', [
+    { type: 'bar', label: '취업자 증감', data: cols.map(d => yoyDiff(emp, d)), backgroundColor: PALETTE[0] + '99', order: 2 },
+    ln(`추세 (${krEmpTrend}M)`, d => trend(emp, d), '#1a2b4a', { order: 0, borderWidth: 2.5 }),
+  ]);
+  mk(1, '고용률 (%) — 15~64세 ★ · 전체 · 청년', [
+    ln('15~64세', d => lvl(er1564, d), PALETTE[2]),
+    ln('15세이상', d => lvl(erAll, d), PALETTE[5]),
+    ln('청년(15~29)', d => lvl(erYouth, d), PALETTE[3]),
+  ]);
+  mk(2, '실업률 (%)', [ln('실업률', d => lvl(ur, d), PALETTE[1])]);
+  mk(3, '경제활동참가율 (%)', [ln('참가율', d => lvl(pr, d), PALETTE[4])]);
+}
+
+// 연령별: 연령계층 × 지표 트리
+function renderKrEmpAge() {
+  const box = document.getElementById('retailWrap');
+  const ind = krEmpData.age;
+  if (!ind) { box.innerHTML = '<div style="padding:24px;color:#888">연령별 데이터가 없습니다. <b>python fetch.py kr_emp_age</b> 실행 필요.</div>'; return; }
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const AGES = ['15세 이상 전체', '15 - 64세', '15 - 29세', '20 - 29세', '30 - 39세', '40 - 49세', '50 - 59세', '60세이상'];
+  const METRICS = [['고용률', '%'], ['실업률', '%'], ['경제활동참가율', '%'], ['취업자', '천명']];
+  if (krEmpSel === null) krEmpSel = new Set(['15 - 64세', '15 - 29세']);
+  const M = (age, met) => krMap('age', `${age} · ${met}`);
+  let out = '<div style="font-size:12px;color:#8592a3;margin-bottom:8px">연령 이름을 <b>클릭</b>하면 차트에 추가/제거됩니다. ★ 15~64세는 한국은행이 중시하는 핵심 고용률.</div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krA${i}"></canvas></div></div>`).join('')
+    + '</div>';
+  METRICS.forEach(([met, unit]) => {
+    out += `<div class="block-title">${met} (${unit})</div><div class="tscroll"><table class="data vlines"><thead><tr><th>연령</th>`
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    AGES.forEach((age, i) => {
+      const m = M(age, met);
+      if (!m.size) return;
+      const sel = krEmpSel.has(age) ? '● ' : '';
+      const star = age === '15 - 64세' ? ' ★' : '';
+      out += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}"><td data-kra="${age}" style="cursor:pointer">${sel}${age}${star}</td>`
+        + cols.map(d => { const v = m.get(d) ?? null;
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: unit === '%' ? 1 : 0 })}</td>`; }).join('') + '</tr>';
+    });
+    out += '</tbody></table></div>';
+  });
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-kra]').forEach(td => td.onclick = () => {
+    const a = td.dataset.kra; krEmpSel.has(a) ? krEmpSel.delete(a) : krEmpSel.add(a); renderKrEmp();
+  });
+  const sel = [...krEmpSel];
+  [['고용률', 0], ['실업률', 1]].forEach(([met, ci]) => {
+    if (krEmpCharts[ci]) { krEmpCharts[ci].destroy(); krEmpCharts[ci] = null; }
+    const datasets = sel.map((age, j) => {
+      const m = M(age, met);
+      return { label: age, data: cols.map(d => m.get(d) ?? null), borderColor: PALETTE[j % PALETTE.length],
+        backgroundColor: PALETTE[j % PALETTE.length], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true };
+    });
+    krEmpCharts[ci] = new Chart(box.querySelector('#krA' + ci), {
+      type: 'line', data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: `${met} (%) — 연령별`, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+    });
+  });
+}
+
+// 상세: 인구·경활·비경활 구조 + 성별
+function renderKrEmpDetail() {
+  const box = document.getElementById('retailWrap');
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  // 비경제활동인구 활동상태별(쉬었음 등) — kr_emp_inactive
+  const inact = krEmpData.inact;
+  const iMap = nm => {
+    if (!inact) return new Map();
+    const s = inact.series.find(x => baseName(x.name).replace(/\s/g, '').includes(nm.replace(/\s/g, '')));
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map();
+  };
+  // 활동상태별: '쉬었음'이 별도 항목이면 그것, 없으면 '그외'(쉬었음 포함 계열)로 대체
+  const rest = iMap('쉬었음').size ? iMap('쉬었음') : iMap('그외');
+  const restLabel = iMap('쉬었음').size ? '· 쉬었음 ★' : '· 그외(쉬었음 포함) ★';
+  const rows = [
+    ['15세이상 인구', krMap('tot', '계 · 15세이상인구'), 'lv0 sep-solid'],
+    ['경제활동인구', krMap('tot', '계 · 경제활동인구'), 'lv1'],
+    ['· 취업자', krMap('tot', '계 · 취업자'), 'lv2'],
+    ['· 실업자', krMap('tot', '계 · 실업자'), 'lv2'],
+    ['비경제활동인구', krMap('tot', '계 · 비경제활동인구'), 'lv1'],
+    [restLabel, rest, 'lv2'],
+    ['· 취업준비', iMap('취업준비'), 'lv2'],
+    ['· 육아', iMap('육아'), 'lv2'],
+    ['· 가사', iMap('가사'), 'lv2'],
+    ['· 통학', iMap('통학'), 'lv2'],
+    ['· 연로', iMap('연로'), 'lv2'],
+    ['· 심신장애', iMap('심신장애'), 'lv2'],
+  ].filter(r => r[1] && r[1].size);
+  const yoyDiff = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
+  // 활동상태별 표의 '계'가 총괄 비경활과 다르면 범위가 다른 표 → 경고 표시
+  const iTot = iMap('계'), lastD = cols.length ? cols[cols.length - 1] : null;
+  const iSum = lastD ? iTot.get(lastD) : null, tSum = lastD ? krMap('tot', '계 · 비경제활동인구').get(lastD) : null;
+  const scopeWarn = (iSum != null && tSum != null && Math.abs(iSum - tSum) > 100)
+    ? `<div style="font-size:12px;color:#c0392b;margin-bottom:8px">⚠ 활동상태별 표의 계(${iSum.toLocaleString('ko-KR')}천명)가 총괄 비경제활동인구(${tSum.toLocaleString('ko-KR')}천명)와 달라 <b>범위가 다른 통계표</b>입니다. '
+      + '순수 「쉬었음」 계열이 아니므로 수준 해석에 주의하세요(추세만 참고).</div>` : '';
+  let out = '<div style="font-size:12px;color:#8592a3;margin-bottom:8px">한국 실업률은 2%대로 변동이 작아, 구직 포기가 흡수되는 <b>비경제활동인구</b>와 참가율을 함께 봐야 합니다. '
+    + (rest.size ? '유휴인력 신호는 <b>' + restLabel.replace('· ', '').replace(' ★', '') + '</b>·취업준비에서 확인.'
+                 : '<b style="color:#c0392b">활동상태별 데이터가 없습니다 — python fetch.py kr_emp_inactive 실행 필요.</b>') + '</div>'
+    + scopeWarn
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="krD0"></canvas></div></div>'
+    + '<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="krD1"></canvas></div></div>'
+    + '</div>';
+  [['수준 (천명)', (m, d) => m.get(d) ?? null, v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })],
+   ['전년동월 증감 (천명)', yoyDiff, v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })],
+  ].forEach(([title, fn, fmt]) => {
+    out += `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(([nm, m, cls]) => {
+      out += `<tr class="${cls}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d);
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('') + '</tr>';
+    });
+    out += '</tbody></table></div>';
+  });
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  const mkD = (i, title, datasets) => {
+    if (krEmpCharts[i]) { krEmpCharts[i].destroy(); krEmpCharts[i] = null; }
+    const cv = box.querySelector('#krD' + i); if (!cv) return;
+    krEmpCharts[i] = new Chart(cv, {
+      type: 'line', data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+    });
+  };
+  const ln2 = (label, m, col, fn) => ({ label, data: cols.map(d => (fn || yoyDiff)(m, d)), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true });
+  mkD(0, '취업자 vs 비경제활동인구 전년동월 증감 (천명)', [
+    ln2('취업자 증감', krMap('tot', '계 · 취업자'), PALETTE[0]),
+    ln2('비경제활동인구 증감', krMap('tot', '계 · 비경제활동인구'), PALETTE[3]),
+  ]);
+  const rl = restLabel.replace('· ', '').replace(' ★', '');
+  mkD(1, `${rl} · 취업준비 (천명, 수준)`, [
+    ln2(rl, rest, PALETTE[1], (m, d) => m.get(d) ?? null),
+    ln2('취업준비', iMap('취업준비'), PALETTE[4], (m, d) => m.get(d) ?? null),
+  ]);
 }
 
 // ── 미국 고용상황 (BLS: 비농업 산업별 + 실업률 + 임금) ──────────
@@ -3694,7 +4395,7 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
@@ -3721,6 +4422,14 @@ document.getElementById('endSel').onchange = e => {
         const b = document.createElement('button');
         b.id = 'fundBtn'; b.textContent = FUND.name; b.onclick = enterFundFlow;
         nav.appendChild(b); return;
+      }
+      if (KR_EMP.ids.includes(item.id)) {   // 고용 2종 → "고용상황" 하나로
+        if (!krEmpInserted) {
+          const b = document.createElement('button');
+          b.id = 'krEmpBtn'; b.textContent = KR_EMP.name; b.onclick = enterKrEmp;
+          nav.appendChild(b); krEmpInserted = true;
+        }
+        return;
       }
       if (US_EMP.ids.includes(item.id)) {   // 미국 고용 3종 → "미국 고용상황" 하나로
         if (!usEmpInserted) {
@@ -3771,6 +4480,11 @@ document.getElementById('endSel').onchange = e => {
     // 생산자물가 종합을 소매판매 바로 위로 이동
     const ppiB = document.getElementById('ppiBtn'), retB = document.getElementById('retailBtn');
     if (ppiB && retB) nav.insertBefore(ppiB, retB);
+    // 테일러 준칙 (한국 지표 기반 계산 뷰) — 미국 섹션 앞에 배치
+    const tyBtn = document.createElement('button');
+    tyBtn.id = 'taylorBtn'; tyBtn.textContent = TAYLOR.name; tyBtn.onclick = enterTaylor;
+    const usHdr = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
+    if (usHdr) nav.insertBefore(tyBtn, usHdr); else nav.appendChild(tyBtn);
     // 지표 비교 메뉴 (구분선 + 버튼)
     const hr = document.createElement('div');
     hr.style.cssText = 'border-top:1px solid #e0e4ea;margin:10px 0';

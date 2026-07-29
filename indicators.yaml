@@ -116,6 +116,109 @@ indicators:
       objL1: "T10 "
       objL2: "ALL"
 
+  # ── 고용 (통계청 경제활동인구조사) ────────────────────────────
+  # 한국은행 평가 프레임: ①추세 대비 취업자 증감 ②15~64세 고용률 ③산업별 취업자
+  # ④실업률은 보조(2%대 저변동) — 확장실업률·쉬었음·청년고용률 병행
+  - id: kr_emp_total
+    name: 고용 총괄 (성별)
+    source: kosis
+    unit: 천명·%
+    freq: M
+    start_year: 2000
+    refetch_years: 2
+    series_first: ["취업자"]
+    params:
+      orgId: "101"
+      tblId: "DT_1DA7001S"
+      itmId: "ALL"
+      objL1: "0 "              # 계(전체)
+
+  - id: kr_emp_age
+    name: 고용 총괄 (연령별)
+    source: kosis
+    unit: 천명·%
+    freq: M
+    start_year: 2000
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA7002S"
+      itmId: "ALL"
+      objL1: "ALL"            # 15~19,20~29,…,15~64 등 연령계층
+
+  # 산업별 취업자 (계절조정, 한국표준산업분류 대분류) — 미국 NFP 산업별 분해와 대칭
+  - id: kr_emp_industry
+    name: 산업별 취업자 (계절조정)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2013
+    refetch_years: 2
+    series_first: ["전체"]
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9003S"
+      itmId: "T30 "
+      objL1: "ALL"
+
+  # ── 계절조정 계열 (DT_1DA9xxx) — 전월대비 모멘텀 판단용 ────────
+  - id: kr_emp_total_sa
+    name: 고용 총괄 (계절조정)
+    source: kosis
+    unit: 천명·%
+    freq: M
+    start_year: 2000
+    refetch_years: 2
+    series_first: ["취업자"]
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9001S"
+      itmId: "T10 T20 T30 T40 T50 T60 T80 T90 "
+      objL1: "ALL"
+
+  # 직업별 취업자 (계절조정)
+  - id: kr_emp_occupation
+    name: 직업별 취업자 (계절조정)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2013
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9004S"
+      itmId: "T30 "
+      objL1: "ALL"
+
+  # 연령/활동상태별 비경제활동인구 (계절조정) — '쉬었음' 포함
+  - id: kr_emp_inactive_sa
+    name: 비경활 활동상태 (계절조정)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2003
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9011S"
+      itmId: "T50 "
+      objL1: "ALL"
+
+  # 비경제활동인구 활동상태별 — '쉬었음'(구직 포기·유휴인력) 추적
+  - id: kr_emp_inactive
+    name: 비경제활동인구 (활동상태별)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2003
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA7145S"
+      itmId: "ALL"
+      objL1: "ALL"
+      objL2: "ALL"      # 활동상태 전체(쉬었음 포함) — 코드 일부 지정 시 누락되는 항목 방지
+
   # ── 소매판매액지수 (통계청) ──────────────────────────────────
   - id: kr_retail
     name: 소매판매액지수 (상품군별)

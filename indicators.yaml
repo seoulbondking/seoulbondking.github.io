@@ -146,6 +146,25 @@ indicators:
       itmId: "ALL"
       objL1: "ALL"            # 15~19,20~29,…,15~64 등 연령계층
 
+  # 연령별 계절조정 (사용자 확인 URL 기준).
+  # objL1 을 ALL 로 두면 이 표는 오류를 내므로 연령 코드를 명시한다.
+  #   75=15세이상 전체 · 63=15~64세 · 10/20/30/40/50/60=연령계층
+  # itmId 는 kr_emp_total_sa 와 동일한 8개 항목(인구·경활·취업·실업·비경활·참가율·실업률·고용률).
+  # 계절조정 표에는 원계열보다 연령 구간이 적어(8개), 없는 구간은 대시보드가 항목별로
+  # 원계열(kr_emp_age)로 폴백하고 화면에 '(원계열)'로 표시한다.
+  - id: kr_emp_age_sa
+    name: 고용 총괄 (연령별, 계절조정)
+    source: kosis
+    unit: 천명·%
+    freq: M
+    start_year: 2000
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9002S"
+      itmId: "T10 T20 T30 T40 T50 T60 T80 T90"
+      objL1: "75 10 20 30 40 50 60 63"
+
   # 산업별 취업자 (계절조정, 한국표준산업분류 대분류) — 미국 NFP 산업별 분해와 대칭
   - id: kr_emp_industry
     name: 산업별 취업자 (계절조정)
@@ -407,6 +426,18 @@ indicators:
       sheet: 금리stack
       groups: ["국고채권", "통안증권", "회사채AA-(공모/무보증)", "회사채A-(공모/무보증)",
                "금융채 은행채 AAA", "CD AAA", "CP A1"]
+
+  # ACM 기간프리미엄 — kr_yield 를 입력으로 쓰는 파생 지표이므로 kr_yield 뒤에 둔다.
+  # (외부 API 호출 없음. 매번 전체 재추정하므로 증분 설정 불필요)
+  - id: kr_acm
+    name: ACM 기간프리미엄 (월별)
+    source: acm
+    unit: '%'
+    freq: M
+    params:
+      boot: 500          # BRW 편의보정 부트스트랩 횟수
+      iter: 25           # 반복 조정 횟수
+      cap: 0.999         # 정상성 상한 (0.999 이상에선 결과가 3bp 내로 안정)
 
   - id: kr_policy_bei
     name: 기준금리·BEI (일별)

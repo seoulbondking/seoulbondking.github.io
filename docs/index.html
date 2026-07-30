@@ -162,6 +162,7 @@
         <button data-yt="decomp" class="active">금리 분해</button>
         <button data-yt="curve">일드커브</button>
         <button data-yt="model">커브 모델</button>
+        <button data-yt="acm">ACM 기간프리미엄</button>
         <button data-yt="spread">스프레드</button>
         <button data-yt="table">원자료</button>
       </div>
@@ -266,7 +267,14 @@ let catalog = [], current = null, chart = null;
 // 메뉴·비교에서 숨길 지표 (기본분류는 PPI 산업별이 내부적으로 사용하므로 수집은 유지, 메뉴만 숨김)
 const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
-                  'kr_yield', 'kr_policy_bei', 'mkt_oil_fx'];
+                  'kr_yield', 'kr_policy_bei', 'mkt_oil_fx',
+                  // 메뉴에서 내린 한국 지표 (고용 총괄 ~ 테일러 준칙 구간)
+                  'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm'];
+
+// 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
+// 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
+const NAV_OFF = ['ppi', 'apt', 'yield', 'taylor'];
+const navOn = k => !NAV_OFF.includes(k);
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
@@ -1470,7 +1478,7 @@ function renderFundFlow() {
 }
 
 // ── 금리 분해 (국고채 = 정책기대 + 물가기대 + 기간프리미엄) ──────
-const YIELD = { id: 'yield', name: '금리 분해', ids: ['kr_yield', 'kr_policy_bei', 'mkt_oil_fx'] };
+const YIELD = { id: 'yield', name: '금리 분해', ids: ['kr_yield', 'kr_policy_bei', 'mkt_oil_fx', 'kr_acm'] };
 let yldData = null, yldTab = 'decomp', yldCharts = [null, null, null, null];
 let yldSel = null, yldCurveDates = null;
 const TENORS = ['3월', '6월', '9월', '1년', '1.5년', '2년', '2.5년', '3년', '4년', '5년', '7년', '10년', '30년'];
@@ -1516,6 +1524,7 @@ function renderYield() {
   document.querySelectorAll('#yieldTabs button').forEach(b => b.classList.toggle('active', b.dataset.yt === yldTab));
   if (yldTab === 'curve') { renderYieldCurve(); return; }
   if (yldTab === 'model') { renderCurveModel(); return; }
+  if (yldTab === 'acm') { renderAcm(); return; }
   if (yldTab === 'spread') { renderYieldSpread(); return; }
   if (yldTab === 'table') { renderYieldTable(); return; }
   renderYieldDecomp();
@@ -1732,6 +1741,129 @@ function curvePoints(d) {                 // 해당 일자의 (만기, 금리) �
 }
 
 // ③ 커브 모델: NSS 적합 + 레벨/기울기/곡률 + 선도금리 + 기간프리미엄 근사
+// ── ACM 기간프리미엄 (Adrian-Crump-Moench 2013) ──────────────────
+// 추정은 무거워서 Python(fetchers/acm.py)에서 하고, 여기선 결과만 표시한다.
+let acmCfg = { mat: '3년', bc: true };
+function renderAcm() {
+  const box = document.getElementById('retailWrap');
+  const ind = yldData && yldData['kr_acm'];
+  if (!ind || !ind.series.length) {
+    box.innerHTML = '<div style="padding:24px;color:#888">ACM 데이터가 없습니다. '
+      + '<b>python fetch.py kr_acm</b> 를 실행하세요 (numpy 필요: <b>pip install numpy</b>).</div>';
+    return;
+  }
+  const meta = ind.acm || {};
+  const tag = acmCfg.bc ? '편의보정' : 'ACM';
+  const S = nm => { const s = ind.series.find(x => baseName(x.name) === nm);
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const act = S(`국고 ${acmCfg.mat} 실제`), rn = S(`국고 ${acmCfg.mat} 위험중립 (${tag})`),
+        tp = S(`국고 ${acmCfg.mat} 기간프리미엄 (${tag})`);
+  if (!act.size) { box.innerHTML = '<div style="padding:24px;color:#888">해당 만기 시리즈가 없습니다.</div>'; return; }
+  const allD = [...act.keys()].sort();
+  const rows = allD.filter(d => rn.has(d) && tp.has(d))
+    .map(d => ({ d, act: act.get(d), rn: rn.get(d), tp: tp.get(d) }));
+  const shown = rows.filter(r => inRange(r.d));
+  const cols = shown.map(r => r.d);
+  const dg = (meta.diag || {})[`${acmCfg.mat}_${tag}`] || {};
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+    + '<b>ACM (Adrian-Crump-Moench 2013)</b> — 아핀 기간구조모형을 최대우도 대신 '
+    + '<b>선형회귀 5단계</b>로 추정합니다. NY Fed가 이 방식으로 미국 기간프리미엄을 매일 공표합니다.<br>'
+    + '<pre style="background:#f5f7fa;padding:10px;border-radius:8px;font-size:12.5px;margin:6px 0">'
+    + '① 수익률 곡선 주성분 5개 → 상태변수 X\n'
+    + '② VAR(1):  X(t+1) = μ + Φ·X(t) + v(t+1)\n'
+    + '③ 초과수익률  rx = p(t+1, n−1) − p(t, n) − r(t)\n'
+    + '④ rx ~ [1, v(t+1), X(t)] 회귀 → 위험가격 λ₀, λ₁\n'
+    + '⑤ 아핀 점화식으로 곡선 복원. λ=0으로 한 번 더 → <b>위험중립금리</b>\n'
+    + '   기간프리미엄 = 실제금리 − 위험중립금리</pre>'
+    + '<b>위험중립금리</b>는 "투자자가 위험을 요구하지 않는다면 붙었을 금리" = 순수 정책금리 기대 경로. '
+    + '<b>기간프리미엄</b>은 그 위에 얹힌 위험 보상입니다.</div>'
+    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+    + '<b>만기</b>' + ['3년', '10년'].map(m =>
+        `<button class="mini-btn acmMat${acmCfg.mat === m ? ' on' : ''}" data-m="${m}">${m}</button>`).join('')
+    + '<b style="margin-left:8px">추정</b>'
+    + `<button class="mini-btn acmBc${acmCfg.bc ? ' on' : ''}" data-b="1">편의보정 (BRW)</button>`
+    + `<button class="mini-btn acmBc${acmCfg.bc ? '' : ' on'}" data-b="0">표준 ACM</button></div>`;
+
+  // 진단 + 소표본 경고
+  out += '<div style="font-size:12px;color:#8592a3;margin-bottom:10px">'
+    + `표본 ${meta.months || '-'}개월 (${meta.start || '?'}~${meta.end || '?'}) · `
+    + `주성분 설명력 ${(meta.pc_share || []).slice(0, 3).map(v => (v * 100).toFixed(1) + '%').join(' / ')} (레벨/기울기/곡률) · `
+    + `모형 적합 RMSE <b>${dg.rmse_bp != null ? dg.rmse_bp.toFixed(2) : '-'}bp</b><br>`
+    + `VAR 지속성 Φ 최대고유값: OLS ${meta.eig_ols} (반감기 ${meta.halflife_ols}개월) → `
+    + `편의보정 ${meta.eig_bc} (${meta.halflife_bc}개월)</div>`;
+  if (!acmCfg.bc) {
+    out += '<div style="padding:10px 12px;background:#fdf3f2;border-left:3px solid #c0392b;border-radius:6px;'
+      + 'font-size:12px;color:#8a2b22;line-height:1.75;margin-bottom:12px">'
+      + `⚠ <b>표준 ACM은 기간프리미엄을 과대추정합니다.</b> 표본이 ${meta.months || 200}개월뿐이라 Φ가 하향 편의되고`
+      + `(반감기 ${meta.halflife_ols}개월 vs 미국 수년), 위험중립금리가 너무 빨리 평균회귀합니다 `
+      + '— Bauer-Rudebusch-Wu(2012). <b>편의보정</b> 쪽을 기본으로 보세요.</div>';
+  } else if (meta.binds) {
+    out += '<div style="padding:10px 12px;background:#fffaf0;border-left:3px solid #e8930c;border-radius:6px;'
+      + 'font-size:12px;color:#7a5a12;line-height:1.75;margin-bottom:12px">'
+      + `※ 편의보정이 <b>정상성 상한(${meta.cap})에 붙었습니다</b> — 소표본에서 흔한 일로, 보정이 단위근 쪽까지 밀렸다는 뜻입니다. `
+      + '상한을 0.999~0.9995로 바꿔도 결과 차이는 3bp 이내라 수준 자체는 안정적입니다. '
+      + '그래도 <b>절대 수준보다 방향·변화분</b>을 신뢰하세요.</div>';
+  }
+
+  out += '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:290px"><canvas id="acC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // 최근 변화 분해
+  const last = shown.length ? shown[shown.length - 1] : null;
+  const back = shown.length > 6 ? shown[shown.length - 7] : null;
+  if (last && back) {
+    const d1 = last.act - back.act, d2 = last.rn - back.rn, d3 = last.tp - back.tp;
+    out += `<div style="margin-bottom:12px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">`
+      + `<b>${dateLabel(back.d)} → ${dateLabel(last.d)} (6개월) 국고 ${acmCfg.mat} 변화 분해</b><br>`
+      + `실제금리 <b>${d1 >= 0 ? '+' : ''}${(d1 * 100).toFixed(0)}bp</b> = `
+      + `정책금리 기대 <b style="color:${PALETTE[0]}">${d2 >= 0 ? '+' : ''}${(d2 * 100).toFixed(0)}bp</b> + `
+      + `기간프리미엄 <b style="color:${PALETTE[1]}">${d3 >= 0 ? '+' : ''}${(d3 * 100).toFixed(0)}bp</b><br>`
+      + `<span style="color:#8592a3">현재 실제 ${last.act.toFixed(3)}% = 위험중립 ${last.rn.toFixed(3)}% + 기간프리미엄 ${last.tp.toFixed(3)}%p. `
+      + `기간프리미엄 표본평균은 ${dg.tp_mean != null ? (dg.tp_mean >= 0 ? '+' : '') + dg.tp_mean.toFixed(3) : '-'}%p이므로 `
+      + `현재는 ${dg.tp_mean != null && last.tp > dg.tp_mean ? '<b>평균보다 높은</b> 위험보상을 요구받는' : '<b>평균보다 낮은</b>'} 국면입니다.</span></div>`;
+  }
+
+  out += `<div class="block-title">국고 ${acmCfg.mat} 분해 (%, ${tag})</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  const line = (nm, f, cls) => {
+    let h = `<tr class="${cls}"><td>${nm}</td>`;
+    shown.forEach(r => { const v = f(r); h += `<td${v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(3)}</td>`; });
+    return h + '</tr>';
+  };
+  out += line('실제 금리', r => r.act, 'lv0 sep-solid');
+  out += line('  위험중립금리 (정책기대)', r => r.rn, 'lv1');
+  out += line('  기간프리미엄', r => r.tp, 'lv1');
+  out += '</tbody></table></div>';
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('.acmMat').forEach(b => b.onclick = () => { acmCfg.mat = b.dataset.m; refresh(); });
+  box.querySelectorAll('.acmBc').forEach(b => b.onclick = () => { acmCfg.bc = b.dataset.b === '1'; refresh(); });
+
+  const mk = (i, title, datasets, extra) => {
+    if (yldCharts[i]) { yldCharts[i].destroy(); yldCharts[i] = null; }
+    yldCharts[i] = new Chart(box.querySelector('#acC' + i), {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}` } } },
+        scales: { x: { stacked: !!(extra && extra.stack), ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { stacked: !!(extra && extra.stack), ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#c0392b55' : '#eee' } } } }, extra || {}),
+    });
+  };
+  mk(0, `국고 ${acmCfg.mat}: 실제 vs 위험중립 (%)`, [
+    { type: 'line', label: '실제 금리', data: shown.map(r => r.act), borderColor: '#1a2b4a', borderWidth: 2.5, pointRadius: 0, tension: 0.15 },
+    { type: 'line', label: '위험중립금리 (정책기대)', data: shown.map(r => r.rn), borderColor: PALETTE[0], borderWidth: 2, pointRadius: 0, tension: 0.15 },
+  ]);
+  mk(1, `기간프리미엄 구성 (%p) — 합이 실제금리`, [
+    { type: 'bar', label: '위험중립금리', data: shown.map(r => r.rn), backgroundColor: PALETTE[0] + 'aa' },
+    { type: 'bar', label: '기간프리미엄', data: shown.map(r => r.tp), backgroundColor: PALETTE[1] + 'aa' },
+  ], { stack: true });
+}
+
 function renderCurveModel() {
   const box = document.getElementById('retailWrap');
   const cols = periodDates.filter(inRange);
@@ -2915,15 +3047,23 @@ function taylorHelpHTML() {
 // 한국은행 평가 프레임: ①추세 대비 취업자 증감(이슈노트 2025-17) ②15~64세 고용률
 // ③산업별 취업자 ④실업률은 보조(2%대 저변동) — 청년고용률·확장지표 병행
 const KR_EMP = { id: 'kr_emp', name: '고용상황',
-                 ids: ['kr_emp_total', 'kr_emp_age', 'kr_emp_industry', 'kr_emp_inactive'] };
+                 ids: ['kr_emp_total', 'kr_emp_age', 'kr_emp_industry', 'kr_emp_inactive',
+                       'kr_emp_total_sa', 'kr_emp_age_sa'] };
+// 계열 선택. 'raw' = 원계열, 'sa' = 계절조정(기본).
+// 원계열 6월 고용률은 계절적으로 연평균보다 +0.8%p 높아, 통계청 발표(계절조정)와 어긋나 보인다.
+// 산업별·직업별은 KOSIS가 계절조정으로만 주므로 스위치와 무관하게 항상 계절조정이다.
+let krSA = 'sa';
+// 계절조정 모드에서 실제로 어떤 계열을 쓸지. 계절조정 데이터가 없으면 원계열로 폴백한다.
+const krPick = (sa, raw) => (krSA === 'sa' && krEmpData[sa]) ? sa : raw;
 let krEmpData = null, krEmpTab = 'main', krEmpCharts = [null, null, null, null];
 let krEmpSel = null, krEmpTrend = 12;        // 추세 계산 창(개월)
 let krIndSel = null, krIndCharts = [null, null];
 
 async function enterKrEmp() {
-  const [tot, age, ind, inact] = await Promise.all(KR_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  const [tot, age, ind, inact, totSa, ageSa] = await Promise.all(KR_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
   if (!tot && !age) { alert('고용 데이터가 없습니다. python fetch.py kr_emp_total kr_emp_age 실행 필요.'); return; }
-  krEmpData = { tot, age, ind, inact };
+  krEmpData = { tot, age, ind, inact, totSa, ageSa };
+  if (!totSa && !ageSa) krSA = 'raw';           // 계절조정 데이터가 전혀 없으면 원계열로만
   current = { id: KR_EMP.id, name: KR_EMP.name, freq: 'M', unit: '천명·%',
               updated_at: (tot || age).updated_at, series: [] };
   view = 'kremp'; krEmpTab = 'main';
@@ -2937,7 +3077,7 @@ async function enterKrEmp() {
     document.getElementById('krEmpTabs').dataset.bound = '1';
   }
   const ds = new Set();
-  [tot, age, ind, inact].filter(Boolean).forEach(x => x.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  [tot, age, ind, inact, totSa, ageSa].filter(Boolean).forEach(x => x.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -2958,6 +3098,44 @@ function krMap(which, name) {
   const s = krSer(which, name);
   return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map();
 }
+// 원계열 표와 계절조정 표의 분류명 표기가 달라(‘15 - 64세’ / ‘15~64세’, ‘인구’ / ‘15세이상인구’)
+// 공백·물결·하이픈을 지우고 별칭까지 대조한다.
+const krNorm = s => String(s).replace(/[\s~-]/g, '');
+const KR_ALIAS = {
+  '15세이상전체': ['15세이상', '계', '전체'],
+  '인구': ['15세이상인구'],
+  '15세이상인구': ['인구'],
+};
+const krAlts = s => { const n = krNorm(s); return [n, ...(KR_ALIAS[n] || []).map(krNorm)]; };
+
+// '<분류> · <항목>' 형태를 분류·항목 각각 별칭까지 비교해 찾는다.
+function krFind(which, name) {
+  const ind = krEmpData[which];
+  if (!ind) return new Map();
+  const parts = name.split('·').map(x => x.trim());
+  const A = krAlts(parts[0]), B = parts[1] ? krAlts(parts[1]) : null;
+  const s = ind.series.find(x => {
+    const p = baseName(x.name).split('·').map(y => y.trim());
+    if (!A.includes(krNorm(p[0]))) return false;
+    return B ? (p[1] != null && B.includes(krNorm(p[1]))) : true;
+  });
+  return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map();
+}
+// 연령별 조회. 계절조정 표는 연령 구간이 8개뿐이라 없는 항목(예: 15~29세)이 생긴다.
+// 항목마다 계절조정이 있으면 그걸 쓰고, 없으면 원계열로 폴백해 [맵, 원계열여부]를 돌려준다.
+// 계절조정 연령별 표에는 '15세 이상 전체'가 없다(15~19·15~29·15~64·20대…60세이상 8개뿐).
+// 그래서 계절조정 총괄표(kr_emp_total_sa 의 '계')까지 순서대로 찾아본다.
+function krAge(name) {
+  if (krSA === 'sa') {
+    for (const src of ['ageSa', 'totSa']) {
+      if (!krEmpData[src]) continue;
+      const m = krFind(src, name);
+      if (m.size) return [m, false];
+    }
+  }
+  return [krFind('age', name), krSA === 'sa'];
+}
+const KR_RAW_TAG = ' <span style="color:#c0392b;font-weight:400">(원계열)</span>';
 
 function renderKrEmp() {
   document.querySelectorAll('#krEmpTabs button').forEach(b => b.classList.toggle('active', b.dataset.ke === krEmpTab));
@@ -3035,12 +3213,13 @@ function renderKrEmpMain() {
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
-  const emp = krMap('tot', '계 · 취업자');
-  const emp1564 = krMap('age', '15 - 64세 · 취업자');
-  const er1564 = krMap('age', '15 - 64세 · 고용률');
-  const erAll = krMap('tot', '계 · 고용률');
-  const erYouth = krMap('age', '15 - 29세 · 고용률');
-  const ur = krMap('tot', '계 · 실업률'), pr = krMap('tot', '계 · 경제활동참가율');
+  const TOT = krPick('totSa', 'tot');
+  const emp = krMap(TOT, '계 · 취업자');
+  const [emp1564, rw1] = krAge('15 - 64세 · 취업자');
+  const [er1564, rw2] = krAge('15 - 64세 · 고용률');
+  const erAll = krMap(TOT, '계 · 고용률');
+  const [erYouth, rw3] = krAge('15 - 29세 · 고용률');
+  const ur = krMap(TOT, '계 · 실업률'), pr = krMap(TOT, '계 · 경제활동참가율');
   const lvl = (m, d) => m.get(d) ?? null;
   const yoyDiff = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
   // 추세: 취업자 전년동월 증감의 후행 N개월 이동평균 (한은식 '추세 취업자수 증가규모' 근사)
@@ -3054,7 +3233,26 @@ function renderKrEmpMain() {
     return n ? s / n : null;
   };
 
+  const hasSa = !!(krEmpData.totSa || krEmpData.ageSa);
   let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">계열: </span><div class="mode" id="krSaBtns">'
+    + [['sa', '계절조정'], ['raw', '원계열']].map(([v, t]) =>
+        `<button data-ks="${v}" class="${krSA === v ? 'active' : ''}"${v === 'sa' && !hasSa ? ' disabled' : ''}>${t}</button>`).join('')
+    + '</div>'
+    + (krSA === 'sa'
+        ? '<span style="font-size:12px;color:#8592a3">통계청 공표 기준 — 고용률·실업률은 이 값으로 비교하세요</span>'
+        : '<span style="font-size:12px;color:#c0392b">⚠ 원계열은 계절성이 남아 있습니다. 6월 고용률은 계절적으로 연평균보다 <b>+0.8%p</b> 높아, '
+          + '통계청 공표치(계절조정)보다 커 보입니다.</span>')
+    + '</div>'
+    + (krSA === 'sa' && !krEmpData.ageSa
+        ? '<div style="padding:9px 12px;background:#fffaf0;border-left:3px solid #e8930c;border-radius:6px;'
+          + 'font-size:12px;color:#7a5a12;line-height:1.7;margin-bottom:8px">'
+          + '※ <b>연령별만 원계열</b>입니다 — 계절조정 연령별 데이터가 아직 없습니다. '
+          + '<b>python fetch.py kr_emp_age_sa</b> 를 실행하면 자동으로 계절조정으로 바뀝니다. '
+          + '(표 ID를 DT_1DA9002S로 추정했는데, 오류가 나면 KOSIS의 "연령별 경제활동인구 총괄(계절조정)" '
+          + 'URL을 알려주세요.)</div>'
+        : '')
+    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
     + '<span style="font-size:12px;color:#555">추세 기준: </span><div class="mode" id="krTrendBtns">'
     + [[12, '12개월'], [24, '24개월'], [36, '36개월']].map(([v, t]) =>
         `<button data-kt="${v}" class="${krEmpTrend === v ? 'active' : ''}">${t}</button>`).join('')
@@ -3076,27 +3274,46 @@ function renderKrEmpMain() {
   };
   const k0 = v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
   const p1 = v => v.toFixed(1);
-  const pop1564 = krMap('age', '15 - 64세 · 인구');
+  const [pop1564, rw4] = krAge('15 - 64세 · 인구');
+  // 항목별로 원계열로 폴백된 행만 표시 (계절조정 모드에서 계열이 섞이는 걸 막는다)
+  const tg = r => r ? KR_RAW_TAG : '';
+  const momDiff = (m, d) => { const p = prevN(d, 1); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
+  // 계절조정에서만 전월비가 의미를 갖는다. 원계열 전월비는 계절성 그 자체라 표시하지 않는다.
+  if (krSA === 'sa') {
+    out += tbl('취업자 수준과 전월 증감 (천명, 계절조정)', [
+      ['취업자 (수준)', d => lvl(emp, d), 'lv0 sep-solid'],
+      ['취업자 전월 증감', d => momDiff(emp, d), 'lv1'],
+      ['15~64세 취업자 (수준)' + tg(rw1), d => lvl(emp1564, d), 'lv1'],
+      ['15~64세 취업자 전월 증감' + tg(rw1), d => momDiff(emp1564, d), 'lv2'],
+    ], k0);
+    out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">전월비는 <b>계절조정에서만</b> 의미가 있습니다. '
+      + '아래 전년동월 증감과 부호가 다를 수 있습니다 — 최근 흐름은 전월비, 구조적 방향은 전년동월비로 보세요.</div>';
+  }
   out += tbl('취업자 증감 (전년동월, 천명)', [
     ['취업자 증감', d => yoyDiff(emp, d), 'lv0 sep-solid'],
     [`추세 (${krEmpTrend}개월 평균)`, d => trend(emp, d)],
-    ['15~64세 취업자 증감', d => yoyDiff(emp1564, d)],
-    ['· 15~64세 인구 증감 (참고)', d => yoyDiff(pop1564, d)],
+    ['15~64세 취업자 증감' + tg(rw1), d => yoyDiff(emp1564, d)],
+    ['· 15~64세 인구 증감 (참고)' + tg(rw4), d => yoyDiff(pop1564, d)],
   ], k0);
-  out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">※ 15~64세 취업자 증감이 마이너스인 것은 <b>생산가능인구가 연 30만명대 감소</b>하기 때문입니다. '
-    + '같은 기간 15~64세 <b>고용률은 사상 최고 수준(70%대)</b>이므로, 수(數)보다 <b>고용률·추세 대비 위치</b>로 판단해야 합니다.</div>';
-  out += tbl('고용률 (%)', [
-    ['15~64세 고용률 ★', d => lvl(er1564, d), 'lv0 sep-solid'],
+  out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">※ 15~64세 취업자 <b>전년동월</b> 증감이 마이너스인 것은 <b>생산가능인구가 연 34만명 감소</b>하기 때문입니다. '
+    + '같은 기간 15~64세 <b>고용률은 70%대로 사상 최고 수준</b>이므로, 수(數)보다 <b>고용률·추세 대비 위치</b>로 판단해야 합니다. '
+    + '실제로 최근에도 전월비는 <b>플러스</b>인데 전년동월비는 마이너스인 달이 있습니다.</div>';
+  out += tbl(`고용률 (%) — ${krSA === 'sa' ? '계절조정' : '원계열'}`, [
+    ['15~64세 고용률 ★' + tg(rw2), d => lvl(er1564, d), 'lv0 sep-solid'],
     ['15세이상 고용률', d => lvl(erAll, d)],
-    ['청년(15~29세) 고용률', d => lvl(erYouth, d)],
+    ['청년(15~29세) 고용률' + tg(rw3), d => lvl(erYouth, d)],
   ], p1);
-  out += tbl('실업률·참가율 (%)', [
+  out += tbl(`실업률·참가율 (%) — ${krSA === 'sa' ? '계절조정' : '원계열'}`, [
     ['실업률', d => lvl(ur, d), 'lv0 sep-solid'],
     ['경제활동참가율', d => lvl(pr, d)],
   ], p1);
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#krTrendBtns button').forEach(b => b.onclick = () => { krEmpTrend = +b.dataset.kt; renderKrEmp(); });
+  box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
+    if (b.disabled) return; krSA = b.dataset.ks; renderKrEmp();
+  });
 
   const mk = (i, title, datasets, opts) => {
     if (krEmpCharts[i]) { krEmpCharts[i].destroy(); krEmpCharts[i] = null; }
@@ -3126,7 +3343,7 @@ function renderKrEmpMain() {
 // 연령별: 연령계층 × 지표 트리
 function renderKrEmpAge() {
   const box = document.getElementById('retailWrap');
-  const ind = krEmpData.age;
+  const ind = krEmpData.age || krEmpData.ageSa;
   if (!ind) { box.innerHTML = '<div style="padding:24px;color:#888">연령별 데이터가 없습니다. <b>python fetch.py kr_emp_age</b> 실행 필요.</div>'; return; }
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((d, i) => [d, i]));
@@ -3134,8 +3351,25 @@ function renderKrEmpAge() {
   const AGES = ['15세 이상 전체', '15 - 64세', '15 - 29세', '20 - 29세', '30 - 39세', '40 - 49세', '50 - 59세', '60세이상'];
   const METRICS = [['고용률', '%'], ['실업률', '%'], ['경제활동참가율', '%'], ['취업자', '천명']];
   if (krEmpSel === null) krEmpSel = new Set(['15 - 64세', '15 - 29세']);
-  const M = (age, met) => krMap('age', `${age} · ${met}`);
-  let out = '<div style="font-size:12px;color:#8592a3;margin-bottom:8px">연령 이름을 <b>클릭</b>하면 차트에 추가/제거됩니다. ★ 15~64세는 한국은행이 중시하는 핵심 고용률.</div>'
+  // 연령×지표마다 계절조정이 있으면 그걸, 없으면 원계열을 쓴다. 폴백된 연령은 라벨에 표시.
+  const M = (age, met) => krAge(`${age} · ${met}`)[0];
+  const isRaw = age => krAge(`${age} · 고용률`)[1];
+  const rawAges = AGES.filter(isRaw);
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">계열: </span><div class="mode" id="krSaBtns">'
+    + [['sa', '계절조정'], ['raw', '원계열']].map(([v, t]) =>
+        `<button data-ks="${v}" class="${krSA === v ? 'active' : ''}"${v === 'sa' && !krEmpData.ageSa ? ' disabled' : ''}>${t}</button>`).join('')
+    + '</div>'
+    + (krSA !== 'sa'
+        ? '<span style="font-size:12px;color:#c0392b">전 항목 <b>원계열</b> — 계절성이 남아 있습니다</span>'
+        : !krEmpData.ageSa
+          ? '<span style="font-size:12px;color:#c0392b">계절조정 연령별 데이터가 없어 원계열로 표시합니다. '
+            + '<b>python fetch.py kr_emp_age_sa</b> 실행 필요.</span>'
+          : rawAges.length
+            ? `<span style="font-size:12px;color:#c0392b">계절조정 표에 없는 연령은 원계열입니다: <b>${rawAges.join(', ')}</b></span>`
+            : '<span style="font-size:12px;color:#8592a3">전 항목 <b>계절조정</b> (통계청 공표 기준)</span>')
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:8px">연령 이름을 <b>클릭</b>하면 차트에 추가/제거됩니다. ★ 15~64세는 한국은행이 중시하는 핵심 고용률.</div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krA${i}"></canvas></div></div>`).join('')
     + '</div>';
@@ -3147,7 +3381,8 @@ function renderKrEmpAge() {
       if (!m.size) return;
       const sel = krEmpSel.has(age) ? '● ' : '';
       const star = age === '15 - 64세' ? ' ★' : '';
-      out += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}"><td data-kra="${age}" style="cursor:pointer">${sel}${age}${star}</td>`
+      const rt = (krSA === 'sa' && krAge(`${age} · ${met}`)[1]) ? KR_RAW_TAG : '';
+      out += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}"><td data-kra="${age}" style="cursor:pointer">${sel}${age}${star}${rt}</td>`
         + cols.map(d => { const v = m.get(d) ?? null;
           return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: unit === '%' ? 1 : 0 })}</td>`; }).join('') + '</tr>';
     });
@@ -3155,6 +3390,9 @@ function renderKrEmpAge() {
   });
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
+    if (b.disabled) return; krSA = b.dataset.ks; renderKrEmp();
+  });
   box.querySelectorAll('[data-kra]').forEach(td => td.onclick = () => {
     const a = td.dataset.kra; krEmpSel.has(a) ? krEmpSel.delete(a) : krEmpSel.add(a); renderKrEmp();
   });
@@ -3193,24 +3431,29 @@ function renderKrEmpDetail() {
   // 활동상태별: '쉬었음'이 별도 항목이면 그것, 없으면 '그외'(쉬었음 포함 계열)로 대체
   const rest = iMap('쉬었음').size ? iMap('쉬었음') : iMap('그외');
   const restLabel = iMap('쉬었음').size ? '· 쉬었음 ★' : '· 그외(쉬었음 포함) ★';
+  // 총괄 4행은 계열 스위치를 따르지만, 활동상태별(육아·가사·쉬었음 등)은 KOSIS에 계절조정이
+  // 없어 항상 원계열이다. 계절조정 모드에서 섞이면 헷갈리므로 하위 행에 표시를 붙인다.
+  const TOT = krPick('totSa', 'tot');
+  const iTag = (krSA === 'sa' && TOT === 'totSa')
+    ? ' <span style="color:#c0392b;font-weight:400">(원계열)</span>' : '';
   const rows = [
-    ['15세이상 인구', krMap('tot', '계 · 15세이상인구'), 'lv0 sep-solid'],
-    ['경제활동인구', krMap('tot', '계 · 경제활동인구'), 'lv1'],
-    ['· 취업자', krMap('tot', '계 · 취업자'), 'lv2'],
-    ['· 실업자', krMap('tot', '계 · 실업자'), 'lv2'],
-    ['비경제활동인구', krMap('tot', '계 · 비경제활동인구'), 'lv1'],
-    [restLabel, rest, 'lv2'],
-    ['· 취업준비', iMap('취업준비'), 'lv2'],
-    ['· 육아', iMap('육아'), 'lv2'],
-    ['· 가사', iMap('가사'), 'lv2'],
-    ['· 통학', iMap('통학'), 'lv2'],
-    ['· 연로', iMap('연로'), 'lv2'],
-    ['· 심신장애', iMap('심신장애'), 'lv2'],
+    ['15세이상 인구', krMap(TOT, '계 · 15세이상인구'), 'lv0 sep-solid'],
+    ['경제활동인구', krMap(TOT, '계 · 경제활동인구'), 'lv1'],
+    ['· 취업자', krMap(TOT, '계 · 취업자'), 'lv2'],
+    ['· 실업자', krMap(TOT, '계 · 실업자'), 'lv2'],
+    ['비경제활동인구', krMap(TOT, '계 · 비경제활동인구'), 'lv1'],
+    [restLabel + iTag, rest, 'lv2'],
+    ['· 취업준비' + iTag, iMap('취업준비'), 'lv2'],
+    ['· 육아' + iTag, iMap('육아'), 'lv2'],
+    ['· 가사' + iTag, iMap('가사'), 'lv2'],
+    ['· 통학' + iTag, iMap('통학'), 'lv2'],
+    ['· 연로' + iTag, iMap('연로'), 'lv2'],
+    ['· 심신장애' + iTag, iMap('심신장애'), 'lv2'],
   ].filter(r => r[1] && r[1].size);
   const yoyDiff = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
   // 활동상태별 표의 '계'가 총괄 비경활과 다르면 범위가 다른 표 → 경고 표시
   const iTot = iMap('계'), lastD = cols.length ? cols[cols.length - 1] : null;
-  const iSum = lastD ? iTot.get(lastD) : null, tSum = lastD ? krMap('tot', '계 · 비경제활동인구').get(lastD) : null;
+  const iSum = lastD ? iTot.get(lastD) : null, tSum = lastD ? krMap(TOT, '계 · 비경제활동인구').get(lastD) : null;
   const scopeWarn = (iSum != null && tSum != null && Math.abs(iSum - tSum) > 100)
     ? `<div style="font-size:12px;color:#c0392b;margin-bottom:8px">⚠ 활동상태별 표의 계(${iSum.toLocaleString('ko-KR')}천명)가 총괄 비경제활동인구(${tSum.toLocaleString('ko-KR')}천명)와 달라 <b>범위가 다른 통계표</b>입니다. '
       + '순수 「쉬었음」 계열이 아니므로 수준 해석에 주의하세요(추세만 참고).</div>` : '';
@@ -3249,8 +3492,8 @@ function renderKrEmpDetail() {
   };
   const ln2 = (label, m, col, fn) => ({ label, data: cols.map(d => (fn || yoyDiff)(m, d)), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true });
   mkD(0, '취업자 vs 비경제활동인구 전년동월 증감 (천명)', [
-    ln2('취업자 증감', krMap('tot', '계 · 취업자'), PALETTE[0]),
-    ln2('비경제활동인구 증감', krMap('tot', '계 · 비경제활동인구'), PALETTE[3]),
+    ln2('취업자 증감', krMap(TOT, '계 · 취업자'), PALETTE[0]),
+    ln2('비경제활동인구 증감', krMap(TOT, '계 · 비경제활동인구'), PALETTE[3]),
   ]);
   const rl = restLabel.replace('· ', '').replace(' ★', '');
   mkD(1, `${rl} · 취업준비 (천명, 수준)`, [
@@ -5538,11 +5781,13 @@ document.getElementById('endSel').onchange = e => {
         nav.appendChild(h); usInserted = true;
       }
       if (item.id === PPI.src) {   // 생산자물가 → 종합 페이지 하나로
+        if (!navOn('ppi')) return;
         const b = document.createElement('button');
         b.id = 'ppiBtn'; b.textContent = PPI.name; b.onclick = enterPpi;
         nav.appendChild(b); return;
       }
       if (item.id === FUND.id) {   // 자금흐름 → 히트맵 페이지
+        if (!navOn('fund')) return;
         const b = document.createElement('button');
         b.id = 'fundBtn'; b.textContent = FUND.name; b.onclick = enterFundFlow;
         nav.appendChild(b); return;
@@ -5564,7 +5809,7 @@ document.getElementById('endSel').onchange = e => {
         return;
       }
       if (RETAIL.ids.includes(item.id)) {   // 소매판매 2종 → "소매판매" 하나로
-        if (!retInserted) {
+        if (!retInserted && navOn('retail')) {
           const b = document.createElement('button');
           b.id = 'retailBtn'; b.textContent = RETAIL.name; b.onclick = enterRetail;
           nav.appendChild(b); retInserted = true;
@@ -5585,7 +5830,7 @@ document.getElementById('endSel').onchange = e => {
       }
       if (APT_COMBO.ids.includes(item.id)) {
         // 부동산 3개 지표는 종합 메뉴 하나로 묶어서 표시
-        if (!comboInserted) {
+        if (!comboInserted && navOn('apt')) {
           const btn = document.createElement('button');
           btn.id = 'aptComboBtn';
           btn.textContent = APT_COMBO.name;
@@ -5605,15 +5850,19 @@ document.getElementById('endSel').onchange = e => {
     const ppiB = document.getElementById('ppiBtn'), retB = document.getElementById('retailBtn');
     if (ppiB && retB) nav.insertBefore(ppiB, retB);
     // 금리 분해 (인포맥스 금리 기반) — 미국 섹션 앞에 배치
-    const yBtn = document.createElement('button');
-    yBtn.id = 'yieldBtn'; yBtn.textContent = YIELD.name; yBtn.onclick = enterYield;
-    const usHdr0 = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
-    if (usHdr0) nav.insertBefore(yBtn, usHdr0); else nav.appendChild(yBtn);
+    if (navOn('yield')) {
+      const yBtn = document.createElement('button');
+      yBtn.id = 'yieldBtn'; yBtn.textContent = YIELD.name; yBtn.onclick = enterYield;
+      const usHdr0 = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
+      if (usHdr0) nav.insertBefore(yBtn, usHdr0); else nav.appendChild(yBtn);
+    }
     // 테일러 준칙 (한국 지표 기반 계산 뷰) — 미국 섹션 앞에 배치
-    const tyBtn = document.createElement('button');
-    tyBtn.id = 'taylorBtn'; tyBtn.textContent = TAYLOR.name; tyBtn.onclick = enterTaylor;
-    const usHdr = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
-    if (usHdr) nav.insertBefore(tyBtn, usHdr); else nav.appendChild(tyBtn);
+    if (navOn('taylor')) {
+      const tyBtn = document.createElement('button');
+      tyBtn.id = 'taylorBtn'; tyBtn.textContent = TAYLOR.name; tyBtn.onclick = enterTaylor;
+      const usHdr = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
+      if (usHdr) nav.insertBefore(tyBtn, usHdr); else nav.appendChild(tyBtn);
+    }
     // 지표 비교 메뉴 (구분선 + 버튼)
     const hr = document.createElement('div');
     hr.style.cssText = 'border-top:1px solid #e0e4ea;margin:10px 0';

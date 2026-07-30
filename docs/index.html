@@ -3048,7 +3048,7 @@ function taylorHelpHTML() {
 // ③산업별 취업자 ④실업률은 보조(2%대 저변동) — 청년고용률·확장지표 병행
 const KR_EMP = { id: 'kr_emp', name: '고용상황',
                  ids: ['kr_emp_total', 'kr_emp_age', 'kr_emp_industry', 'kr_emp_inactive',
-                       'kr_emp_total_sa', 'kr_emp_age_sa'] };
+                       'kr_emp_total_sa', 'kr_emp_age_sa', 'kr_emp_supp'] };
 // 계열 선택. 'raw' = 원계열, 'sa' = 계절조정(기본).
 // 원계열 6월 고용률은 계절적으로 연평균보다 +0.8%p 높아, 통계청 발표(계절조정)와 어긋나 보인다.
 // 산업별·직업별은 KOSIS가 계절조정으로만 주므로 스위치와 무관하게 항상 계절조정이다.
@@ -3056,13 +3056,13 @@ let krSA = 'sa';
 // 계절조정 모드에서 실제로 어떤 계열을 쓸지. 계절조정 데이터가 없으면 원계열로 폴백한다.
 const krPick = (sa, raw) => (krSA === 'sa' && krEmpData[sa]) ? sa : raw;
 let krEmpData = null, krEmpTab = 'main', krEmpCharts = [null, null, null, null];
-let krEmpSel = null, krEmpTrend = 12;        // 추세 계산 창(개월)
+let krEmpSel = null, krPopSel = null;   // 연령 선택 · 인구구조 차트 계열 선택
 let krIndSel = null, krIndCharts = [null, null];
 
 async function enterKrEmp() {
-  const [tot, age, ind, inact, totSa, ageSa] = await Promise.all(KR_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  const [tot, age, ind, inact, totSa, ageSa, supp] = await Promise.all(KR_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
   if (!tot && !age) { alert('고용 데이터가 없습니다. python fetch.py kr_emp_total kr_emp_age 실행 필요.'); return; }
-  krEmpData = { tot, age, ind, inact, totSa, ageSa };
+  krEmpData = { tot, age, ind, inact, totSa, ageSa, supp };
   if (!totSa && !ageSa) krSA = 'raw';           // 계절조정 데이터가 전혀 없으면 원계열로만
   current = { id: KR_EMP.id, name: KR_EMP.name, freq: 'M', unit: '천명·%',
               updated_at: (tot || age).updated_at, series: [] };
@@ -3077,7 +3077,8 @@ async function enterKrEmp() {
     document.getElementById('krEmpTabs').dataset.bound = '1';
   }
   const ds = new Set();
-  [tot, age, ind, inact, totSa, ageSa].filter(Boolean).forEach(x => x.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  [tot, age, ind, inact, totSa, ageSa, supp].filter(Boolean)
+    .forEach(x => x.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -3213,52 +3214,54 @@ function renderKrEmpMain() {
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
-  const TOT = krPick('totSa', 'tot');
+  // 종합탭은 계절조정 전용 (원계열은 계절성 때문에 전월비 해석이 불가능하다).
+  // 계절조정 총괄이 없으면 어쩔 수 없이 원계열로 내려가고, 그 사실을 화면에 알린다.
+  const TOT = krEmpData.totSa ? 'totSa' : 'tot';
+  const saMissing = !krEmpData.totSa;
   const emp = krMap(TOT, '계 · 취업자');
-  const [emp1564, rw1] = krAge('15 - 64세 · 취업자');
-  const [er1564, rw2] = krAge('15 - 64세 · 고용률');
+  const pop = krMap(TOT, '계 · 15세이상인구');
+  const lf = krMap(TOT, '계 · 경제활동인구');
+  const unemp = krMap(TOT, '계 · 실업자');
   const erAll = krMap(TOT, '계 · 고용률');
-  const [erYouth, rw3] = krAge('15 - 29세 · 고용률');
   const ur = krMap(TOT, '계 · 실업률'), pr = krMap(TOT, '계 · 경제활동참가율');
+  // 고용보조지표3 = 확장실업률 (미국 U-6 대응). 계절조정 미공표 → 항상 원계열.
+  const u6 = (() => {
+    const s = krEmpData.supp;
+    if (!s) return new Map();
+    const f = s.series.find(x => /보조지표\s*3|고용보조지표3/.test(baseName(x.name)))
+           || s.series.find(x => /확장실업/.test(baseName(x.name)));
+    return f ? new Map(f.data.map(p => [p.d, p.v])) : new Map();
+  })();
   const lvl = (m, d) => m.get(d) ?? null;
-  const yoyDiff = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
-  // 추세: 취업자 전년동월 증감의 후행 N개월 이동평균 (한은식 '추세 취업자수 증가규모' 근사)
-  const trend = (m, d) => {
-    const i = idx.get(d); if (i == null) return null;
-    let s = 0, n = 0;
-    for (let k = 0; k < krEmpTrend; k++) {
-      const dd = periodDates[i - k]; if (!dd) break;
-      const v = yoyDiff(m, dd); if (v != null) { s += v; n++; }
-    }
-    return n ? s / n : null;
-  };
+  const momDiff = (m, d) => { const p = prevN(d, 1); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
 
-  const hasSa = !!(krEmpData.totSa || krEmpData.ageSa);
-  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
-    + '<span style="font-size:12px;color:#555">계열: </span><div class="mode" id="krSaBtns">'
-    + [['sa', '계절조정'], ['raw', '원계열']].map(([v, t]) =>
-        `<button data-ks="${v}" class="${krSA === v ? 'active' : ''}"${v === 'sa' && !hasSa ? ' disabled' : ''}>${t}</button>`).join('')
-    + '</div>'
-    + (krSA === 'sa'
-        ? '<span style="font-size:12px;color:#8592a3">통계청 공표 기준 — 고용률·실업률은 이 값으로 비교하세요</span>'
-        : '<span style="font-size:12px;color:#c0392b">⚠ 원계열은 계절성이 남아 있습니다. 6월 고용률은 계절적으로 연평균보다 <b>+0.8%p</b> 높아, '
-          + '통계청 공표치(계절조정)보다 커 보입니다.</span>')
-    + '</div>'
-    + (krSA === 'sa' && !krEmpData.ageSa
-        ? '<div style="padding:9px 12px;background:#fffaf0;border-left:3px solid #e8930c;border-radius:6px;'
-          + 'font-size:12px;color:#7a5a12;line-height:1.7;margin-bottom:8px">'
-          + '※ <b>연령별만 원계열</b>입니다 — 계절조정 연령별 데이터가 아직 없습니다. '
-          + '<b>python fetch.py kr_emp_age_sa</b> 를 실행하면 자동으로 계절조정으로 바뀝니다. '
-          + '(표 ID를 DT_1DA9002S로 추정했는데, 오류가 나면 KOSIS의 "연령별 경제활동인구 총괄(계절조정)" '
-          + 'URL을 알려주세요.)</div>'
-        : '')
-    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
-    + '<span style="font-size:12px;color:#555">추세 기준: </span><div class="mode" id="krTrendBtns">'
-    + [[12, '12개월'], [24, '24개월'], [36, '36개월']].map(([v, t]) =>
-        `<button data-kt="${v}" class="${krEmpTrend === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><span style="font-size:12px;color:#8592a3">취업자 증감이 추세선 위면 호조 · 아래면 부진 (한은 평가 방식)</span></div>'
+  // 인구 구조 차트에 올릴 계열 선택 (수준 차이가 커서 함께 그리면 안 보인다 → 선택식 + Y축 자동)
+  const POPSER = [
+    ['pop', '15세 이상 인구', pop, '#1a2b4a'],
+    ['lf', '경제활동인구', lf, PALETTE[0]],
+    ['emp', '취업자', emp, PALETTE[2]],
+    ['unemp', '실업자', unemp, PALETTE[1]],
+  ];
+  if (krPopSel === null) krPopSel = new Set(['emp']);
+  if (!krPopSel.size) krPopSel = new Set(['emp']);        // 전부 해제되면 취업자로 복귀
+
+  let out = (saMissing
+      ? '<div style="padding:9px 12px;background:#fdf3f2;border-left:3px solid #c0392b;border-radius:6px;'
+        + 'font-size:12px;color:#8a2b22;line-height:1.7;margin-bottom:10px">'
+        + '⚠ 계절조정 총괄 데이터가 없어 <b>원계열</b>로 표시 중입니다 — '
+        + '<b>python fetch.py kr_emp_total_sa</b> 실행 필요. 원계열 전월비는 계절성 그 자체라 해석할 수 없습니다.</div>'
+      : '<div style="font-size:12px;color:#8592a3;margin-bottom:10px">'
+        + '전 항목 <b>계절조정</b> (통계청 공표 기준). 전월 증감으로 최근 흐름을 봅니다.</div>')
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:6px">'
-    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krE${i}"></canvas></div></div>`).join('')
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krE${i}"></canvas></div>`
+        + (i === 1
+            ? '<div id="krPopSel" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px">'
+              + POPSER.map(([k, nm, m, c]) =>
+                  `<button class="mini-btn${krPopSel.has(k) ? ' on' : ''}" data-kp="${k}"${m.size ? '' : ' disabled'}>${nm}</button>`).join('')
+              + '</div>'
+            : '')
+        + '</div>').join('')
     + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [2, 3].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krE${i}"></canvas></div></div>`).join('')
     + '</div>';
@@ -3274,70 +3277,126 @@ function renderKrEmpMain() {
   };
   const k0 = v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
   const p1 = v => v.toFixed(1);
-  const [pop1564, rw4] = krAge('15 - 64세 · 인구');
-  // 항목별로 원계열로 폴백된 행만 표시 (계절조정 모드에서 계열이 섞이는 걸 막는다)
-  const tg = r => r ? KR_RAW_TAG : '';
-  const momDiff = (m, d) => { const p = prevN(d, 1); if (!p) return null;
-    const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
-  // 계절조정에서만 전월비가 의미를 갖는다. 원계열 전월비는 계절성 그 자체라 표시하지 않는다.
-  if (krSA === 'sa') {
-    out += tbl('취업자 수준과 전월 증감 (천명, 계절조정)', [
-      ['취업자 (수준)', d => lvl(emp, d), 'lv0 sep-solid'],
-      ['취업자 전월 증감', d => momDiff(emp, d), 'lv1'],
-      ['15~64세 취업자 (수준)' + tg(rw1), d => lvl(emp1564, d), 'lv1'],
-      ['15~64세 취업자 전월 증감' + tg(rw1), d => momDiff(emp1564, d), 'lv2'],
-    ], k0);
-    out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">전월비는 <b>계절조정에서만</b> 의미가 있습니다. '
-      + '아래 전년동월 증감과 부호가 다를 수 있습니다 — 최근 흐름은 전월비, 구조적 방향은 전년동월비로 보세요.</div>';
-  }
-  out += tbl('취업자 증감 (전년동월, 천명)', [
-    ['취업자 증감', d => yoyDiff(emp, d), 'lv0 sep-solid'],
-    [`추세 (${krEmpTrend}개월 평균)`, d => trend(emp, d)],
-    ['15~64세 취업자 증감' + tg(rw1), d => yoyDiff(emp1564, d)],
-    ['· 15~64세 인구 증감 (참고)' + tg(rw4), d => yoyDiff(pop1564, d)],
+  const SER = saMissing ? '원계열' : '계절조정';
+
+  out += tbl(`취업자 증감 (전월 증감, 천명, ${SER})`, [
+    ['취업자 전월 증감', d => momDiff(emp, d), 'lv0 sep-solid'],
   ], k0);
-  out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">※ 15~64세 취업자 <b>전년동월</b> 증감이 마이너스인 것은 <b>생산가능인구가 연 34만명 감소</b>하기 때문입니다. '
-    + '같은 기간 15~64세 <b>고용률은 70%대로 사상 최고 수준</b>이므로, 수(數)보다 <b>고용률·추세 대비 위치</b>로 판단해야 합니다. '
-    + '실제로 최근에도 전월비는 <b>플러스</b>인데 전년동월비는 마이너스인 달이 있습니다.</div>';
-  out += tbl(`고용률 (%) — ${krSA === 'sa' ? '계절조정' : '원계열'}`, [
-    ['15~64세 고용률 ★' + tg(rw2), d => lvl(er1564, d), 'lv0 sep-solid'],
-    ['15세이상 고용률', d => lvl(erAll, d)],
-    ['청년(15~29세) 고용률' + tg(rw3), d => lvl(erYouth, d)],
-  ], p1);
-  out += tbl(`실업률·참가율 (%) — ${krSA === 'sa' ? '계절조정' : '원계열'}`, [
-    ['실업률', d => lvl(ur, d), 'lv0 sep-solid'],
-    ['경제활동참가율', d => lvl(pr, d)],
-  ], p1);
+  out += tbl(`인구 구조 (천명, ${SER})`, [
+    ['15세 이상 인구', d => lvl(pop, d), 'lv0 sep-solid'],
+    ['  경제활동인구', d => lvl(lf, d), 'lv1'],
+    ['    취업자', d => lvl(emp, d), 'lv2'],
+    ['    실업자', d => lvl(unemp, d), 'lv2'],
+  ], k0);
+  const ratioRows = [
+    ['경제활동참가율', d => lvl(pr, d), 'lv0 sep-solid'],
+    ['고용률 (취업률)', d => lvl(erAll, d), 'lv1'],
+    ['실업률', d => lvl(ur, d), 'lv1'],
+  ];
+  if (u6.size) ratioRows.push(['확장실업률 (고용보조지표3, U-6 대응)' + KR_RAW_TAG, d => lvl(u6, d), 'lv1']);
+  out += tbl(`비율 (%, ${SER})`, ratioRows, p1);
+  if (!u6.size) {
+    out += '<div style="padding:9px 12px;background:#fffaf0;border-left:3px solid #e8930c;border-radius:6px;'
+      + 'font-size:12px;color:#7a5a12;line-height:1.7;margin-top:-6px;margin-bottom:12px">'
+      + '※ <b>확장실업률(고용보조지표3)</b> 데이터가 없습니다 — <b>python fetch.py kr_emp_supp</b> 실행 필요. '
+      + '미국 U-6에 대응하는 지표로, 실업자 + 시간관련 추가취업가능자 + 잠재경제활동인구를 확장경제활동인구로 나눈 값입니다.</div>';
+  } else {
+    out += '<div style="font-size:12px;color:#8592a3;margin:-6px 0 12px">'
+      + '<b>확장실업률(고용보조지표3)</b> = (실업자 + 시간관련 추가취업가능자 + 잠재경제활동인구) ÷ 확장경제활동인구. '
+      + '미국 U-6에 대응합니다. 통계청이 계절조정을 공표하지 않아 <b>원계열</b>입니다.</div>';
+  }
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
-  box.querySelectorAll('#krTrendBtns button').forEach(b => b.onclick = () => { krEmpTrend = +b.dataset.kt; renderKrEmp(); });
-  box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
-    if (b.disabled) return; krSA = b.dataset.ks; renderKrEmp();
+  box.querySelectorAll('#krPopSel button').forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    const k = b.dataset.kp;
+    krPopSel.has(k) ? krPopSel.delete(k) : krPopSel.add(k);
+    renderKrEmp();
   });
 
+  // 선택 계열의 실제 범위에 맞춰 Y축을 잡는다(0부터 시작하지 않음 → 변화가 보인다).
+  // 눈금 간격을 1·2·2.5·5×10ⁿ 중 하나로 고르고 구간 수를 DIV로 고정해,
+  // 차트들끼리 격자 간격과 개수가 같아지도록 한다.
+  const niceStep = raw => {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  };
+  const yFit = maps => {
+    let lo = Infinity, hi = -Infinity;
+    maps.forEach(m => cols.forEach(d => { const v = m.get(d); if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }));
+    if (!isFinite(lo)) return {};
+    const span = hi - lo || Math.abs(hi) || 1;
+    const pad = span * 0.18;
+    // 아래·위 목표선을 각각 눈금 격자에 '반올림'해서 붙인다 → 위아래 여백이 비슷해진다.
+    // (아래는 내림, 위는 고정폭을 더하는 방식이면 남는 여유가 전부 위로 몰린다)
+    let step = niceStep((span + 2 * pad) / 8);
+    let min = Math.round((lo - pad) / step) * step;
+    let max = Math.round((hi + pad) / step) * step;
+    while (min > lo) min -= step;                  // 데이터는 반드시 포함
+    while (max < hi) max += step;
+    for (let g = 0; g < 6 && (max - min) / step > 10; g++) {   // 눈금이 너무 촘촘하면 한 단계 키움
+      step = niceStep(step * 1.5);
+      min = Math.floor(min / step) * step;
+      max = Math.ceil(max / step) * step;
+    }
+    const dec = Math.max(0, -Math.floor(Math.log10(step)) + 1);
+    return { min: +min.toFixed(dec), max: +max.toFixed(dec), ticks: { stepSize: step } };
+  };
+  // x축은 항상 '25.07 형식. opts 로 scales/plugins 를 넘겨도 x 설정이 날아가지 않도록
+  // Object.assign(얕은 병합) 대신 scales·plugins 를 한 단계 더 병합한다.
+  const X_AXIS = { ticks: { maxTicksLimit: 10, autoSkip: true, maxRotation: 0, minRotation: 0,
+                            font: { size: 9 },
+                            callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
   const mk = (i, title, datasets, opts) => {
     if (krEmpCharts[i]) { krEmpCharts[i].destroy(); krEmpCharts[i] = null; }
+    const o = opts || {};
     krEmpCharts[i] = new Chart(box.querySelector('#krE' + i), {
       data: { labels: cols, datasets },
-      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false } }, o, {
+        plugins: Object.assign({
+          legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: title, font: { size: 12 } },
-          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}` } } },
-        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } }, opts || {}),
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}` } },
+        }, o.plugins || {}),
+        scales: Object.assign({ x: X_AXIS, y: { ticks: { font: { size: 10 } } } }, o.scales || {},
+                              { x: Object.assign({}, X_AXIS, (o.scales || {}).x || {}) }),
+      }),
     });
   };
   const ln = (label, fn, col, extra) => Object.assign({ type: 'line', label, data: cols.map(fn), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true }, extra || {});
-  mk(0, '취업자 전년동월 증감 vs 추세 (천명)', [
-    { type: 'bar', label: '취업자 증감', data: cols.map(d => yoyDiff(emp, d)), backgroundColor: PALETTE[0] + '99', order: 2 },
-    ln(`추세 (${krEmpTrend}M)`, d => trend(emp, d), '#1a2b4a', { order: 0, borderWidth: 2.5 }),
-  ]);
-  mk(1, '고용률 (%) — 15~64세 ★ · 전체 · 청년', [
-    ln('15~64세', d => lvl(er1564, d), PALETTE[2]),
-    ln('15세이상', d => lvl(erAll, d), PALETTE[5]),
-    ln('청년(15~29)', d => lvl(erYouth, d), PALETTE[3]),
-  ]);
-  mk(2, '실업률 (%)', [ln('실업률', d => lvl(ur, d), PALETTE[1])]);
-  mk(3, '경제활동참가율 (%)', [ln('참가율', d => lvl(pr, d), PALETTE[4])]);
+
+  // ① 취업자 전월 증감 — 증가는 빨강, 감소는 파랑 (국내 관행)
+  const momVals = cols.map(d => momDiff(emp, d));
+  mk(0, `취업자 전월 증감 (천명, ${SER})`, [
+    { type: 'bar', label: '전월 증감', data: momVals,
+      backgroundColor: momVals.map(v => v == null ? '#ccc' : (v >= 0 ? '#c0392bcc' : '#2c6fbfcc')) },
+  ], { plugins: { legend: { display: false }, title: { display: true, text: `취업자 전월 증감 (천명, ${SER})`, font: { size: 12 } },
+         tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+           label: it => ` 전월 증감: ${it.parsed.y == null ? '-' : (it.parsed.y >= 0 ? '+' : '') + it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}천명` } } },
+       scales: { y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#33333388' : '#eee' } } } });
+
+  // 2~4번 차트는 격자 간격·개수를 맞춘다 (yFit 이 stepSize 를 함께 돌려준다)
+  const yAxis = maps => { const f = yFit(maps);
+    return { min: f.min, max: f.max, ticks: Object.assign({ font: { size: 10 } }, f.ticks || {}) }; };
+
+  // ② 인구 구조 — 선택된 계열만, Y축은 그 범위에 맞춤
+  const picked = POPSER.filter(([k, , m]) => krPopSel.has(k) && m.size);
+  mk(1, `인구 구조 (천명, ${SER})`, picked.map(([, nm, m, c]) => ln(nm, d => lvl(m, d), c)),
+    { scales: { y: yAxis(picked.map(x => x[2])) } });
+
+  // ③ 경제활동참가율·고용률 — 두 계열 범위에 맞춰 확대
+  mk(2, '경제활동참가율 · 고용률 (%)', [
+    ln('경제활동참가율', d => lvl(pr, d), PALETTE[4]),
+    ln('고용률', d => lvl(erAll, d), PALETTE[2]),
+  ], { scales: { y: yAxis([pr, erAll]) } });
+
+  // ④ 실업률만
+  mk(3, '실업률 (%)', [ln('실업률', d => lvl(ur, d), PALETTE[1])],
+    { plugins: { legend: { display: false }, title: { display: true, text: '실업률 (%)', font: { size: 12 } } },
+      scales: { y: yAxis([ur]) } });
 }
 
 // 연령별: 연령계층 × 지표 트리

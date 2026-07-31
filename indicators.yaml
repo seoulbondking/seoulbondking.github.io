@@ -445,6 +445,43 @@ indicators:
       groups: ["국고채권", "통안증권", "회사채AA-(공모/무보증)", "회사채A-(공모/무보증)",
                "금융채 은행채 AAA", "CD AAA", "CP A1"]
 
+  # 스왑금리 (IRS·CRS) — 스왑베이시스·재정거래 유인 계산용
+  #   스왑베이시스 = CRS − IRS   (마이너스면 원화 조달 프리미엄)
+  #   재정거래 유인 = 통안(또는 국고) − CRS   (외국인이 CRS로 원화 조달해 채권 매입)
+  - id: kr_swap
+    name: 스왑금리 IRS·CRS (일별)
+    source: infomax
+    unit: '%'
+    freq: D
+    merge_always: true
+    params:
+      sheet: IRS_stack
+      header_row: 4
+
+  # 원/달러 현물환 (서울외환 기업용 스팟)
+  - id: kr_usdkrw
+    name: 원/달러 환율 (일별)
+    source: infomax
+    unit: 원
+    freq: D
+    merge_always: true
+    params:
+      sheet: 환율_raw
+      header_row: 5
+      rename:
+        중간값: 원/달러
+
+  # 크레딧 스프레드 (국고 대비, bp)
+  - id: kr_credit_spread
+    name: 크레딧 스프레드 (일별)
+    source: infomax
+    unit: bp
+    freq: D
+    merge_always: true
+    params:
+      sheet: 스프레드
+      header_row: 4
+
   # ACM 기간프리미엄 — kr_yield 를 입력으로 쓰는 파생 지표이므로 kr_yield 뒤에 둔다.
   # (외부 API 호출 없음. 매번 전체 재추정하므로 증분 설정 불필요)
   - id: kr_acm

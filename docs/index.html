@@ -163,16 +163,14 @@
         <button data-yt="curve">일드커브</button>
         <button data-yt="model">커브 모델</button>
         <button data-yt="acm">ACM 기간프리미엄</button>
+        <button data-yt="swap">스왑·차익거래</button>
         <button data-yt="spread">스프레드</button>
         <button data-yt="table">원자료</button>
       </div>
+      <!-- 탭을 접고 준칙 하나만 남김. 되살리려면 아래 주석을 풀고 renderTaylor 의 라우팅을 복구.
+           (실질정책금리·준칙3Y·확장준칙·설명 렌더 함수는 코드에 그대로 있음) -->
       <div id="taylorTabs" class="mode" style="display:none">
         <button data-ty="chart" class="active">준칙 vs 실제</button>
-        <button data-ty="table">표</button>
-        <button data-ty="real">실질정책금리</button>
-        <button data-ty="y3">준칙 3Y</button>
-        <button data-ty="ext">확장 준칙</button>
-        <button data-ty="help">설명</button>
       </div>
       <div id="krEmpTabs" class="mode" style="display:none">
         <button data-ke="main" class="active">종합</button>
@@ -273,7 +271,7 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
-const NAV_OFF = ['ppi', 'apt', 'yield', 'taylor'];
+const NAV_OFF = ['ppi', 'apt'];
 const navOn = k => !NAV_OFF.includes(k);
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
@@ -1478,7 +1476,9 @@ function renderFundFlow() {
 }
 
 // ── 금리 분해 (국고채 = 정책기대 + 물가기대 + 기간프리미엄) ──────
-const YIELD = { id: 'yield', name: '금리 분해', ids: ['kr_yield', 'kr_policy_bei', 'mkt_oil_fx', 'kr_acm'] };
+const YIELD = { id: 'yield', name: '금리 분해',
+                ids: ['kr_yield', 'kr_policy_bei', 'mkt_oil_fx', 'kr_acm',
+                      'kr_swap', 'kr_usdkrw', 'kr_credit_spread'] };
 let yldData = null, yldTab = 'decomp', yldCharts = [null, null, null, null];
 let yldSel = null, yldCurveDates = null;
 const TENORS = ['3월', '6월', '9월', '1년', '1.5년', '2년', '2.5년', '3년', '4년', '5년', '7년', '10년', '30년'];
@@ -1525,6 +1525,7 @@ function renderYield() {
   if (yldTab === 'curve') { renderYieldCurve(); return; }
   if (yldTab === 'model') { renderCurveModel(); return; }
   if (yldTab === 'acm') { renderAcm(); return; }
+  if (yldTab === 'swap') { renderSwap(); return; }
   if (yldTab === 'spread') { renderYieldSpread(); return; }
   if (yldTab === 'table') { renderYieldTable(); return; }
   renderYieldDecomp();
@@ -1741,6 +1742,152 @@ function curvePoints(d) {                 // 해당 일자의 (만기, 금리) �
 }
 
 // ③ 커브 모델: NSS 적합 + 레벨/기울기/곡률 + 선도금리 + 기간프리미엄 근사
+// ── 스왑·차익거래 ──────────────────────────────────────────────
+//   스왑베이시스 = CRS − IRS. 마이너스면 원화를 스왑으로 조달하는 비용이 싸다는 뜻
+//     → 외국인에게 유리. 위기 때 달러 확보 수요로 크게 마이너스가 된다.
+//   재정거래 유인 = 통안(또는 국고) − CRS. CRS로 원화를 조달해 채권을 사서 만기까지 보유하면
+//     환위험 없이 남는 스프레드. 플러스면 외국인 채권 매수 유인.
+//   본드스왑 스프레드 = IRS − 국고. 국내 기관의 스왑/현물 상대가치.
+const SWAP_TEN = [['1Y', '1년'], ['18M', '1.5년'], ['2Y', '2년'], ['3Y', '3년'],
+                  ['4Y', '4년'], ['5Y', '5년'], ['7Y', '7년'], ['10Y', '10년']];
+let swapTenor = '3Y', swapBench = '통안증권';
+function renderSwap() {
+  const box = document.getElementById('retailWrap');
+  const sw = yldData && yldData['kr_swap'];
+  if (!sw) {
+    box.innerHTML = '<div style="padding:24px;color:#888">스왑 데이터가 없습니다. '
+      + '<b>python fetch.py kr_swap</b> 실행 필요.</div>';
+    return;
+  }
+  const M = (ind, nm) => { const d = yldData[ind]; if (!d) return new Map();
+    const s = d.series.find(x => baseName(x.name) === nm);
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const irs = t => M('kr_swap', 'IRS ' + t), crs = t => M('kr_swap', 'CRS ' + t);
+  const bond = (g, t) => M('kr_yield', `${g} ${t}`);
+  const fx = M('kr_usdkrw', '원/달러');
+
+  // 날짜 축: 스왑·국고가 모두 있는 영업일
+  const T = swapTenor, TB = (SWAP_TEN.find(x => x[0] === T) || [])[1];
+  const I = irs(T), C = crs(T), B = bond(swapBench, TB), G = bond('국고채권', TB);
+  const ds = [...I.keys()].filter(d => C.has(d)).sort().filter(inRange);
+  const cols = ds;
+  const bp = (a, b, d) => (a.has(d) && b.has(d)) ? (a.get(d) - b.get(d)) * 100 : null;
+  const basis = d => bp(C, I, d);                    // CRS − IRS
+  const carry = d => bp(B, C, d);                    // 벤치마크 − CRS
+  const bss = d => bp(I, G, d);                      // IRS − 국고
+
+  const last = cols.length ? cols[cols.length - 1] : null;
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+    + '<pre style="background:#f5f7fa;padding:10px 12px;border-radius:8px;font-size:12.5px;margin:6px 0">'
+    + '스왑베이시스   = CRS − IRS          (−) 원화 스왑조달이 쌈 → 외국인에 유리\n'
+    + `재정거래 유인  = ${swapBench} − CRS   (+) CRS로 원화 조달해 채권 매수 시 남는 스프레드\n`
+    + '본드스왑 SPD   = IRS − 국고          국내 기관의 스왑·현물 상대가치</pre>'
+    + '<span style="color:#8592a3">모두 bp 단위. 재정거래 유인은 환헤지가 끝난 무위험 스프레드 개념이라, '
+    + '플러스가 커지면 외국인 채권자금 유입 압력으로 읽습니다.</span></div>'
+    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+    + '<b>만기</b><div class="mode" id="swTen">'
+    + SWAP_TEN.map(([t]) => `<button data-sw="${t}" class="${T === t ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><b style="margin-left:8px">벤치마크</b><div class="mode" id="swBen">'
+    + [['통안증권', '통안'], ['국고채권', '국고']].map(([v, n]) =>
+        `<button data-sb="${v}" class="${swapBench === v ? 'active' : ''}">${n}</button>`).join('')
+    + '</div></div>';
+  if (!B.size) out += '<div style="font-size:12px;color:#c0392b;margin-bottom:8px">'
+    + `※ ${swapBench} ${TB} 금리가 없어 재정거래 유인은 비어 있습니다 (통안증권은 3년까지만 고시).</div>`;
+
+  out += '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:290px"><canvas id="swC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // 만기별 현재 스냅샷
+  out += `<div class="block-title">만기별 현재 (${last ? dateLabel(last) : '-'})</div>`
+    + '<table class="data vlines" style="width:auto"><thead><tr><th>만기</th><th>IRS</th><th>CRS</th>'
+    + '<th>스왑베이시스</th><th>통안</th><th>통안−CRS</th><th>국고</th><th>국고−CRS</th><th>IRS−국고</th></tr></thead><tbody>';
+  SWAP_TEN.forEach(([t, tb], i) => {
+    const Ii = irs(t), Ci = crs(t), Ti = bond('통안증권', tb), Gi = bond('국고채권', tb);
+    const v = m => m.has(last) ? m.get(last) : null;
+    const sp = (a, b) => (a.has(last) && b.has(last)) ? (a.get(last) - b.get(last)) * 100 : null;
+    const c = (x, dec) => x == null ? '<td></td>' : `<td${x < 0 ? ' class="neg"' : ''}>${x.toFixed(dec)}</td>`;
+    out += `<tr class="${t === T ? 'lv0 sep-solid' : 'lv1'}"><td>${t}${t === T ? ' ★' : ''}</td>`
+      + c(v(Ii), 3) + c(v(Ci), 3) + c(sp(Ci, Ii), 1) + c(v(Ti), 3) + c(sp(Ti, Ci), 1)
+      + c(v(Gi), 3) + c(sp(Gi, Ci), 1) + c(sp(Ii, Gi), 1) + '</tr>';
+  });
+  out += '</tbody></table>';
+
+  // 선택 만기 시계열
+  out += `<div class="block-title">${T} 시계열 (bp, 금리는 %)</div><div class="tscroll">`
+    + '<table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  const line = (nm, fn, cls, dec) => {
+    let h = `<tr class="${cls || 'lv1'}"><td>${nm}</td>`;
+    cols.forEach(d => { const v = fn(d);
+      h += `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(dec ?? 1)}</td>`; });
+    return h + '</tr>';
+  };
+  out += line('스왑베이시스 (CRS−IRS)', basis, 'lv0 sep-solid');
+  out += line(`재정거래 유인 (${swapBench === '통안증권' ? '통안' : '국고'}−CRS)`, carry, 'lv0');
+  out += line('본드스왑 SPD (IRS−국고)', bss, 'lv1');
+  out += line('  IRS', d => I.get(d) ?? null, 'lv2', 3);
+  out += line('  CRS', d => C.get(d) ?? null, 'lv2', 3);
+  out += line(`  ${swapBench}`, d => B.get(d) ?? null, 'lv2', 3);
+  out += line('  국고채권', d => G.get(d) ?? null, 'lv2', 3);
+  if (fx.size) out += line('  원/달러 (참고)', d => fx.get(d) ?? null, 'lv2', 1);
+  out += '</tbody></table></div>';
+
+  if (last) {
+    const b0 = basis(last), c0 = carry(last);
+    out += '<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">'
+      + `<b>${dateLabel(last)} · ${T}</b><br>`
+      + (b0 == null ? '' : `스왑베이시스 <b style="color:${b0 < 0 ? '#2c6fbf' : '#c0392b'}">${b0 >= 0 ? '+' : ''}${b0.toFixed(1)}bp</b> — `
+          + (b0 < 0 ? '원화 스왑조달이 싸 <b>외국인에 유리</b>한 방향' : 'CRS가 IRS보다 높아 <b>원화 조달 유인이 약한</b> 방향') + '<br>')
+      + (c0 == null ? '' : `재정거래 유인 <b style="color:${c0 > 0 ? '#c0392b' : '#2c6fbf'}">${c0 >= 0 ? '+' : ''}${c0.toFixed(1)}bp</b> — `
+          + (c0 > 0 ? 'CRS로 원화 조달해 채권을 사면 남는 구간 → <b>외국인 매수 유인</b>'
+                    : '유인이 <b>사라진</b> 구간 (환헤지 후 손실)') + '</div>');
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#swTen button').forEach(b => b.onclick = () => { swapTenor = b.dataset.sw; refresh(); });
+  box.querySelectorAll('#swBen button').forEach(b => b.onclick = () => { swapBench = b.dataset.sb; refresh(); });
+
+  const TX = { ticks: { maxTicksLimit: 9, font: { size: 9 },
+                        callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
+  const mk = (i, title, datasets, o) => {
+    o = o || {};
+    if (yldCharts[i]) { yldCharts[i].destroy(); yldCharts[i] = null; }
+    yldCharts[i] = new Chart(box.querySelector('#swC' + i), {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false } }, o, {
+        plugins: Object.assign({
+          legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}` } },
+        }, o.plugins || {}),
+        scales: Object.assign({ x: TX, y: { ticks: { font: { size: 10 } },
+          grid: { color: c => c.tick.value === 0 ? '#33333388' : '#eee' } } }, o.scales || {},
+          { x: Object.assign({}, TX, (o.scales || {}).x || {}) }),
+      }),
+    });
+  };
+  mk(0, `스왑베이시스 · 재정거래 유인 (${T}, bp)`, [
+    { type: 'line', label: '스왑베이시스 (CRS−IRS)', data: cols.map(basis),
+      borderColor: PALETTE[0], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true },
+    { type: 'line', label: `재정거래 유인 (${swapBench === '통안증권' ? '통안' : '국고'}−CRS)`,
+      data: cols.map(carry), borderColor: PALETTE[1], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true },
+    { type: 'line', label: '본드스왑 SPD (IRS−국고)', data: cols.map(bss),
+      borderColor: '#8592a3', borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, tension: 0.15, spanGaps: true },
+  ]);
+  mk(1, `금리 수준 (${T}, %)`, [
+    { type: 'line', label: 'IRS', data: cols.map(d => I.get(d) ?? null), borderColor: PALETTE[0], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true },
+    { type: 'line', label: 'CRS', data: cols.map(d => C.get(d) ?? null), borderColor: PALETTE[1], borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true },
+    { type: 'line', label: '국고채권', data: cols.map(d => G.get(d) ?? null), borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true },
+  ].concat(B.size ? [{ type: 'line', label: swapBench, data: cols.map(d => B.get(d) ?? null),
+      borderColor: PALETTE[2], borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, tension: 0.15, spanGaps: true }] : []),
+    { plugins: { tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+        label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}%` } } },
+      scales: { y: { ticks: { font: { size: 10 } } } } });
+}
+
 // ── ACM 기간프리미엄 (Adrian-Crump-Moench 2013) ──────────────────
 // 추정은 무거워서 Python(fetchers/acm.py)에서 하고, 여기선 결과만 표시한다.
 let acmCfg = { mat: '3년', bc: true };
@@ -1882,13 +2029,13 @@ function renderCurveModel() {
                        f1y1y: f.fwd(1, 2), f2y1y: f.fwd(2, 3), f5y5y: f.fwd(5, 10), rmse: f.rmse });
   }
   const hd = hist.map(h => h.d);
-  const neutral = tayCfg.rstar + tayCfg.target;          // 명목 중립금리 = r* + π*
+  const neutral = tayCfg.neutral;                        // 명목 중립금리 (테일러 탭 설정값)
   const tp = h => h.f5y5y - neutral;                     // 기간프리미엄 근사
 
   let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:8px">'
     + '<b>NSS(Nelson-Siegel-Svensson)</b>로 국고채 커브를 6모수 함수에 적합해 <b>레벨·기울기·곡률</b>과 <b>선도금리</b>를 뽑습니다. '
     + '관측 안 되는 만기도 곡선에서 읽을 수 있습니다.<br>'
-    + `<b>기간프리미엄(근사)</b> = 5y5y 선도금리 − 명목 중립금리(r* ${tayCfg.rstar.toFixed(2)} + π* ${tayCfg.target.toFixed(2)} = ${neutral.toFixed(2)}%). `
+    + `<b>기간프리미엄(근사)</b> = 5y5y 선도금리 − 명목 중립금리(${neutral.toFixed(2)}%). `
     + '<span style="color:#c0392b">ACM 모형이 아닌 <b>근사치</b>입니다 — 한국은 공개된 ACM 추정치가 없어, 장기 선도금리에서 중립금리를 뺀 값으로 대용합니다. '
     + '중립금리 가정(테일러 준칙 탭의 슬라이더)에 따라 값이 달라집니다.</span></div>'
     + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">'
@@ -2084,7 +2231,13 @@ const TAYLOR = { id: 'taylor', name: '테일러 준칙',
                        'kr_gdp_real', 'kr_policy_bei', 'kr_yield', 'mkt_oil_fx',
                        'kr_apt_sale_idx', 'kr_apt_jeonse_idx'] };
 let tayData = null, tayTab = 'chart', tayCharts = [null, null];
-let tayCfg = { pi: 'cpi', gap: 'hp', rstar: 1.0, target: 2.0, a: 0.5, b: 0.5, pot: 2.0, smooth: 'ma4' };
+// 준칙금리 = 중립금리(명목) + a×인플레갭 + b×GDP갭
+// neutral 은 '명목' 중립금리다. 한은 제시 범위 1.8~3.3% 를 그대로 넣을 수 있다.
+let tayCfg = { pi: 'cpi', gap: 'hp', neutral: 3.3, target: 2.0, a: 1.0, b: 1.0, pot: 2.0, smooth: 'ma4' };
+// 한은이 제시한 중립금리 추정 범위 (명목, 5개 연구 종합). 기준금리와 같은 축이므로 명목이다.
+//   명목 1.8~3.3%  →  실질 rⁿ = 명목 − 물가목표 = −0.2 ~ 1.3%
+// 출처: 한국은행 → 권영세 의원실 서면답변 (2026-07-31 보도)
+const BOK_NEUTRAL = { lo: 1.8, hi: 3.3, asof: '2026.07', note: '한은 5개 연구 종합' };
 
 async function enterTaylor() {
   const got = await Promise.all(TAYLOR.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -2210,7 +2363,8 @@ function taylorSeries() {
   [...piM.keys()].sort().forEach(d => {
     const p = piM.get(d), gp = gapAt(d), b = base.get(d);
     if (p == null) return;
-    const rule = (gp == null) ? null : tayCfg.rstar + p + tayCfg.a * (p - tayCfg.target) + tayCfg.b * gp;
+    // 중립금리 앵커식. (표준 테일러의 rⁿ+π 대신 명목중립금리를 쓰고, 인플레갭 계수는 a 그대로)
+    const rule = (gp == null) ? null : tayCfg.neutral + tayCfg.a * (p - tayCfg.target) + tayCfg.b * gp;
     out.push({ d, pi: p, gap: gp, rule, base: b ?? null });
   });
   return out;
@@ -2219,10 +2373,7 @@ function taylorSeries() {
 function renderTaylor() {
   document.querySelectorAll('#taylorTabs button').forEach(b => b.classList.toggle('active', b.dataset.ty === tayTab));
   const box = document.getElementById('retailWrap');
-  if (tayTab === 'help') { box.innerHTML = taylorHelpHTML(); return; }
-  if (tayTab === 'real') { renderRealRate(); return; }
-  if (tayTab === 'y3') { renderTaylor3Y(); return; }
-  if (tayTab === 'ext') { renderTaylorExt(); return; }
+  tayTab = 'chart';                      // 탭을 접었으므로 항상 준칙 뷰
   const all = taylorSeries();
   const rows = all.filter(r => inRange(r.d));
   const cols = rows.map(r => r.d);
@@ -2239,8 +2390,8 @@ function renderTaylor() {
     + [['raw', '분기 원계열'], ['ma4', '4분기 이동평균'], ['ma4c', '4분기 중심']].map(([v, t]) =>
         `<button data-tys="${v}" class="${tayCfg.smooth === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
     + '</div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px;color:#555">'
-    + [['rstar', '중립실질금리 r*', 0, 3, 0.25], ['target', '물가목표 π*', 1, 4, 0.25],
-       ['a', '인플레 계수 a', 0, 2, 0.25], ['b', 'GDP갭 계수 b', 0, 2, 0.25]].map(([k, lab, mn, mx, st]) =>
+    + [['neutral', '중립금리 (명목)', 1.0, 5.0, 0.05], ['target', '물가목표 π*', 1, 4, 0.25],
+       ['a', '인플레갭 계수 a', 0, 2, 0.05], ['b', 'GDP갭 계수 b', 0, 2, 0.05]].map(([k, lab, mn, mx, st]) =>
         `<label style="display:flex;gap:6px;align-items:center">${lab}<input type="range" id="ty_${k}" min="${mn}" max="${mx}" step="${st}" value="${tayCfg[k]}" style="width:90px">`
         + `<b id="tyv_${k}" style="min-width:34px;display:inline-block">${tayCfg[k].toFixed(2)}</b></label>`).join('')
     + '</div>'
@@ -2250,8 +2401,9 @@ function renderTaylor() {
         return (bd && lastRow && bd > lastRow.d)
           ? `<div style="font-size:12px;color:#c0392b;margin-bottom:6px">※ 최신 기준금리 <b>${bm.get(bd).toFixed(2)}%</b>(${dateLabel(bd)})는 표에 아직 없습니다 — 물가 공표가 ${dateLabel(lastRow.d)}까지라 준칙 계산도 그 시점까지입니다.</div>` : '';
       })()
-    + `<div style="font-size:12px;color:#8592a3;margin-bottom:10px">준칙금리 = r*(${tayCfg.rstar.toFixed(2)}) + π + `
-    + `${tayCfg.a.toFixed(2)}×(π − ${tayCfg.target.toFixed(2)}) + ${tayCfg.b.toFixed(2)}×GDP갭 · 인플레 기준: <b>${piLabel}</b>`
+    + `<pre style="background:#f5f7fa;padding:10px 12px;border-radius:8px;font-size:13px;margin:6px 0 8px">준칙금리 = 중립금리 ${tayCfg.neutral.toFixed(2)} + ${tayCfg.a.toFixed(2)}×인플레갭 + ${tayCfg.b.toFixed(2)}×GDP갭</pre>`
+    + `<div style="font-size:12px;color:#8592a3;margin-bottom:10px">인플레갭 = π − π*(${tayCfg.target.toFixed(2)}) · 인플레 기준: <b>${piLabel}</b>`
+    + ` · <b>중립금리는 명목</b>입니다 — 한은 제시 범위 <b>${BOK_NEUTRAL.lo}~${BOK_NEUTRAL.hi}%</b>(${BOK_NEUTRAL.asof}, ${BOK_NEUTRAL.note})를 그대로 넣으시면 됩니다.`
     + (tayCfg.gap === 'pot'
         ? ' · <span style="color:#c0392b">잠재성장률 2%는 최근 추정치라 <b>최근 8년</b>을 기준으로 정렬했습니다. 2010년 이전 구간은 해석 불가.</span>'
         : ' · <span style="color:#c0392b">HP필터는 표본 끝에서 불안정(end-point bias)합니다.</span>') + '</div>';
@@ -2275,61 +2427,81 @@ function renderTaylor() {
   out += line('실제 기준금리', r => r.base, 'lv1');
   out += line('격차 (준칙−실제)', r => (r.rule != null && r.base != null) ? r.rule - r.base : null, 'lv1');
   // 준칙금리 구성요소 (합 = 준칙금리)
-  out += line(`① r* (중립실질금리 ${tayCfg.rstar.toFixed(2)})`, r => r.rule == null ? null : tayCfg.rstar, 'lv2');
-  out += line(`② π  (${piLabel})`, r => r.pi, 'lv2');
-  out += line(`③ ${tayCfg.a.toFixed(2)}×(π − π* ${tayCfg.target.toFixed(2)})`, r => r.rule == null ? null : tayCfg.a * (r.pi - tayCfg.target), 'lv2');
-  out += line(`④ ${tayCfg.b.toFixed(2)}×GDP갭`, r => r.rule == null ? null : tayCfg.b * r.gap, 'lv2');
+  out += line(`① 중립금리 (${tayCfg.neutral.toFixed(2)})`, r => r.rule == null ? null : tayCfg.neutral, 'lv2');
+  out += line(`② ${tayCfg.a.toFixed(2)} × 인플레갭`, r => r.rule == null ? null : tayCfg.a * (r.pi - tayCfg.target), 'lv2');
+  out += line(`③ ${tayCfg.b.toFixed(2)} × GDP갭`, r => r.rule == null ? null : tayCfg.b * r.gap, 'lv2');
+  out += line(`  · 인플레 π (${piLabel})`, r => r.pi, 'lv2');
+  out += line('  · 인플레갭 (π − π*)', r => r.pi == null ? null : r.pi - tayCfg.target, 'lv2');
+  out += line('  · GDP갭', r => r.gap, 'lv2');
   out += line('   (참고) GDP갭', r => r.gap, 'lv3');
   out += '</tbody></table></div>';
   // 최근 시점 계산식 풀어쓰기
   const last = rows.length ? rows[rows.length - 1] : null;
   if (last && last.rule != null) {
-    const t1 = tayCfg.rstar, t2 = last.pi, t3 = tayCfg.a * (last.pi - tayCfg.target), t4 = tayCfg.b * last.gap;
+    const t1 = tayCfg.neutral, pg = last.pi - tayCfg.target,
+          t3 = tayCfg.a * pg, t4 = tayCfg.b * last.gap;
     out += `<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">`
       + `<b>${dateLabel(last.d)} 계산식</b><br>`
-      + `준칙금리 = <b>①</b> r* ${t1.toFixed(2)} <b>+ ②</b> π ${t2.toFixed(2)} `
-      + `<b>+ ③</b> ${tayCfg.a.toFixed(2)}×(${t2.toFixed(2)} − ${tayCfg.target.toFixed(2)}) = ${t3.toFixed(2)} `
-      + `<b>+ ④</b> ${tayCfg.b.toFixed(2)}×${last.gap.toFixed(2)} = ${t4.toFixed(2)}`
+      + `준칙금리 = <b>①</b> 중립금리 ${t1.toFixed(2)} `
+      + `<b>+ ②</b> ${tayCfg.a.toFixed(2)}×인플레갭(${pg >= 0 ? '+' : ''}${pg.toFixed(2)}) = ${t3.toFixed(2)} `
+      + `<b>+ ③</b> ${tayCfg.b.toFixed(2)}×GDP갭(${last.gap >= 0 ? '+' : ''}${last.gap.toFixed(2)}) = ${t4.toFixed(2)}`
       + ` &nbsp;=&nbsp; <b style="color:${PALETTE[1]}">${last.rule.toFixed(2)}%</b><br>`
       + `격차 = 준칙 ${last.rule.toFixed(2)} − 실제 ${last.base == null ? '-' : last.base.toFixed(2)} = `
       + `<b style="color:${last.base != null && last.rule - last.base > 0 ? '#c0392b' : '#2c6fbf'}">`
       + `${last.base == null ? '-' : (last.rule - last.base >= 0 ? '+' : '') + (last.rule - last.base).toFixed(2)}%p</b>`
       + `${last.base != null ? (last.rule - last.base > 0 ? ' → 준칙 대비 <b>완화적</b>(긴축 여지)' : ' → 준칙 대비 <b>긴축적</b>(완화 여지)') : ''}</div>`;
   }
+  if (tayTab === 'chart') out += taylorScenarioHTML(all);
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#tyPi button').forEach(b => b.onclick = () => { tayCfg.pi = b.dataset.typ; renderTaylor(); });
   box.querySelectorAll('#tyGap button').forEach(b => b.onclick = () => { tayCfg.gap = b.dataset.tyg; renderTaylor(); });
   box.querySelectorAll('#tySm button').forEach(b => b.onclick = () => { tayCfg.smooth = b.dataset.tys; renderTaylor(); });
-  ['rstar', 'target', 'a', 'b'].forEach(k => {
+  ['neutral', 'target', 'a', 'b'].forEach(k => {
     const el = box.querySelector('#ty_' + k); if (!el) return;
     el.oninput = e => { tayCfg[k] = +e.target.value; box.querySelector('#tyv_' + k).textContent = tayCfg[k].toFixed(2); };
     el.onchange = () => renderTaylor();
   });
   if (tayTab !== 'chart') return;
+  // plugins·scales 는 한 단계 더 병합한다 (얕은 병합이면 제목·x축 포맷이 통째로 날아간다)
+  const TX = { ticks: { maxTicksLimit: 9, font: { size: 9 },
+                        callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
   const mk = (i, title, datasets, extra) => {
     if (tayCharts[i]) { tayCharts[i].destroy(); tayCharts[i] = null; }
+    const o = extra || {};
     tayCharts[i] = new Chart(box.querySelector('#tyC' + i), {
       data: { labels: cols, datasets },
-      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false } }, o, {
+        plugins: Object.assign({
+          legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: title, font: { size: 12 } },
-          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
-        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
-          y: { ticks: { font: { size: 10 } } } } }, extra || {}),
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => it.dataset.label.startsWith('_') ? null
+              : ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } },
+        }, o.plugins || {}),
+        scales: Object.assign({ x: TX, y: { ticks: { font: { size: 10 } } } }, o.scales || {},
+                              { x: Object.assign({}, TX, (o.scales || {}).x || {}) }),
+      }),
     });
   };
+  // 한은 중립금리 추정 범위(명목)를 띠로 깔아 준다. 두 상수선 사이를 채우는 방식.
+  const bandHi = { type: 'line', label: `한은 중립금리 범위 ${BOK_NEUTRAL.lo}~${BOK_NEUTRAL.hi}%`,
+    data: rows.map(() => BOK_NEUTRAL.hi), borderColor: '#2e8b5733', backgroundColor: '#2e8b571f',
+    borderWidth: 1, pointRadius: 0, fill: '+1', order: 9 };
+  const bandLo = { type: 'line', label: '_밴드하단', data: rows.map(() => BOK_NEUTRAL.lo),
+    borderColor: '#2e8b5733', borderWidth: 1, pointRadius: 0, fill: false, order: 9 };
   mk(0, '준칙금리 vs 실제 기준금리 (%)', [
-    { type: 'line', label: '준칙금리', data: rows.map(r => r.rule), borderColor: PALETTE[1], backgroundColor: PALETTE[1], borderWidth: 2.5, pointRadius: 0, tension: 0.15, spanGaps: true },
-    { type: 'line', label: '실제 기준금리', data: rows.map(r => r.base), borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, stepped: true, spanGaps: true },
-  ]);
+    bandHi, bandLo,
+    { type: 'line', label: '준칙금리', data: rows.map(r => r.rule), borderColor: PALETTE[1], backgroundColor: PALETTE[1], borderWidth: 2.5, pointRadius: 0, tension: 0.15, spanGaps: true, order: 1 },
+    { type: 'line', label: '실제 기준금리', data: rows.map(r => r.base), borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, stepped: true, spanGaps: true, order: 0 },
+  ], { plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10,
+        filter: it => !it.text.startsWith('_') } } } });
   // 격차 차트 = 준칙 구성요소 누적막대(합=준칙) − 실제금리 선. 계산 과정이 그대로 보이도록.
   mk(1, '준칙금리 분해 (%) — 막대 합 = 준칙, 선 = 실제 기준금리', [
-    { type: 'bar', label: `r* (${tayCfg.rstar.toFixed(2)})`, data: rows.map(r => r.rule == null ? null : tayCfg.rstar),
+    { type: 'bar', label: `중립금리 (${tayCfg.neutral.toFixed(2)})`, data: rows.map(r => r.rule == null ? null : tayCfg.neutral),
       backgroundColor: '#8aa832cc', stack: 's', order: 3 },
-    { type: 'bar', label: 'π (인플레)', data: rows.map(r => r.rule == null ? null : r.pi),
-      backgroundColor: '#d9534fcc', stack: 's', order: 3 },
-    { type: 'bar', label: `${tayCfg.a.toFixed(2)}×(π−π*)`, data: rows.map(r => r.rule == null ? null : tayCfg.a * (r.pi - tayCfg.target)),
+    { type: 'bar', label: `${tayCfg.a.toFixed(2)}×인플레갭`, data: rows.map(r => r.rule == null ? null : tayCfg.a * (r.pi - tayCfg.target)),
       backgroundColor: '#e8930ccc', stack: 's', order: 3 },
     { type: 'bar', label: `${tayCfg.b.toFixed(2)}×GDP갭`, data: rows.map(r => r.rule == null ? null : tayCfg.b * r.gap),
       backgroundColor: '#17879ccc', stack: 's', order: 3 },
@@ -2886,6 +3058,68 @@ function bindExt(box) {
     extCfg.on[b.dataset.k] = extCfg.on[b.dataset.k] ? 0 : 1; renderTaylor(); });
 }
 
+// 잠재성장률 시나리오 — 잠재성장률은 준칙금리에 두 경로로, 서로 반대 방향으로 작용한다.
+//   ① rⁿ 경로(+): 잠재성장률↑ → 중립금리↑ → 준칙금리 상방 (한은이 말한 '상방압력')
+//   ② 산출갭 경로(−): 잠재성장률↑ → 잠재GDP 경로가 가팔라짐 → 갭 축소 → 준칙금리 하방
+// λ = 잠재성장률 상승분이 rⁿ 에 전가되는 비율. 이론상 1에 가깝지만 실증적으로는 더 낮고 느리다.
+function taylorScenarioHTML(all) {
+  const g = tayData['kr_gdp_real'];
+  const last = all.length ? all[all.length - 1] : null;
+  if (!g || !g.series.length || !last || last.pi == null) return '';
+  let ser = g.series[0].data.filter(p => p.v > 0);
+  if (tayCfg.smooth === 'ma4' && ser.length >= 4)
+    ser = ser.slice(3).map((p, i) => ({ d: p.d, v: (ser[i].v + ser[i + 1].v + ser[i + 2].v + ser[i + 3].v) / 4 }));
+  const ly = ser.map(p => Math.log(p.v)), n = ly.length;
+  // 잠재성장률 pot 을 가정했을 때의 최종 GDP갭 (최근 8년을 기준으로 추세선 정렬)
+  const gapAt = pot => {
+    const q = Math.log(1 + pot / 100) / 4, W = Math.min(32, n);
+    let acc = 0;
+    for (let i = n - W; i < n; i++) acc += ly[i] - q * i;
+    return (ly[n - 1] - (acc / W + q * (n - 1))) * 100;
+  };
+  const pi = last.pi, T = tayCfg.target, base = last.base;
+  const POTS = [2.0, 2.5, 3.0], LAMS = [[0, '전가 없음'], [0.5, '절반 전가'], [1.0, '완전 전가']];
+  const f2 = v => v.toFixed(2);
+  let h = '<div class="block-title">잠재성장률 시나리오 — 상방(rⁿ) vs 하방(산출갭)</div>'
+    + '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:8px">'
+    + '한은은 <b>“잠재성장률 상승은 중립금리에 상방압력”</b>이라고 했습니다. 다만 잠재성장률은 준칙식에 '
+    + '<b>두 곳</b>에 들어가고 방향이 반대입니다.<br>'
+    + '<span style="color:#8592a3">① <b>rⁿ</b>(상수항) — 잠재성장률↑ → 중립금리↑ → 준칙금리 <b>상방</b><br>'
+    + '② <b>y*</b>(잠재GDP, 산출갭의 기준선) — 잠재성장률↑ → 갭 축소 → 준칙금리 <b>하방</b></span><br>'
+    + `기준: π ${f2(pi)}% · 물가목표 ${f2(T)}% · 실제 기준금리 ${base == null ? '-' : f2(base)}% · 중립금리 기준값 ${f2(tayCfg.neutral)}%</div>`
+    + '<div class="tscroll"><table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + '<th>λ (rⁿ 전가율)</th><th>잠재성장률</th><th>rⁿ</th><th>명목중립</th><th>GDP갭</th>'
+    + '<th>준칙금리</th><th>격차 (준칙−실제)</th></tr></thead><tbody>';
+  LAMS.forEach(([lam, ltag]) => {
+    POTS.forEach((pot, i) => {
+      const nom = tayCfg.neutral + lam * (pot - 2.0);   // 명목중립금리
+      const gp = gapAt(pot);
+      const rule = nom + tayCfg.a * (pi - T) + tayCfg.b * gp;
+      const dev = base == null ? null : rule - base;
+      h += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}">`
+        + `<td style="text-align:left">${i === 0 ? `${lam.toFixed(1)} — ${ltag}` : ''}</td>`
+        + `<td>${pot.toFixed(1)}%</td><td>${f2(nom - T)}</td><td>${f2(nom)}</td>`
+        + `<td${gp < 0 ? ' class="neg"' : ''}>${gp >= 0 ? '+' : ''}${f2(gp)}</td>`
+        + `<td><b>${f2(rule)}</b></td>`
+        + `<td${dev != null && dev < 0 ? ' class="neg"' : ''}>${dev == null ? '' : (dev >= 0 ? '+' : '') + f2(dev)}</td></tr>`;
+    });
+  });
+  h += '</tbody></table></div>';
+  const g20 = gapAt(2.0), g30 = gapAt(3.0);
+  const r20 = tayCfg.neutral + tayCfg.a * (pi - T) + tayCfg.b * g20;
+  const r30full = tayCfg.neutral + 1.0 + tayCfg.a * (pi - T) + tayCfg.b * g30;
+  h += '<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">'
+    + `잠재성장률 2.0% → 3.0% 이고 중립금리가 <b>완전히 전가</b>(λ=1, +1.00%p)돼도, `
+    + `산출갭이 ${g20 >= 0 ? '+' : ''}${f2(g20)}% → ${f2(g30)}% 로 ${f2(g20 - g30)}%p 줄면서 `
+    + `준칙금리는 <b>${f2(r20)}% → ${f2(r30full)}%</b> 로 <b style="color:#2c6fbf">${f2(r30full - r20)}%p</b> 낮아집니다.<br>`
+    + '<span style="color:#8592a3">즉 이 계산에서는 <b>산출갭 경로가 rⁿ 경로를 압도</b>합니다. 잠재성장률이 1%p 오르면 '
+    + '8년 누적으로 잠재GDP 경로가 크게 높아져 갭이 확 줄기 때문입니다. 한은이 “상방압력”이라면서도 '
+    + '<b>“그 정도를 일률적으로 말하기 어렵다”</b>고 덧붙인 이유이기도 합니다.<br>'
+    + '⚠ 산출갭은 잠재 경로 가정에 매우 민감합니다. 이 표는 방향과 크기의 감(感)을 잡는 용도이지 '
+    + '정밀 추정이 아닙니다.</span></div>';
+  return h;
+}
+
 // 확장 준칙 배경 — 설명 탭 상단
 function extHelpHTML() {
   const cite = (a, b) => `<li><b>${a}</b> — ${b}</li>`;
@@ -3166,21 +3400,48 @@ function renderKrEmpIndustry() {
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="krI${i}"></canvas></div></div>`).join('')
     + '</div>';
-  const tbl = (title, fn, isTot) => {
+  // 종합탭과 대조용 총괄(계절조정) 취업자. 계절조정은 항목별로 따로 하므로
+  // 산업 합계 ≠ 총괄 이 정상이다(비가법성). 얼마나 벌어지는지 표에 직접 보여준다.
+  const TOTSRC = krEmpData.totSa ? 'totSa' : 'tot';
+  const empTot = krMap(TOTSRC, '계 · 취업자');
+  const mom = (n, d) => { const p = prevN(d, 1); if (!p || !S[n]) return null;
+    const a = S[n].get(d), b = S[n].get(p); return a != null && b != null ? a - b : null; };
+  const totRef = {
+    lvl: d => empTot.get(d) ?? null,
+    yoy: d => { const p = prevN(d, 12); if (!p) return null;
+      const a = empTot.get(d), b = empTot.get(p); return a != null && b != null ? a - b : null; },
+    mom: d => { const p = prevN(d, 1); if (!p) return null;
+      const a = empTot.get(d), b = empTot.get(p); return a != null && b != null ? a - b : null; },
+  };
+  const num = v => v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+  const cell = v => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${num(v)}</td>`;
+  const tbl = (title, fn, refFn) => {
     let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>`
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-    h += `<tr class="lv0 sep-solid"><td>전체</td>` + cols.map(d => { const v = totalOf(fn, d);
-      return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</td>`; }).join('') + '</tr>';
+    h += '<tr class="lv0 sep-solid"><td>산업 21개 합계</td>' + cols.map(d => cell(totalOf(fn, d))).join('') + '</tr>';
+    if (refFn) {
+      h += '<tr class="lv0"><td>총괄 (계절조정)</td>' + cols.map(d => cell(refFn(d))).join('') + '</tr>';
+      h += '<tr class="lv1"><td style="color:#8592a3">차이 (합계 − 총괄)</td>'
+        + cols.map(d => { const a = totalOf(fn, d), b = refFn(d);
+            const v = (a != null && b != null) ? a - b : null;
+            return `<td style="color:#8592a3"${v != null && v < 0 ? ' class="neg"' : ''}>${num(v)}</td>`; }).join('') + '</tr>';
+    }
     names.forEach(n => {
       const sel = krIndSel.has(n) ? '● ' : '';
       h += `<tr class="lv1"><td data-kri="${n}" style="cursor:pointer">${sel}${n}</td>`
-        + cols.map(d => { const v = fn(n, d);
-          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</td>`; }).join('') + '</tr>';
+        + cols.map(d => cell(fn(n, d))).join('') + '</tr>';
     });
     return h + '</tbody></table></div>';
   };
-  out += tbl('전년동월 증감 (천명)', yoy);
-  out += tbl('취업자 수 (천명)', lvl);
+  out += tbl('전월 증감 (천명, 계절조정)', mom, totRef.mom);
+  out += tbl('전년동월 증감 (천명)', yoy, totRef.yoy);
+  out += tbl('취업자 수 (천명)', lvl, totRef.lvl);
+  out += '<div style="padding:10px 12px;background:#fffaf0;border-left:3px solid #e8930c;border-radius:6px;'
+    + 'font-size:12px;color:#7a5a12;line-height:1.75;margin-top:10px">'
+    + '※ <b>산업 합계와 총괄은 정확히 일치하지 않습니다.</b> 통계청이 계절조정을 산업별·총괄 '
+    + '<b>각각 따로</b> 수행하기 때문입니다(계절조정의 비가법성). 수준 기준 차이는 총취업자의 0.1% 안쪽이며, '
+    + '증감에서는 더 크게 벌어질 수 있습니다. <b>산업별 표는 기여 방향과 순위를 보는 용도</b>로 쓰고, '
+    + '총량은 종합탭 값을 기준으로 삼으세요.</div>';
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('[data-kri]').forEach(td => td.onclick = () => {

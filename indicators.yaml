@@ -445,6 +445,27 @@ indicators:
       groups: ["국고채권", "통안증권", "회사채AA-(공모/무보증)", "회사채A-(공모/무보증)",
                "금융채 은행채 AAA", "CD AAA", "CP A1"]
 
+  # KOSPI (한국거래소 OpenAPI). 이 API 는 하루치씩만 주므로 여러 번 나눠 받는다.
+  #   .env 에 KRX_API_KEY=... 필요 · openapi.krx.co.kr 에서 'KOSPI 시리즈 일별시세정보'
+  #   서비스에 별도로 'API 이용신청'까지 해야 호출이 열린다.
+  #   python fetch.py kr_kospi  를 남은 날짜가 0 이 될 때까지 반복 실행.
+  - id: kr_kospi
+    name: KOSPI 지수 (일별)
+    source: krx
+    unit: 지수
+    freq: D
+    merge_always: true
+    params:
+      path: idx/kospi_dd_trd
+      index_name: 코스피
+      start: "2010-01-04"
+      max_calls: 400
+      pause: 0.12
+      fields:
+        종가: CLSPRC_IDX
+        거래대금: ACC_TRDVAL
+        시가총액: MKTCAP
+
   # 스왑금리 (IRS·CRS) — 스왑베이시스·재정거래 유인 계산용
   #   스왑베이시스 = CRS − IRS   (마이너스면 원화 조달 프리미엄)
   #   재정거래 유인 = 통안(또는 국고) − CRS   (외국인이 CRS로 원화 조달해 채권 매입)

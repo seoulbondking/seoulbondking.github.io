@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax, acm
+from fetchers import kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax, acm, krx
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -37,6 +37,7 @@ SOURCES = {
     "fred": fred.fetch,
     "infomax": infomax.fetch,
     "acm": acm.fetch,
+    "krx": krx.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -193,7 +194,9 @@ def main():
             if meta.get("level_of"):
                 payload["level_of"] = meta["level_of"]     # 항목명 → 계층 레벨
         if ind.get("_acm_meta"):
-            payload["acm"] = ind["_acm_meta"]              # ACM 추정 진단 (주성분·지속성·적합도)
+            payload["acm"] = ind["_acm_meta"]                      # ACM 추정 진단 (주성분·지속성·적합도)
+        if ind.get("_krx_checked"):
+            payload["_checked"] = ind["_krx_checked"]              # KRX 조회 완료일 (휴장일 재조회 방지)
         body = json.dumps(payload, ensure_ascii=False)
         out_path.write_text(body, encoding="utf-8")
         # 더블클릭(file://)으로도 대시보드가 열리도록 JS 버전도 함께 저장

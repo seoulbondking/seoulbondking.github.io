@@ -463,6 +463,7 @@ function refresh() {
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
+  const isNg = view === 'ngdp';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -472,7 +473,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -489,12 +490,13 @@ function refresh() {
   document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
   if (isYld) renderYield();
   else if (isTay) renderTaylor();
+  else if (isNg) renderNgdp();
   else if (isKrE) renderKrEmp();
   else if (isFund) renderFundFlow();
   else if (isUsE) renderUsEmp();
@@ -2224,12 +2226,244 @@ function renderYieldTable() {
   });
 }
 
+// ── 명목GDP·금리 시차 상관 ─────────────────────────────────────
+// 우리금융경영연구소 「경제 브리프」(2026-06) Box 2 재현 + 상관계수 직접 계산.
+//   명목GDP는 물가에 3~4분기, 기준금리에 4분기 선행하는 반면 국고 10년은 거의 동시점.
+//   → 시장금리가 가장 빨리 반응하고 기준금리가 가장 늦게 따라온다 (BIS 2024).
+// 원문 방법론: 금리는 분기말 값, 명목GDP·물가상승률은 4분기 이동평균.
+const NGDP = { id: 'ngdp', name: '명목GDP·금리',
+               ids: ['kr_gdp_nominal', 'kr_cpi', 'kr_yield', 'kr_policy_bei'] };
+let ngData = null, ngMA = 4, ngMaxLead = 6, ngBasis = 'yoy';
+const NG_TARGETS = [['cpi', '물가상승률'], ['base', '기준금리'], ['y3', '국고 3년'], ['y10', '국고 10년']];
+
+async function enterNgdp() {
+  const got = await Promise.all(NGDP.ids.map(id => loadIndicator(id).catch(() => null)));
+  ngData = {}; NGDP.ids.forEach((id, i) => ngData[id] = got[i]);
+  if (!ngData['kr_gdp_nominal']) { alert('명목GDP 데이터가 없습니다. python fetch.py kr_gdp_nominal 실행 필요.'); return; }
+  current = { id: NGDP.id, name: NGDP.name, freq: 'Q', unit: '%',
+              updated_at: ngData['kr_gdp_nominal'].updated_at, series: [] };
+  view = 'ngdp';
+  document.getElementById('title').textContent = NGDP.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'ngdpBtn'));
+  const p = ngPanel();
+  periodDates = p.dates;
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 60)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+// 분기 축으로 정렬한 패널. 금리는 분기말 값, 명목GDP·물가는 이동평균.
+function ngPanel() {
+  const qKey = d => {                                   // 아무 날짜 → 그 분기 말일
+    const y = +d.slice(0, 4), m = +d.slice(5, 7), qm = Math.ceil(m / 3) * 3;
+    return `${y}-${String(qm).padStart(2, '0')}-${new Date(y, qm, 0).getDate()}`;
+  };
+  const ser = (id, nm) => { const ind = ngData[id]; if (!ind) return null;
+    return ind.series.find(x => baseName(x.name) === nm) || null; };
+  const qEnd = s => { const m = new Map();            // 분기 안에서 가장 늦은 값
+    if (s) [...s.data].sort((a, b) => a.d < b.d ? -1 : 1).forEach(p => m.set(qKey(p.d), p.v));
+    return m; };
+  const qAvg = s => { const acc = new Map();          // 분기 평균
+    if (s) s.data.forEach(p => { const k = qKey(p.d); (acc.get(k) || acc.set(k, []).get(k)).push(p.v); });
+    const m = new Map(); acc.forEach((v, k) => m.set(k, v.reduce((a, b) => a + b, 0) / v.length));
+    return m; };
+  const ma = (m, w) => {                              // 후행 w분기 이동평균
+    const ks = [...m.keys()].sort(), out = new Map();
+    for (let i = w - 1; i < ks.length; i++) {
+      let s = 0, ok = true;
+      for (let k = 0; k < w; k++) { const v = m.get(ks[i - k]); if (v == null) { ok = false; break; } s += v; }
+      if (ok) out.set(ks[i], s / w);
+    }
+    return out;
+  };
+  // 명목GDP 증가율
+  const g = ser('kr_gdp_nominal', '국내총생산에 대한 지출');
+  const raw = new Map(); if (g) g.data.filter(p => p.v > 0).forEach(p => raw.set(qKey(p.d), p.v));
+  const gk = [...raw.keys()].sort(), gr = new Map();
+  gk.forEach((d, i) => {
+    if (ngBasis === 'yoy') { if (i >= 4) gr.set(d, (raw.get(d) / raw.get(gk[i - 4]) - 1) * 100); }
+    else if (i >= 1) gr.set(d, (Math.pow(raw.get(d) / raw.get(gk[i - 1]), 4) - 1) * 100);  // 전기비 연율
+  });
+  // 물가 전년동월비 → 분기평균
+  const c = ser('kr_cpi', '총지수');
+  const cm = new Map(); if (c) c.data.forEach(p => cm.set(p.d.slice(0, 7), p.v));
+  const cy = new Map();
+  cm.forEach((v, ym) => { const p = `${+ym.slice(0, 4) - 1}${ym.slice(4)}`;
+    if (cm.has(p)) cy.set(ym, (v / cm.get(p) - 1) * 100); });
+  const cq = new Map(); const acc = new Map();
+  cy.forEach((v, ym) => { const k = qKey(ym + '-01'); if (!acc.has(k)) acc.set(k, []); acc.get(k).push(v); });
+  acc.forEach((v, k) => { if (v.length === 3) cq.set(k, v.reduce((a, b) => a + b, 0) / v.length); });
+
+  const S = {
+    ngdp: ma(gr, ngMA),
+    cpi: ma(cq, ngMA),
+    base: qEnd(ser('kr_policy_bei', '한국:기준금리')),
+    y3: qEnd(ser('kr_yield', '국고채권 3년')),
+    y10: qEnd(ser('kr_yield', '국고채권 10년')),
+  };
+  const ds = new Set();
+  Object.values(S).forEach(m => m.forEach((_v, k) => ds.add(k)));
+  return { S, dates: [...ds].sort() };
+}
+
+// 선행 상관: 명목GDP[t] 와 대상[t+L] (L분기 선행)
+function ngCorr(src, tgt, dates, L) {
+  let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let i = 0; i + L < dates.length; i++) {
+    const x = src.get(dates[i]), y = tgt.get(dates[i + L]);
+    if (x == null || y == null) continue;
+    n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+  }
+  if (n < 12) return null;
+  const den = Math.sqrt((sxx - sx * sx / n) * (syy - sy * sy / n));
+  return den ? { r: (sxy - sx * sy / n) / den, n } : null;
+}
+
+function renderNgdp() {
+  const box = document.getElementById('retailWrap');
+  const { S, dates } = ngPanel();
+  const cols = dates.filter(inRange);
+  const lastOf = m => { const k = [...m.keys()].sort().pop(); return k ? m.get(k) : null; };
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+    + '<b>명목GDP가 물가·금리에 선행하는가</b>를 시차별 상관계수로 봅니다. '
+    + '우리금융경영연구소 「경제 브리프」(2026-06) Box 2 방법론입니다.<br>'
+    + '<span style="color:#8592a3">금리는 <b>분기말 값</b>, 명목GDP·물가상승률은 <b>' + ngMA + '분기 이동평균</b>. '
+    + '선행 L분기 = 명목GDP(t) 와 대상(t+L) 의 상관.</span></div>'
+    + '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px">'
+    + '<span style="color:#555">명목GDP 기준</span><div class="mode" id="ngBasis">'
+    + [['yoy', '전년동기비'], ['qoq', '전기비 연율']].map(([v, t]) =>
+        `<button data-nb="${v}" class="${ngBasis === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
+    + '<span style="color:#555">이동평균</span><div class="mode" id="ngMA">'
+    + [[1, '없음'], [2, '2분기'], [4, '4분기'], [8, '8분기']].map(([v, t]) =>
+        `<button data-nm="${v}" class="${ngMA === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
+    + '<span style="color:#555">최대 선행</span><div class="mode" id="ngLead">'
+    + [4, 6, 8].map(v => `<button data-nl="${v}" class="${ngMaxLead === v ? 'active' : ''}">${v}분기</button>`).join('')
+    + '</div></div>';
+
+  // ── 시차 상관 매트릭스
+  const M = {};
+  NG_TARGETS.forEach(([k]) => {
+    M[k] = [];
+    for (let L = 0; L <= ngMaxLead; L++) M[k].push(ngCorr(S.ngdp, S[k], dates, L));
+  });
+  const best = {};
+  NG_TARGETS.forEach(([k]) => {
+    let bi = -1, bv = -Infinity;
+    M[k].forEach((c, i) => { if (c && c.r > bv) { bv = c.r; bi = i; } });
+    best[k] = bi;
+  });
+  out += '<div class="block-title">시차 상관계수 — 명목GDP가 L분기 선행</div>'
+    + '<table class="data vlines" style="width:auto"><thead><tr><th>선행 L (분기)</th>'
+    + NG_TARGETS.map(([, n]) => `<th>${n}</th>`).join('') + '</tr></thead><tbody>';
+  for (let L = 0; L <= ngMaxLead; L++) {
+    out += `<tr class="${L === 0 ? 'lv0 sep-solid' : 'lv1'}"><td>${L === 0 ? '0 (동시점)' : L}</td>`
+      + NG_TARGETS.map(([k]) => {
+          const c = M[k][L];
+          if (!c) return '<td></td>';
+          const hi = best[k] === L;
+          return `<td${c.r < 0 ? ' class="neg"' : ''}${hi ? ' style="background:#fff3cd;font-weight:700"' : ''}>${c.r.toFixed(2)}</td>`;
+        }).join('') + '</tr>';
+  }
+  out += '</tbody></table>'
+    + '<div style="font-size:12px;color:#8592a3;margin:6px 0 14px">노란 칸이 상관이 가장 높은 시차입니다. '
+    + '표본 n=' + (M.cpi[0] ? M.cpi[0].n : '-') + '.</div>';
+
+  // 최대 시차 요약
+  const sum = NG_TARGETS.map(([k, n]) => {
+    const L = best[k], c = L >= 0 ? M[k][L] : null;
+    return c ? `<b>${n}</b> ${L}분기 (${c.r.toFixed(2)})` : `<b>${n}</b> -`;
+  }).join(' · ');
+  out += `<div style="padding:11px 13px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.85;margin-bottom:14px">`
+    + `<b>최대 상관 시차</b> — ${sum}<br>`
+    + '<span style="color:#8592a3">국고 10년이 가장 짧고 기준금리가 가장 깁니다. '
+    + '시장금리는 명목GDP 개선을 빠르게 선반영하는 반면, 기준금리는 중앙은행이 실제 성장·물가를 '
+    + '확인한 뒤 움직이기 때문입니다 (BIS 2024).</span></div>';
+
+  // ── 차트 4개
+  out += '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:275px"><canvas id="ngC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px">'
+    + [2, 3].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:275px"><canvas id="ngC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // ── 원자료
+  out += '<div class="block-title">원자료 (%)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  const line = (nm, m, cls) => {
+    let h = `<tr class="${cls || 'lv1'}"><td>${nm}</td>`;
+    cols.forEach(d => { const v = m.get(d);
+      h += `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(2)}</td>`; });
+    return h + '</tr>';
+  };
+  out += line(`명목GDP (${ngBasis === 'yoy' ? '전년동기비' : '전기비 연율'}${ngMA > 1 ? `, ${ngMA}Q평균` : ''})`, S.ngdp, 'lv0 sep-solid');
+  NG_TARGETS.forEach(([k, n]) => out += line(n + (k === 'cpi' && ngMA > 1 ? ` (${ngMA}Q평균)` : ''), S[k], 'lv1'));
+  out += '</tbody></table></div>';
+
+  // ── 현재 국면
+  const ng0 = lastOf(S.ngdp), cpi0 = lastOf(S.cpi), b0 = lastOf(S.base);
+  if (ng0 != null && cpi0 != null) {
+    const L = best.cpi;
+    out += '<div style="margin-top:10px;padding:12px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;line-height:1.9">'
+      + `<b>현재 국면</b> — 명목GDP ${ngMA}분기 평균 <b>${ng0.toFixed(2)}%</b>, 물가 ${ngMA}분기 평균 <b>${cpi0.toFixed(2)}%</b>`
+      + (b0 != null ? `, 기준금리 <b>${b0.toFixed(2)}%</b>` : '') + '<br>'
+      + `<span style="color:#8592a3">명목GDP가 물가에 <b>${L}분기 선행</b>(상관 ${M.cpi[L] ? M.cpi[L].r.toFixed(2) : '-'})하는 관계가 유지된다면, `
+      + `현재의 ${ng0 > cpi0 * 2 ? '<b>높은</b> ' : ''}명목 성장세는 향후 ${L}분기에 걸쳐 물가에 `
+      + `<b>${ng0 > cpi0 * 2 ? '상방' : '중립~하방'}</b> 압력으로 작용할 수 있습니다. `
+      + '다만 상관관계이지 인과가 아니며, 공급충격(유가 등)은 이 경로 밖입니다.</span></div>';
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#ngBasis button').forEach(b => b.onclick = () => { ngBasis = b.dataset.nb; refresh(); });
+  box.querySelectorAll('#ngMA button').forEach(b => b.onclick = () => { ngMA = +b.dataset.nm; refresh(); });
+  box.querySelectorAll('#ngLead button').forEach(b => b.onclick = () => { ngMaxLead = +b.dataset.nl; refresh(); });
+
+  // ── 차트: 명목GDP(좌축) vs 대상(우축)
+  const TX = { ticks: { maxTicksLimit: 9, font: { size: 9 },
+                        callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
+  NG_TARGETS.forEach(([k, nm], i) => {
+    if (ngCharts[i]) { ngCharts[i].destroy(); ngCharts[i] = null; }
+    const L = best[k];
+    ngCharts[i] = new Chart(box.querySelector('#ngC' + i), {
+      data: { labels: cols, datasets: [
+        { type: 'line', label: `명목GDP (${ngMA}Q평균)`, data: cols.map(d => S.ngdp.get(d) ?? null),
+          borderColor: '#17879c', borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: true, yAxisID: 'y' },
+        { type: 'line', label: nm + (k === 'cpi' && ngMA > 1 ? ` (${ngMA}Q평균)` : ''),
+          data: cols.map(d => S[k].get(d) ?? null),
+          borderColor: '#e8930c', borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: true, yAxisID: 'y2' },
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, font: { size: 12 },
+            text: `${nm}  —  최대 상관 ${L >= 0 ? `${L}분기 선행 (${M[k][L].r.toFixed(2)})` : '-'}` },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } },
+        },
+        scales: {
+          x: TX,
+          y: { position: 'left', ticks: { font: { size: 10 }, color: '#17879c' },
+               grid: { color: c => c.tick.value === 0 ? '#c0392b55' : '#eee' } },
+          y2: { position: 'right', ticks: { font: { size: 10 }, color: '#e8930c' }, grid: { display: false } },
+        },
+      },
+    });
+  });
+}
+
 // ── 테일러 준칙 (Taylor rule) ─────────────────────────────────
 // i = r* + π + a(π − π*) + b(GDP갭).  한은 잠재성장률 2.0%(2024~26) 반영.
 const TAYLOR = { id: 'taylor', name: '테일러 준칙',
                  ids: ['kr_base_rate', 'kr_cpi', 'kr_cpi_core', 'kr_cpi_living', 'kr_infl_expect',
                        'kr_gdp_real', 'kr_policy_bei', 'kr_yield', 'mkt_oil_fx',
                        'kr_apt_sale_idx', 'kr_apt_jeonse_idx'] };
+let ngCharts = [null, null, null, null];
 let tayData = null, tayTab = 'chart', tayCharts = [null, null];
 // 준칙금리 = 중립금리(명목) + a×인플레갭 + b×GDP갭
 // neutral 은 '명목' 중립금리다. 한은 제시 범위 1.8~3.3% 를 그대로 넣을 수 있다.
@@ -6182,6 +6416,13 @@ document.getElementById('endSel').onchange = e => {
       tyBtn.id = 'taylorBtn'; tyBtn.textContent = TAYLOR.name; tyBtn.onclick = enterTaylor;
       const usHdr = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
       if (usHdr) nav.insertBefore(tyBtn, usHdr); else nav.appendChild(tyBtn);
+    }
+    // 명목GDP·금리 시차 상관 — 미국 섹션 앞에 배치
+    if (navOn('ngdp')) {
+      const ngBtn = document.createElement('button');
+      ngBtn.id = 'ngdpBtn'; ngBtn.textContent = NGDP.name; ngBtn.onclick = enterNgdp;
+      const usHdr2 = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
+      if (usHdr2) nav.insertBefore(ngBtn, usHdr2); else nav.appendChild(ngBtn);
     }
     // 지표 비교 메뉴 (구분선 + 버튼)
     const hr = document.createElement('div');

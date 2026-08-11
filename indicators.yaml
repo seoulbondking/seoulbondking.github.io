@@ -405,6 +405,64 @@ indicators:
     params:
       stat_code: "404Y014"
 
+  # ── 교역조건 → 수출입물가 → 국내공급물가 → PPI → 근원CPI 전달경로 ──────
+  #   유상대 부총재보(2026.08.11): "교역조건이 수출·내수가격을 거쳐 근원물가에 영향"
+  #   비용경로(수입물가↑ → 생산비 → 국내가격)와 소득경로(교역조건 개선 → 구매력 → 내수)를
+  #   가르려면 교역조건·수출입물가·국내공급물가가 함께 있어야 한다.
+
+  # 교역조건지수 — 순상품(가격비율) · 소득(물량까지 반영) (403Y005)
+  - id: kr_terms_trade
+    name: 교역조건지수
+    source: ecos
+    unit: 지수(2020=100)
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    params:
+      stat_code: "403Y005"
+
+  # 수출물가지수(기본분류) — 총지수·농림수산품·공산품(+반도체·석유제품 등) (402Y014)
+  - id: kr_export_price
+    name: 수출물가지수 (기본분류)
+    source: ecos
+    unit: 지수(2020=100)
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    with_weights: true
+    levels: 2                   # 총지수+대분류+중분류(반도체·석유제품 등)
+    series_first: ["총지수"]
+    params:
+      stat_code: "402Y014"
+
+  # 수입물가지수(기본분류) — 비용경로의 출발점. 수출과 달리 401Y 접두사다 (402Y 아님) (401Y015)
+  - id: kr_import_price
+    name: 수입물가지수 (기본분류)
+    source: ecos
+    unit: 지수(2020=100)
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    with_weights: true
+    levels: 2                   # 총지수+대분류+중분류(원유·천연가스·화학제품 등)
+    series_first: ["총지수"]
+    params:
+      stat_code: "401Y015"
+
+  # 국내공급물가지수 — 국내 출하 + 수입품을 합친 공급 단계 물가. PPI 와 CPI 사이의 다리 (405Y006)
+  - id: kr_supply_price
+    name: 국내공급물가지수
+    source: ecos
+    unit: 지수(2020=100)
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    with_weights: true
+    levels: 1
+    series_first: ["총지수"]
+    params:
+      stat_code: "405Y006"
+
   - id: kr_base_rate
     name: 한국은행 기준금리
     source: ecos

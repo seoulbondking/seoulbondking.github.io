@@ -469,6 +469,7 @@ function refresh() {
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
+  const isTot = view === 'tot';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -478,7 +479,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -491,8 +492,8 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
     (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || (isCombo && tab === 'chart')) ? '' : 'none';
@@ -510,6 +511,7 @@ function refresh() {
   else if (isPpi) renderPpi();
   else if (isRet) renderRetail();
   else if (isJlt) renderJolts();
+  else if (isTot) renderTot();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -5256,11 +5258,257 @@ function renderUsDur() {
       y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false }, title: { display: true, text: '주', font: { size: 10 } } } } } });
 }
 
+// ── 교역조건·물가 (전달경로) ────────────────────────────────────
+// 유상대 부총재보(2026.08.11) "교역조건이 수출·내수가격을 거쳐 근원물가에 영향".
+// 그 사슬을 한 화면에 모은다: 교역조건 → 수출입물가 → 국내공급물가 → PPI → 근원CPI
+const TOT = { id: 'tot', name: '교역조건·물가',
+              ids: ['kr_terms_trade', 'kr_export_price', 'kr_supply_price', 'kr_import_price'],
+              extra: ['kr_ppi_special', 'kr_cpi_core'] };
+let totData = null, totTab = 'main', totCharts = [null, null, null], totCur = '원화기준';
+let totCM = 'yoy';   // 차트 변환: lvl(지수) | mom(전월비) | yoy(전년동월비)
+
+async function enterTot() {
+  const all = TOT.ids.concat(TOT.extra);
+  const got = await Promise.all(all.map(id => loadIndicator(id).catch(() => null)));
+  totData = {}; all.forEach((id, i) => totData[id] = got[i]);
+  if (!totData['kr_terms_trade']) { alert('교역조건 데이터가 없습니다. python fetch.py kr_terms_trade 실행 필요.'); return; }
+  const t = totData['kr_terms_trade'];
+  current = { id: TOT.id, name: TOT.name, freq: 'M', unit: '지수', updated_at: t.updated_at, series: [] };
+  view = 'tot'; totTab = 'main';
+  document.getElementById('title').textContent = TOT.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + t.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'totBtn'));
+  const ds = new Set();
+  TOT.ids.forEach(id => { const x = totData[id];
+    if (x) x.series.forEach(s => s.data.forEach(p => ds.add(p.d))); });
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 60)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderTot() {
+  const box = document.getElementById('retailWrap');
+  // 탭마다 캔버스 개수가 달라, 남아 있는 차트를 먼저 모두 정리한다
+  totCharts.forEach((c, i) => { if (c) { c.destroy(); totCharts[i] = null; } });
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, k) => { const i = idx.get(d); return i >= k ? periodDates[i - k] : null; };
+  // 지표 하나에서 시리즈 하나 → Map. 이름은 부분일치도 허용한다
+  const M = (id, nm) => { const x = totData[id];
+    if (!x) return new Map();
+    const s = x.series.find(y => y.name === nm) || x.series.find(y => y.name.includes(nm));
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const lvl = (m, d) => m.get(d) ?? null;
+  const yoy = (m, d) => { const p = prevN(d, 12); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+  const mom = (m, d) => { const p = prevN(d, 1); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+
+  const net = M('kr_terms_trade', '순상품교역조건지수');
+  const inc = M('kr_terms_trade', '소득교역조건지수');
+  const expT = M('kr_export_price', '총지수 · ' + totCur);
+  const impT = M('kr_import_price', '총지수 · ' + totCur);
+  const sup = M('kr_supply_price', '총지수');
+  const ppi = M('kr_ppi_special', '총지수');
+  const core = M('kr_cpi_core', '식료품 및 에너지제외');
+  const hasImp = impT.size > 0;
+  // 물가지수 기준 교역조건 = 수출물가 ÷ 수입물가 × 100 (통관 단가 기준과 산출 방식이 다르다)
+  const netP = d => { const a = expT.get(d), b = impT.get(d); return a != null && b ? a / b * 100 : null; };
+
+  // 차트 변환 — 표는 지수·MoM·YoY 를 모두 보여주지만 차트는 하나만 고른다
+  const CM = { lvl: ['지수 (2020=100)', lvl], mom: ['전월비 MoM (%)', mom], yoy: ['전년동월비 YoY (%)', yoy] };
+  const cfn = CM[totCM][1], clab = CM[totCM][0];
+
+  const tabs = [['main', '종합'], ['exp', '수출물가 업종별'], ['sup', '국내공급물가']];
+  let out = '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+    + '<div class="mode">'
+    + tabs.map(([k, t]) => `<button data-tt="${k}" class="${totTab === k ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><span style="font-size:12px;color:#5a6b80"><b>차트</b></span><div class="mode" id="totCM">'
+    + [['lvl', '지수'], ['mom', 'MoM'], ['yoy', 'YoY']].map(([v, t]) =>
+        `<button data-cm="${v}" class="${totCM === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div></div>';
+
+  if (totTab === 'main') {
+    out += '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+      + '한국은행이 보는 물가 전달경로를 한 줄로 세운 화면입니다.<br>'
+      + '<b>교역조건 → 수출입물가 → 국내공급물가 → 생산자물가 → 근원소비자물가</b><br>'
+      + '<span style="color:#8592a3"><b>순상품</b>은 가격 비율(비용경로), <b>소득</b>은 물량까지 반영(소득경로)입니다. '
+      + '둘의 방향이 갈리면 반도체처럼 <b>단가는 깎이는데 물량으로 버티는</b> 국면입니다.</span></div>'
+      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+      + '<b>수출입물가 기준</b><div class="mode" id="totCur">'
+      + ['원화기준', '계약통화기준', '달러기준'].map(c =>
+          `<button data-tc="${c}" class="${totCur === c ? 'active' : ''}">${c.replace('기준', '')}</button>`).join('')
+      + '</div><span style="color:#8592a3">원화 − 계약통화 차이가 곧 <b>환율 효과</b>입니다</span></div>';
+    if (!hasImp) out += '<div style="padding:9px 12px;background:#fffaf0;border-left:3px solid #e8930c;'
+      + 'border-radius:6px;font-size:12px;color:#7a5a12;line-height:1.7;margin-bottom:10px">'
+      + '※ <b>수입물가지수</b>가 없어 비용경로의 출발점이 비어 있습니다. '
+      + '<b>python tools\\ecos_find.py 수입물가</b> 로 통계표코드를 확인해 주세요.</div>';
+    out += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="ttC${i}"></canvas></div></div>`).join('')
+      + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="ttC2"></canvas></div></div></div>';
+
+    const rows = [
+      ['순상품교역조건지수', net, 'flat lv0 sep-solid', f1],
+      ['소득교역조건지수', inc, 'flat lv0 sep-solid', f1],
+      [`수출물가 총지수 (${totCur})`, expT, 'flat lv0', f1],
+    ];
+    if (hasImp) rows.push([`수입물가 총지수 (${totCur})`, impT, 'flat lv0', f1]);
+    rows.push(['국내공급물가 총지수', sup, 'flat lv0', f1],
+              ['생산자물가 총지수', ppi, 'flat lv0', f1],
+              ['근원CPI (식료품·에너지 제외)', core, 'flat lv0 sep-solid', f1]);
+    const tbl = (title, fn, fmt) => {
+      let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+        + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+      rows.forEach(([nm, m, cls, f]) => {
+        h += `<tr class="${cls}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d);
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : (fmt || f)(v)}</td>`; }).join('') + '</tr>';
+      });
+      return h + '</tbody></table></div>';
+    };
+    out += tbl('지수 (2020=100)', lvl, null);
+    out += tbl('전월비 MoM (%)', mom, f2);
+    out += tbl('전년동월비 YoY (%)', yoy, f2);
+    if (hasImp) {
+      out += '<div class="block-title">교역조건 두 가지 산출 방식 비교</div>'
+        + '<div style="font-size:12px;color:#5a6b80;line-height:1.8;margin-bottom:6px">'
+        + '<b>순상품교역조건지수</b>는 관세청 <b>통관 단가</b>, <b>수출물가÷수입물가</b>는 기업 설문 <b>물가지수</b>로 만듭니다. '
+        + '벌어지는 시점이 오히려 정보입니다 — 계약가와 실제 통관가가 어긋난 구간입니다.</div>'
+        + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+        + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>'
+        + `<tr class="flat lv0"><td>순상품교역조건 (통관 단가)</td>`
+        + cols.map(d => `<td>${net.get(d) == null ? '' : f1(net.get(d))}</td>`).join('') + '</tr>'
+        + `<tr class="flat lv0"><td>수출물가 ÷ 수입물가 (${totCur})</td>`
+        + cols.map(d => { const v = netP(d); return `<td>${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
+        + `<tr class="flat lv0 sep-solid"><td>차이</td>`
+        + cols.map(d => { const a = net.get(d), b = netP(d);
+            const v = (a != null && b != null) ? a - b : null;
+            return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
+        + '</tbody></table></div>';
+    }
+  } else if (totTab === 'exp') {
+    const ind = totData['kr_export_price'];
+    const names = ind ? [...new Set(ind.series.map(s => s.name.split(' · ')[0]))]
+      .filter(n => n !== '수출물가지수 (기본분류)') : [];
+    out += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+      + '<b>통화 기준</b><div class="mode" id="totCur">'
+      + ['원화기준', '계약통화기준', '달러기준'].map(c =>
+          `<button data-tc="${c}" class="${totCur === c ? 'active' : ''}">${c.replace('기준', '')}</button>`).join('')
+      + '</div><span style="color:#8592a3">계약통화 = 순수 가격 · 원화 = 환율까지 반영</span></div>'
+      + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ttC0"></canvas></div></div></div>';
+    const mk = (title, fn, fmt) => {
+      let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>업종</th>`
+        + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+      names.forEach((n, i) => { const m = M('kr_export_price', n + ' · ' + totCur);
+        h += `<tr class="flat lv${i === 0 ? 0 : 1}${i === 0 ? ' sep-solid' : ''}"><td>${n}</td>`
+          + cols.map(d => { const v = fn(m, d);
+            return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('') + '</tr>'; });
+      return h + '</tbody></table></div>';
+    };
+    out += mk(`수출물가지수 — ${totCur} (2020=100)`, lvl, f1);
+    out += mk(`수출물가 전월비 MoM — ${totCur} (%)`, mom, f2);
+    out += mk(`수출물가 전년동월비 YoY — ${totCur} (%)`, yoy, f2);
+  } else {
+    const ind = totData['kr_supply_price'];
+    const names = ind ? ind.series.map(s => s.name).filter(n => n !== '국내공급물가지수') : [];
+    out += '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+      + '<b>국내공급물가지수</b>는 국내에 <b>공급되는 모든 상품·서비스</b>의 가격입니다. '
+      + '국내 생산품(생산자물가)에 <b>수입품(수입물가)까지 더한</b> 지수라, 수입 가격이 국내로 넘어오는 길목에 있습니다.<br>'
+      + '<span style="color:#8592a3">가공 단계별로 <b>원재료 → 중간재 → 최종재</b> 순서로 전가됩니다. '
+      + '원재료가 먼저 튀고 최종재가 늦게 따라오면 그게 전가 진행 중이라는 뜻입니다.</span></div>'
+      + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ttC0"></canvas></div></div></div>';
+    const mk = (title, fn, fmt) => {
+      let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+        + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+      names.forEach((n, i) => { const m = M('kr_supply_price', n);
+        h += `<tr class="flat lv${i === 0 ? 0 : 1}${i === 0 ? ' sep-solid' : ''}"><td>${n}</td>`
+          + cols.map(d => { const v = fn(m, d);
+            return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('') + '</tr>'; });
+      return h + '</tbody></table></div>';
+    };
+    out += mk('국내공급물가지수 (2020=100)', lvl, f1);
+    out += mk('국내공급물가 전월비 MoM (%)', mom, f2);
+    out += mk('국내공급물가 전년동월비 YoY (%)', yoy, f2);
+  }
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-tt]').forEach(b => b.onclick = () => { totTab = b.dataset.tt; renderTot(); });
+  box.querySelectorAll('#totCur button').forEach(b => b.onclick = () => { totCur = b.dataset.tc; renderTot(); });
+  box.querySelectorAll('#totCM button').forEach(b => b.onclick = () => { totCM = b.dataset.cm; renderTot(); });
+
+  const mkC = (i, title, datasets, extra) => {
+    const el = box.querySelector('#ttC' + i);
+    if (totCharts[i]) { totCharts[i].destroy(); totCharts[i] = null; }
+    if (!el) return;
+    totCharts[i] = new Chart(el, {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 },
+          callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 10 } },
+               grid: { color: c => c.tick.value === 0 ? '#33333388' : '#eee' } } } }, extra || {}),
+    });
+  };
+  // 변환은 위 토글(totCM)이 전부 결정한다 — 호출부의 5번째 인자는 무시된다
+  const ln = (label, m, col, w) => ({ type: 'line', label,
+    data: cols.map(d => cfn(m, d)),
+    borderColor: col, backgroundColor: col, borderWidth: w || 2, pointRadius: 0, tension: 0.15, spanGaps: true });
+
+  if (totTab === 'main') {
+    mkC(0, `교역조건 — ${clab}`, [
+      ln('순상품교역조건', net, '#1a4fa0', 2.6),
+      ln('소득교역조건', inc, '#e0a036', 2.2),
+    ]);
+    const d2 = [ln(`수출물가 (${totCur})`, expT, '#1a6fc4', 2.2, 'yoy')];
+    if (hasImp) d2.push(ln(`수입물가 (${totCur})`, impT, '#c0392b', 2.2, 'yoy'));
+    d2.push(ln('국내공급물가', sup, '#7fb2e5', 1.8, 'yoy'));
+    mkC(1, `전달경로 앞단 (교역조건→수출입→공급) — ${clab}`, d2);
+    mkC(2, `전달경로 뒷단 (공급→PPI→근원CPI) — ${clab}`, [
+      ln('국내공급물가', sup, '#7fb2e5', 2, 'yoy'),
+      ln('생산자물가', ppi, '#1a4fa0', 2.2, 'yoy'),
+      ln('근원CPI', core, '#c0392b', 2.6, 'yoy'),
+    ]);
+  } else if (totTab === 'exp') {
+    const pick = ['총지수', '공산품', '컴퓨터,전자및광학기기', '석탄및석유제품', '화학제품'];
+    mkC(0, `수출물가 — ${totCur} · ${clab}`,
+      pick.map((n, i) => ln(n, M('kr_export_price', n + ' · ' + totCur),
+        PALETTE[i % PALETTE.length], n === '총지수' ? 2.8 : 1.8, 'yoy')));
+  } else {
+    const names = (totData['kr_supply_price'] ? totData['kr_supply_price'].series.map(s => s.name) : [])
+      .filter(n => n !== '국내공급물가지수');
+    mkC(0, `국내공급물가 — ${clab}`,
+      names.map((n, i) => ln(n, M('kr_supply_price', n), PALETTE[i % PALETTE.length],
+        n === '총지수' ? 2.8 : 1.8, 'yoy')));
+  }
+}
+
 // ── 미국 JOLTS ─────────────────────────────────────────────────
 // 표 구성은 US_macro.xlsm 의 JOLTS 시트를 따른다 (JOB OPENINGS → Rates → Unemployed).
 // 시트에 없는 계층만 실제 관계에 맞춰 들여쓴다:
 //   구인 = 민간 + 정부 · 총 이직 = 자발적 이직 + 해고·감원 + 기타
-const JOLTS = { id: 'jolts', name: '미국 JOLTS (구인·이직)', ids: ['us_jolts', 'us_lf'] };
+const JOLTS = { id: 'jolts', name: '미국 JOLTS (구인·이직)', ids: ['us_jolts', 'us_lf', 'us_labor'] };
+// 베버리지 곡선 시기 구분 — [표시명, 시작(YYYY-MM), 끝, 색]
+// 곡선을 '따라 내려온 것'과 곡선 '자체가 밀린 것'을 색으로 갈라 본다
+const BEV_ERA = [
+  ['~2019 정상', '2000-01', '2019-12', '#9aa7b8'],
+  ['2020~21 팬데믹 (곡선 우측 이동)', '2020-01', '2021-12', '#e0a036'],
+  ['2022 과열 (v/u 2.0 정점)', '2022-01', '2022-12', '#c0392b'],
+  ['2023~24 냉각 (수직 구간 하강)', '2023-01', '2024-12', '#1a6fc4'],
+  ['2025~ 현재 (팔꿈치 부근)', '2025-01', '2099-12', '#1a4fa0'],
+];
 const JLT_LVL = [   // [표시명, 레벨]
   ['구인', 0], ['구인 (민간)', 1], ['구인 (정부)', 1],
   ['채용', 0],
@@ -5268,6 +5516,7 @@ const JLT_LVL = [   // [표시명, 레벨]
 ];
 const JLT_RATE = ['구인율', '이직률', '채용률', '총 이직률', '해고율'];
 let joltsData = null, joltsCharts = [null, null, null], joltsCol = null;
+let bevAll = 1;   // 베버리지 곡선 표본: 1 = 전 구간(시기 비교용) · 0 = 위 기간설정 구간만
 
 async function enterJolts() {
   const got = await Promise.all(JOLTS.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -5396,24 +5645,60 @@ function renderJolts() {
     ln('채용률', S['채용률'], '#a8b4c2', 1.4),
   ]);
 
-  // 베버리지 곡선 — 구인율(세로) vs 실업률(가로). 노동시장 긴장도의 궤적
-  const unr = M(joltsData['us_lf'], '실업자'), pop = M(joltsData['us_lf'], '경제활동인구');
-  const pts = cols.map(d => { const o = S['구인율'].get(d), u = unr.get(d), l = pop.get(d);
-    return (o != null && u != null && l) ? { x: u / l * 100, y: o, d } : null; }).filter(Boolean);
+  // ── 베버리지 곡선 ─────────────────────────────────────────────
+  // 가로 실업률(u) · 세로 구인율(v). 시기별로 색을 나눠, 같은 곡선을 따라
+  // 미끄러진 것인지(경기적) 곡선 자체가 밀린 것인지(구조적)를 눈으로 가른다.
+  const unRate = M(joltsData['us_labor'], '실업률');   // BLS 공식 실업률
+  const bevDates = (bevAll ? periodDates : cols)
+    .filter(d => S['구인율'].get(d) != null && unRate.get(d) != null);
+  const bevSets = BEV_ERA.map(([lab, a, b, col]) => {
+    const pts = bevDates.filter(d => d.slice(0, 7) >= a && d.slice(0, 7) <= b)
+      .map(d => ({ x: unRate.get(d), y: S['구인율'].get(d), d }));
+    return { lab, col, pts };
+  }).filter(e => e.pts.length);
+  const lastEra = bevSets[bevSets.length - 1];
+  const lastPt = lastEra && lastEra.pts[lastEra.pts.length - 1];
   if (joltsCharts[2]) { joltsCharts[2].destroy(); joltsCharts[2] = null; }
   joltsCharts[2] = new Chart(box.querySelector('#jlC2'), {
-    data: { datasets: [
-      { type: 'line', label: '베버리지 곡선 (구인율 vs 실업률)', data: pts, showLine: true,
-        borderColor: '#8ba6c9', borderWidth: 1.2, pointRadius: 2.2,
-        pointBackgroundColor: pts.map((_p, i) => i === pts.length - 1 ? '#c0392b' : '#1a4fa0') },
-    ] },
+    data: { datasets: bevSets.map(e => ({
+        type: 'line', label: e.lab, data: e.pts, showLine: true,
+        borderColor: e.col, backgroundColor: e.col, borderWidth: 1.5,
+        pointRadius: e.pts.map(p => (lastPt && p.d === lastPt.d) ? 6 : 2.4),
+        pointStyle: e.pts.map(p => (lastPt && p.d === lastPt.d) ? 'rectRot' : 'circle'),
+        tension: 0,
+      })) },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
-        title: { display: true, text: '베버리지 곡선 — 실업률(가로) vs 구인율(세로), 빨강=최근', font: { size: 12 } },
-        tooltip: { callbacks: { label: it => ` ${dateLabel(it.raw.d)}: 실업률 ${it.raw.x.toFixed(1)}% · 구인율 ${it.raw.y.toFixed(1)}%` } } },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 9.5 }, boxWidth: 9 } },
+        title: { display: true, text: '베버리지 곡선 — 실업률(가로) × 구인율(세로) · ◆ = 최신', font: { size: 12 } },
+        tooltip: { callbacks: {
+          title: () => '',
+          label: it => ` ${dateLabel(it.raw.d)} · 실업률 ${it.raw.x.toFixed(1)}% · 구인율 ${it.raw.y.toFixed(1)}%`
+            + ` · v/u ${(it.raw.y / it.raw.x).toFixed(2)}` } } },
       scales: { x: { type: 'linear', title: { display: true, text: '실업률 %', font: { size: 10 } }, ticks: { font: { size: 10 } } },
         y: { title: { display: true, text: '구인율 %', font: { size: 10 } }, ticks: { font: { size: 10 } } } } },
   });
+
+  // 시기별 요약 — 곡선이 어디서 어디로 갔는지 숫자로도 남긴다
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const out2 = `<div class="block-title">베버리지 곡선 — 시기별 위치 `
+    + `<button class="mini-btn${bevAll ? ' on' : ''}" id="bevAll">${bevAll ? '전 구간' : '선택 구간'}</button></div>`
+    + '<div class="tscroll"><table class="data vlines" style="width:auto"><thead><tr>'
+    + '<th>시기</th><th>개월</th><th>실업률 u</th><th>구인율 v</th><th>v/u</th><th>해석</th>'
+    + '</tr></thead><tbody>'
+    + bevSets.map(e => {
+        const u = mean(e.pts.map(p => p.x)), v = mean(e.pts.map(p => p.y));
+        return `<tr class="flat lv0"><td style="text-align:left"><span style="color:${e.col}">■</span> ${e.lab}</td>`
+          + `<td>${e.pts.length}</td><td>${u.toFixed(2)}</td><td>${v.toFixed(2)}</td>`
+          + `<td><b>${(v / u).toFixed(2)}</b></td>`
+          + `<td style="text-align:left;color:#5a6b80">${
+              v / u > 1.6 ? '곡선 좌상단 — 구인 과잉, 임금 압력 최대'
+              : v / u > 1.1 ? '하강 중 — 공고 취소로 흡수되는 구간'
+              : v / u > 0.85 ? '팔꿈치 — 여기서 더 식으면 실업률로 나타남'
+              : '곡선 우하단 — 수요 부족'}</td></tr>`;
+      }).join('') + '</tbody></table></div>';
+  box.insertAdjacentHTML('beforeend', out2);
+  const bevBtn = box.querySelector('#bevAll');
+  if (bevBtn) bevBtn.onclick = () => { bevAll ^= 1; renderJolts(); };
 }
 function bindTreeJ(box) {
   bindTreeGeneric(box, 'jlCar', 'jlE', 'jlC', JLT_LVL, () => joltsCol, v => { joltsCol = v; }, renderJolts);
@@ -7839,7 +8124,7 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
@@ -7882,6 +8167,14 @@ document.getElementById('endSel').onchange = e => {
           const b = document.createElement('button');
           b.id = 'usEmpBtn'; b.textContent = US_EMP.name; b.onclick = enterUsEmp;
           nav.appendChild(b); usEmpInserted = true;
+        }
+        return;
+      }
+      if (TOT.ids.includes(item.id)) {   // 교역조건·수출입물가·국내공급물가 → 하나로
+        if (!totInserted) {
+          const b = document.createElement('button');
+          b.id = 'totBtn'; b.textContent = TOT.name; b.onclick = enterTot;
+          nav.appendChild(b); totInserted = true;
         }
         return;
       }

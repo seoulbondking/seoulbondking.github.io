@@ -4859,6 +4859,48 @@ const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
 let usEmpSel = null, usIndCharts = [null, null];
 let usMainCol = null;   // 종합 탭 전월증감 트리에서 접어둔 그룹
+let usCesCol = null;    // 시간·급여 업종 트리 (두 표 공통)
+let usDurCol = null;    // 실업기간 트리
+let usErnMode = 'lvl';  // 주당급여 표시: lvl(금액 $, 시트와 동일) | yoy(전년동월비 %)
+// Empsit 의 AVERAGE WEEKLY HOURS / EARNINGS 업종 계층
+const CES_TREE = [
+  ['민간 전체', 0],
+  ['재화생산', 1], ['광업·벌목', 2], ['건설', 2], ['제조업', 2],
+  ['민간 서비스업', 1], ['도매', 2], ['소매', 2], ['운송·창고', 2], ['유틸리티', 2],
+  ['정보', 2], ['금융', 2], ['전문·비즈니스', 2], ['교육·보건', 2], ['레저·접객', 2], ['기타 서비스', 2],
+];
+// Empsit 의 Number of Unemployed 계층 (15주 이상 = 15~26주 + 27주 이상)
+const DUR_TREE = [
+  ['5주 미만', 0], ['5~14주', 0],
+  ['15주 이상', 0], ['15~26주', 1], ['27주 이상 (장기실업)', 1],
+];
+// ── 접이식 트리 공용 헬퍼 ──────────────────────────────────────
+// tree = [[이름, 레벨], ...] · 반환 [이름, 레벨, 자식있음]
+function treeVisible(tree, collapsed) {
+  const out = []; let hide = null;
+  tree.forEach(([nm, lv], i) => {
+    if (hide != null && lv > hide) return;      // 접힌 그룹의 하위는 건너뛴다
+    hide = null;
+    out.push([nm, lv, !!(tree[i + 1] && tree[i + 1][1] > lv)]);
+    if (collapsed.has(nm)) hide = lv;
+  });
+  return out;
+}
+const treeParents = tree => new Set(
+  tree.filter((r, i) => tree[i + 1] && tree[i + 1][1] > r[1]).map(r => r[0]));
+const treeCaret = (nm, kid, collapsed, cls) => kid
+  ? `<span class="${cls}" data-tg="${nm}" style="cursor:pointer;color:#1a4fa0;font-weight:700;margin-right:5px">${collapsed.has(nm) ? '▸' : '▾'}</span>`
+  : '<span style="margin-right:5px;color:transparent">·</span>';
+const treeBtns = (idE, idC) =>
+  ` <button class="mini-btn" id="${idE}">전체 펼치기</button> <button class="mini-btn" id="${idC}">전체 접기</button>`;
+// 캐럿·전체버튼 클릭 배선 (state 를 갈아끼우고 재렌더)
+function bindTree(box, cls, idE, idC, tree, get, set) {
+  box.querySelectorAll('.' + cls).forEach(el => el.onclick = () => {
+    const n = el.dataset.tg, c = get(); c.has(n) ? c.delete(n) : c.add(n); set(c); renderUsEmp(); });
+  const e = box.querySelector('#' + idE), c = box.querySelector('#' + idC);
+  if (e) e.onclick = () => { set(new Set()); renderUsEmp(); };
+  if (c) c.onclick = () => { set(treeParents(tree)); renderUsEmp(); };
+}
 // 비농업 트리 [이름, 레벨]. 14개 말단(레벨3 + 정부)이 배타적 분할 → 합 = 총 비농업 증감
 const NFP_TREE = [
   ['비농업 전체', 0], ['민간', 1],
@@ -4933,20 +4975,39 @@ function renderUsHoursEarn() {
   // 차트 2개: 민간 전체 주당근로시간 · 제조업 주당근로시간 / 주당급여 YoY(민간·제조)
   let out = '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:320px"><div class="cchart" style="height:250px"><canvas id="usH${i}"></canvas></div></div>`).join('') + '</div>';
-  const tblOf = (title, ind, fn, fmt) => {
-    let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>업종</th>`
+  // 업종 계층은 Empsit 의 AVERAGE WEEKLY HOURS / EARNINGS 블록을 따른다
+  if (usCesCol === null) usCesCol = new Set(['재화생산', '민간 서비스업']);
+  const tblOf = (title, ind, fn, fmt, btnE, btnC, carCls) => {
+    let h = `<div class="block-title">${title}${treeBtns(btnE, btnC)}</div>`
+      + '<div class="tscroll"><table class="data vlines"><thead><tr><th>업종</th>'
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
-    CES_INDS.forEach((nm, i) => {
+    treeVisible(CES_TREE, usCesCol).forEach(([nm, lv, kid]) => {
       const m = Mof(ind, nm);
-      h += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d); const t = v == null ? '' : fmt(v);
-        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
+      h += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td>${treeCaret(nm, kid, usCesCol, carCls)}${nm}</td>`
+        + cols.map(d => { const v = fn(m, d);
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('') + '</tr>';
     });
     return h + '</tbody></table></div>';
   };
-  out += tblOf('주당 근로시간 (업종별, 시간)', hours, lvl, v => v.toFixed(1));
-  out += tblOf('주당 급여 전년동월비 (업종별, %)', earn, yoy, v => v.toFixed(2));
+  out += tblOf('AVERAGE WEEKLY HOURS — 주당 근로시간 (시간)', hours, lvl, v => v.toFixed(1),
+               'uhE', 'uhC', 'uhCar');
+  out += '<div style="display:flex;gap:8px;align-items:center;margin:14px 0 4px;font-size:12px">'
+    + '<b>주당급여 표시</b><div class="mode" id="usErnMode">'
+    + [['lvl', '금액 ($)'], ['yoy', '전년동월비 (%)']].map(([v, t]) =>
+        `<button data-em="${v}" class="${usErnMode === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><span style="color:#8592a3">엑셀 시트는 금액 기준입니다</span></div>';
+  out += usErnMode === 'lvl'
+    ? tblOf('AVERAGE WEEKLY EARNINGS — 주당 급여 ($)', earn, lvl,
+            v => v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'ueE2', 'ueC2', 'ueCar2')
+    : tblOf('AVERAGE WEEKLY EARNINGS — 주당 급여 전년동월비 (%)', earn, yoy,
+            v => v.toFixed(2), 'ueE2', 'ueC2', 'ueCar2');
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  const setCes = v => { usCesCol = v; };
+  bindTree(box, 'uhCar', 'uhE', 'uhC', CES_TREE, () => usCesCol, setCes);
+  bindTree(box, 'ueCar2', 'ueE2', 'ueC2', CES_TREE, () => usCesCol, setCes);
+  box.querySelectorAll('#usErnMode button').forEach(b =>
+    b.onclick = () => { usErnMode = b.dataset.em; renderUsEmp(); });
   const mk = (i, title, datasets) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
     usEmpCharts[i] = new Chart(box.querySelector('#usH' + i), {
@@ -5058,17 +5119,25 @@ function renderUsDur() {
     });
     return h + '</tbody></table></div>';
   };
-  out += tbl('실업기간별 실업자 (천명)', [
-    ['5주 미만', d => lvl(u5, d), 'lv0 sep-solid'],
-    ['5~14주', d => lvl(u514, d), 'lv1'],
-    ['15주 이상', d => lvl(u15, d), 'lv1'],
-    ['· 15~26주', d => lvl(u1526, d), 'lv2'],
-    ['· 27주 이상 (장기실업)', d => lvl(u27, d), 'lv2'],
-  ]);
-  out += tbl('실업기간 (주)', [
-    ['평균 실업기간', d => lvl(avg, d), 'lv0 sep-solid', f1],
-    ['중위 실업기간', d => lvl(med, d), 'lv1', f1],
-    ['장기실업 비중 (27주+/전체, %)', shareLT, 'lv1 sep-solid', f1],
+  // Empsit 의 Number of Unemployed 계층 (15주 이상 아래로 15~26주·27주 이상)
+  if (usDurCol === null) usDurCol = new Set();
+  const DM = { '5주 미만': u5, '5~14주': u514, '15주 이상': u15,
+               '15~26주': u1526, '27주 이상 (장기실업)': u27 };
+  out += '<div class="block-title">NUMBER OF UNEMPLOYED — 실업기간별 실업자 (천명)'
+    + treeBtns('udE', 'udC') + '</div>'
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>실업기간</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  treeVisible(DUR_TREE, usDurCol).forEach(([nm, lv, kid]) => {
+    const m = DM[nm];
+    out += `<tr class="flat lv${lv}"><td>${treeCaret(nm, kid, usDurCol, 'udCar')}${nm}</td>`
+      + cols.map(d => { const v = lvl(m, d);
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : k0(v)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  out += tbl('실업기간 (주) · 장기실업 비중 (%)', [
+    ['평균 실업기간 (주)', d => lvl(avg, d), 'flat lv0', f1],
+    ['중위 실업기간 (주)', d => lvl(med, d), 'flat lv0 sep-solid', f1],
+    ['장기실업 비중 (27주+/전체, %)', shareLT, 'flat lv0', f1],
   ]);
   // 3분할 합이 실업자 총계와 맞는지 확인 (반올림 오차 외엔 0이어야 한다)
   out += tbl('합계 점검 — 3분할 합 vs 실업자 총계 (천명, 계절조정 차이로 소폭 불일치)', [
@@ -5079,6 +5148,7 @@ function renderUsDur() {
 
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  bindTree(box, 'udCar', 'udE', 'udC', DUR_TREE, () => usDurCol, v => { usDurCol = v; });
 
   const mk = (i, title, datasets, opt) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
@@ -5162,24 +5232,13 @@ function renderUsEmpMain() {
   // ── OVER THE MONTH CHANGE — 전 카테고리 트리 (그룹 단위 접기/펼치기) ──
   if (usMainCol === null)   // 기본은 대분류만 펼친 상태
     usMainCol = new Set(['재화생산', '민간 서비스업', '운송·창고', '전문·비즈니스', '교육·보건']);
-  const parentOf = i => NFP_TREE[i + 1] && NFP_TREE[i + 1][1] > NFP_TREE[i][1];
-  const vis = []; let hideLv = null;
-  NFP_TREE.forEach(([nm, lv], i) => {
-    if (hideLv != null && lv > hideLv) return;   // 접힌 그룹의 하위는 건너뛴다
-    hideLv = null;
-    vis.push([nm, lv, parentOf(i)]);
-    if (usMainCol.has(nm)) hideLv = lv;
-  });
-  out += '<div class="block-title">전월 증감 (OVER THE MONTH CHANGE, 천명) '
-    + '<button class="mini-btn" id="ueExpand">전체 펼치기</button> '
-    + '<button class="mini-btn" id="ueCollapse">전체 접기</button></div>'
+  const vis = treeVisible(NFP_TREE, usMainCol);
+  out += '<div class="block-title">전월 증감 (OVER THE MONTH CHANGE, 천명)' + treeBtns('ueExpand', 'ueCollapse') + '</div>'
     + '<div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>'
     + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
   vis.forEach(([nm, lv, kid]) => {
     const m = M(nfp, nm);
-    const car = kid
-      ? `<span class="ueCar" data-ueg="${nm}" style="cursor:pointer;color:#1a4fa0;font-weight:700;margin-right:5px">${usMainCol.has(nm) ? '▸' : '▾'}</span>`
-      : '<span style="margin-right:5px;color:transparent">·</span>';
+    const car = treeCaret(nm, kid, usMainCol, 'ueCar');
     out += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td>${car}${nm}</td>`
       + cols.map(d => { const v = delta(m, d);
         return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : k0(v)}</td>`; }).join('') + '</tr>';
@@ -5203,12 +5262,8 @@ function renderUsEmpMain() {
   ], v => v.toFixed(2));
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
-  box.querySelectorAll('.ueCar').forEach(el => el.onclick = () => {
-    const n = el.dataset.ueg; usMainCol.has(n) ? usMainCol.delete(n) : usMainCol.add(n); renderUsEmp(); });
-  const ueE = box.querySelector('#ueExpand'), ueC = box.querySelector('#ueCollapse');
-  if (ueE) ueE.onclick = () => { usMainCol = new Set(); renderUsEmp(); };
-  if (ueC) ueC.onclick = () => { usMainCol = new Set(
-    NFP_TREE.filter((r, i) => NFP_TREE[i + 1] && NFP_TREE[i + 1][1] > r[1]).map(r => r[0])); renderUsEmp(); };
+  bindTree(box, 'ueCar', 'ueExpand', 'ueCollapse', NFP_TREE,
+           () => usMainCol, v => { usMainCol = v; });
 
   const mkChart = (i, title, datasets) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }

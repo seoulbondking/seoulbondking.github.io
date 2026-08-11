@@ -468,7 +468,7 @@ function refresh() {
   const isCmp = view === 'compare', isCombo = view === 'combo', isCpiC = view === 'cpicombo';
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
-  const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair';
+  const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -478,7 +478,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -491,11 +491,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -509,6 +509,7 @@ function refresh() {
   else if (isUsE) renderUsEmp();
   else if (isPpi) renderPpi();
   else if (isRet) renderRetail();
+  else if (isJlt) renderJolts();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -4850,7 +4851,7 @@ function renderKrEmpDetail() {
 
 // ── 미국 고용상황 (BLS: 비농업 산업별 + 실업률 + 임금) ──────────
 const US_EMP = { id: 'us_emp', name: '미국 고용상황',
-                 ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur'] };
+                 ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur', 'us_ahe'] };
 // 실업기간 표시 순서 (Empsit 'Number of Unemployed'). 5주미만+5~14주+15주이상 = 전체 실업자
 const DUR_ROWS = ['5주 미만', '5~14주', '15주 이상', '15~26주', '27주 이상 (장기실업)'];
 // 업종별 시간·급여 표시 순서 (Empsit CES 02/11 세트)
@@ -4861,7 +4862,10 @@ let usEmpSel = null, usIndCharts = [null, null];
 let usMainCol = null;   // 종합 탭 전월증감 트리에서 접어둔 그룹
 let usCesCol = null;    // 시간·급여 업종 트리 (두 표 공통)
 let usDurCol = null;    // 실업기간 트리
-let usErnMode = 'lvl';  // 주당급여 표시: lvl(금액 $, 시트와 동일) | yoy(전년동월비 %)
+let usErnMode = 'lvl';  // 주당급여 표시: lvl(금액 $) | mom(전월비 %) | yoy(전년동월비 %)
+let usAheCol = null, usAheMA = 3;   // 시간당임금 업종 트리 · 전월비 이동평균 개월
+let usErnSel = null;   // 주당급여 차트에 표시할 업종 (표에서 우클릭으로 토글)
+let usAnaMonth = null; // 월별 분석 패널이 열린 월 (null = 닫힘)
 // Empsit 의 AVERAGE WEEKLY HOURS / EARNINGS 업종 계층
 const CES_TREE = [
   ['민간 전체', 0],
@@ -4926,9 +4930,9 @@ const NFP_GROUPS = {
 };
 
 async function enterUsEmp() {
-  const [nfp, labor, lf, hours, earn, dur] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  const [nfp, labor, lf, hours, earn, dur, ahe] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
   if (!nfp || !labor) { alert('미국 고용 데이터가 없습니다. python fetch.py us_nfp us_labor us_lf us_hours us_earn 실행 필요.'); return; }
-  usEmpData = { nfp, labor, lf, hours, earn, dur };
+  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe };
   current = { id: US_EMP.id, name: US_EMP.name, freq: 'M', unit: '', updated_at: nfp.updated_at, series: [] };
   view = 'usemp'; usEmpTab = 'main';
   document.getElementById('title').textContent = US_EMP.name;
@@ -4940,8 +4944,9 @@ async function enterUsEmp() {
     });
     document.getElementById('usEmpTabs').dataset.bound = '1';
   }
+  if (!window.__US_EMP_NOTES__) await loadScript('data/us_emp_notes.js').catch(() => {});
   const ds = new Set();
-  [nfp, labor, lf, hours, earn, dur].filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  [nfp, labor, lf, hours, earn, dur, ahe].filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -4964,63 +4969,130 @@ function renderUsEmp() {
 // 업종별 주당근로시간(CES 02) · 주당급여(CES 11) — Empsit 사업체조사 상세
 function renderUsHoursEarn() {
   const box = document.getElementById('retailWrap');
-  const { hours, earn } = usEmpData;
+  const { hours, earn, ahe } = usEmpData;
   if (!hours || !earn) { box.innerHTML = '<div style="padding:24px;color:#888">시간·급여 데이터가 없습니다. <b>python fetch.py --full us_hours us_earn</b> 실행 필요.</div>'; return; }
   const cols = periodDates.filter(inRange);
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
-  const Mof = (ind, n) => { const s = ind.series.find(x => x.name === n); return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const Mof = (ind, n) => { const x = ind && ind.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
   const lvl = (m, d) => m.get(d) ?? null;
   const yoy = (m, d) => { const p = prevN(d, 12); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
-  // 차트 2개: 민간 전체 주당근로시간 · 제조업 주당근로시간 / 주당급여 YoY(민간·제조)
-  let out = '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px">'
-    + [0, 1].map(i => `<div style="flex:1;min-width:320px"><div class="cchart" style="height:250px"><canvas id="usH${i}"></canvas></div></div>`).join('') + '</div>';
-  // 업종 계층은 Empsit 의 AVERAGE WEEKLY HOURS / EARNINGS 블록을 따른다
+  const mom = (m, d) => { const p = prevN(d, 1); if (!p) return null; const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+  // 전월비 n개월 이동평균 — AHE 는 월별 노이즈가 커서 3ma 로 본다
+  const momMA = (m, d, n) => {
+    const v = []; for (let k = 0; k < n; k++) { const dd = prevN(d, k); if (!dd) return null;
+      const x = mom(m, dd); if (x == null) return null; v.push(x); }
+    return v.reduce((p, q) => p + q, 0) / n;
+  };
   if (usCesCol === null) usCesCol = new Set(['재화생산', '민간 서비스업']);
-  const tblOf = (title, ind, fn, fmt, btnE, btnC, carCls) => {
+  if (usErnSel === null) usErnSel = new Set(['민간 전체']);
+  const aheTot = Mof(ahe, '민간 전체');
+
+  let out = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'
+    + '<b>AHE 전월비 이동평균</b><div class="mode" id="aheMA">'
+    + [1, 3, 6].map(n => `<button data-ma="${n}" class="${usAheMA === n ? 'active' : ''}">${n}개월</button>`).join('')
+    + '</div><span style="color:#8592a3">오른쪽 차트 업종은 <b>주당급여 표에서 우클릭</b>으로 넣고 뺍니다</span></div>'
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="usH${i}"></canvas></div></div>`).join('') + '</div>';
+
+  // 업종 트리 표 (Empsit 의 CES 계층). sel=true 면 우클릭 선택 표시를 붙인다
+  const tblOf = (title, ind, fn, fmt, btnE, btnC, carCls, sel) => {
     let h = `<div class="block-title">${title}${treeBtns(btnE, btnC)}</div>`
       + '<div class="tscroll"><table class="data vlines"><thead><tr><th>업종</th>'
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
     treeVisible(CES_TREE, usCesCol).forEach(([nm, lv, kid]) => {
       const m = Mof(ind, nm);
-      h += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td>${treeCaret(nm, kid, usCesCol, carCls)}${nm}</td>`
+      const mark = sel ? (usErnSel.has(nm) ? '<span style="color:#1a4fa0">● </span>' : '') : '';
+      const attr = sel ? ` data-ern="${nm}" style="cursor:context-menu"` : '';
+      h += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"${attr}><td>${treeCaret(nm, kid, usCesCol, carCls)}${mark}${nm}</td>`
         + cols.map(d => { const v = fn(m, d);
           return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('') + '</tr>';
     });
     return h + '</tbody></table></div>';
   };
-  out += tblOf('AVERAGE WEEKLY HOURS — 주당 근로시간 (시간)', hours, lvl, v => v.toFixed(1),
-               'uhE', 'uhC', 'uhCar');
+
+  // 시간당임금 AHE — MoM 이동평균 + YoY 두 줄
+  if (ahe) {
+    let h = `<div class="block-title">시간당임금 AHE — 전월비 ${usAheMA}개월 이동평균 (%) · 전년비 (%)`
+      + treeBtns('awE', 'awC') + '</div>'
+      + '<div class="tscroll"><table class="data vlines"><thead><tr><th>업종</th>'
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    treeVisible(CES_TREE, usCesCol).forEach(([nm, lv, kid]) => {
+      const m = Mof(ahe, nm);
+      h += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td>${treeCaret(nm, kid, usCesCol, 'awCar')}${nm} <span style="color:#97a3b4">MoM ${usAheMA}ma</span></td>`
+        + cols.map(d => { const v = momMA(m, d, usAheMA);
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(2)}</td>`; }).join('') + '</tr>'
+        + `<tr class="flat lv${lv}"><td style="color:#7a869a">${nm} <span style="color:#97a3b4">YoY</span></td>`
+        + cols.map(d => { const v = yoy(m, d);
+          return `<td style="color:#7a869a"${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : v.toFixed(2)}</td>`; }).join('') + '</tr>';
+    });
+    out += h + '</tbody></table></div>';
+  } else {
+    out += '<div style="padding:9px 12px;background:#fffaf0;border-left:3px solid #e8930c;border-radius:6px;'
+      + 'font-size:12px;color:#7a5a12;margin-bottom:8px">※ 시간당임금(AHE) 데이터가 없습니다 — '
+      + '<b>python fetch.py us_ahe</b> 를 실행하세요.</div>';
+  }
+
+  out += tblOf('AVERAGE WEEKLY HOURS — 주당 근로시간 (시간)', hours, lvl, v => v.toFixed(1), 'uhE', 'uhC', 'uhCar', false);
   out += '<div style="display:flex;gap:8px;align-items:center;margin:14px 0 4px;font-size:12px">'
     + '<b>주당급여 표시</b><div class="mode" id="usErnMode">'
-    + [['lvl', '금액 ($)'], ['yoy', '전년동월비 (%)']].map(([v, t]) =>
+    + [['lvl', '금액 ($)'], ['mom', '전월비 (%)'], ['yoy', '전년동월비 (%)']].map(([v, t]) =>
         `<button data-em="${v}" class="${usErnMode === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><span style="color:#8592a3">엑셀 시트는 금액 기준입니다</span></div>';
-  out += usErnMode === 'lvl'
-    ? tblOf('AVERAGE WEEKLY EARNINGS — 주당 급여 ($)', earn, lvl,
-            v => v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'ueE2', 'ueC2', 'ueCar2')
-    : tblOf('AVERAGE WEEKLY EARNINGS — 주당 급여 전년동월비 (%)', earn, yoy,
-            v => v.toFixed(2), 'ueE2', 'ueC2', 'ueCar2');
+    + '</div><span style="color:#8592a3">엑셀 시트는 금액 기준 · 행을 <b>우클릭</b>하면 오른쪽 차트에 추가됩니다</span></div>';
+  const ernSpec = {
+    lvl: ['주당 급여 ($)', lvl, v => v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })],
+    mom: ['주당 급여 전월비 (%)', mom, v => v.toFixed(2)],
+    yoy: ['주당 급여 전년동월비 (%)', yoy, v => v.toFixed(2)],
+  }[usErnMode];
+  out += tblOf('AVERAGE WEEKLY EARNINGS — ' + ernSpec[0], earn, ernSpec[1], ernSpec[2], 'ueE2', 'ueC2', 'ueCar2', true);
+
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   const setCes = v => { usCesCol = v; };
   bindTree(box, 'uhCar', 'uhE', 'uhC', CES_TREE, () => usCesCol, setCes);
   bindTree(box, 'ueCar2', 'ueE2', 'ueC2', CES_TREE, () => usCesCol, setCes);
-  box.querySelectorAll('#usErnMode button').forEach(b =>
-    b.onclick = () => { usErnMode = b.dataset.em; renderUsEmp(); });
-  const mk = (i, title, datasets) => {
+  bindTree(box, 'awCar', 'awE', 'awC', CES_TREE, () => usCesCol, setCes);
+  box.querySelectorAll('#aheMA button').forEach(b => b.onclick = () => { usAheMA = +b.dataset.ma; renderUsEmp(); });
+  box.querySelectorAll('#usErnMode button').forEach(b => b.onclick = () => { usErnMode = b.dataset.em; renderUsEmp(); });
+  // 우클릭 = 오른쪽 차트에 업종 넣고 빼기 (마지막 하나는 남긴다)
+  box.querySelectorAll('tr[data-ern]').forEach(tr => tr.oncontextmenu = e => {
+    e.preventDefault(); const n = tr.dataset.ern;
+    if (usErnSel.has(n)) { if (usErnSel.size > 1) usErnSel.delete(n); } else usErnSel.add(n);
+    renderUsEmp();
+  });
+
+  const mk = (i, title, datasets, extra) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
     usEmpCharts[i] = new Chart(box.querySelector('#usH' + i), {
       data: { labels: cols, datasets },
-      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } }, title: { display: true, text: title, font: { size: 12 } },
-          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
-        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 },
+          callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } }, extra || {}),
     });
   };
-  const ln = (label, m, col, tf) => ({ type: 'line', label, data: cols.map(d => tf === 'yoy' ? yoy(m, d) : lvl(m, d)), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true });
-  mk(0, '주당근로시간 (시간) — 민간·제조업', [ln('민간 전체', Mof(hours, '민간 전체'), PALETTE[0]), ln('제조업', Mof(hours, '제조업'), PALETTE[2])]);
-  mk(1, '주당급여 전년동월비 (%) — 민간·레저·접객', [ln('민간 전체', Mof(earn, '민간 전체'), PALETTE[0], 'yoy'), ln('레저·접객', Mof(earn, '레저·접객'), PALETTE[3], 'yoy')]);
+  const dualX = { ticks: { maxTicksLimit: 9, font: { size: 9 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
+  // 왼쪽 — 시간당임금 AHE : 전월비 3ma 막대(좌) + 전년비 선(우)
+  if (ahe) mk(0, `미국 임금(AHE) — 전월비 ${usAheMA}ma (좌) · 전년비 (우)`, [
+    { type: 'bar', label: `전월비 ${usAheMA}ma (%)`, data: cols.map(d => momMA(aheTot, d, usAheMA)),
+      backgroundColor: '#c8cfd8', yAxisID: 'y', order: 2 },
+    { type: 'line', label: '전년비 (%, 우)', data: cols.map(d => yoy(aheTot, d)),
+      borderColor: '#1a6fc4', borderWidth: 2.5, pointRadius: 0, tension: 0.15, spanGaps: true, yAxisID: 'y2', order: 1 },
+  ], { scales: { x: dualX,
+      y: { position: 'left', ticks: { font: { size: 10 } }, title: { display: true, text: `${usAheMA}ma %`, font: { size: 10 } } },
+      y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false },
+            title: { display: true, text: '%', font: { size: 10 } } } } });
+  else mk(0, '시간당임금(AHE) — 데이터 없음', []);
+  // 오른쪽 — 주당급여 전년동월비 : 표에서 우클릭으로 고른 업종만
+  const shown = CES_TREE.map(r => r[0]).filter(n => usErnSel.has(n));
+  mk(1, `주당급여 전년동월비 (%) — ${shown.length}개 업종 (표 우클릭으로 변경)`,
+    shown.map((n, i) => ({ type: 'line', label: n, data: cols.map(d => yoy(Mof(earn, n), d)),
+      borderColor: PALETTE[i % PALETTE.length], borderWidth: n === '민간 전체' ? 2.6 : 1.7,
+      pointRadius: 0, tension: 0.15, spanGaps: true })));
 }
 
 // 노동력 상세 (가계조사): 전일제/시간제 · 경제적사유 시간제 등
@@ -5184,6 +5256,288 @@ function renderUsDur() {
       y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false }, title: { display: true, text: '주', font: { size: 10 } } } } } });
 }
 
+// ── 미국 JOLTS ─────────────────────────────────────────────────
+// 표 구성은 US_macro.xlsm 의 JOLTS 시트를 따른다 (JOB OPENINGS → Rates → Unemployed).
+// 시트에 없는 계층만 실제 관계에 맞춰 들여쓴다:
+//   구인 = 민간 + 정부 · 총 이직 = 자발적 이직 + 해고·감원 + 기타
+const JOLTS = { id: 'jolts', name: '미국 JOLTS (구인·이직)', ids: ['us_jolts', 'us_lf'] };
+const JLT_LVL = [   // [표시명, 레벨]
+  ['구인', 0], ['구인 (민간)', 1], ['구인 (정부)', 1],
+  ['채용', 0],
+  ['총 이직', 0], ['자발적 이직', 1], ['해고·감원', 1],
+];
+const JLT_RATE = ['구인율', '이직률', '채용률', '총 이직률', '해고율'];
+let joltsData = null, joltsCharts = [null, null, null], joltsCol = null;
+
+async function enterJolts() {
+  const got = await Promise.all(JOLTS.ids.map(id => loadIndicator(id).catch(() => null)));
+  joltsData = {}; JOLTS.ids.forEach((id, i) => joltsData[id] = got[i]);
+  if (!joltsData['us_jolts']) { alert('JOLTS 데이터가 없습니다. python fetch.py us_jolts 실행 필요.'); return; }
+  const j = joltsData['us_jolts'];
+  current = { id: JOLTS.id, name: JOLTS.name, freq: 'M', unit: '천건·%', updated_at: j.updated_at, series: [] };
+  view = 'jolts';
+  document.getElementById('title').textContent = JOLTS.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + j.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'joltsBtn'));
+  const ds = new Set();
+  j.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderJolts() {
+  const box = document.getElementById('retailWrap');
+  const j = joltsData['us_jolts'], lf = joltsData['us_lf'];
+  const M = (ind, n) => { const x = ind && ind.series.find(y => y.name === n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const cols = periodDates.filter(inRange);
+  const S = {}; JLT_LVL.forEach(([n]) => S[n] = M(j, n));
+  JLT_RATE.forEach(n => S[n] = M(j, n));
+  const unemp = M(lf, '실업자');
+  const lvl = (m, d) => m.get(d) ?? null;
+  // 시트의 '# of job opening per unemployed' — 구인 ÷ 실업자
+  const ratio = d => { const a = S['구인'].get(d), b = unemp.get(d); return a != null && b ? a / b : null; };
+  const k0 = v => Math.round(v).toLocaleString('ko-KR');
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+  if (joltsCol === null) joltsCol = new Set();
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+    + 'JOLTS는 <b>노동 수요</b>를 직접 재는 지표입니다. 고용보고서가 "몇 명이 채용됐나"라면 '
+    + 'JOLTS는 "몇 자리가 비어 있나 · 사람들이 스스로 그만두나"를 봅니다.<br>'
+    + '<span style="color:#8592a3"><b>자발적 이직률</b>은 근로자 자신감의 대리지표라 임금 압력에 선행합니다. '
+    + '<b>구인/실업자 배수</b>가 1을 밑돌면 구직자가 빈 자리보다 많다는 뜻입니다.</span></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="jlC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="jlC2"></canvas></div></div>'
+    + '</div>';
+
+  const head = title => `<div class="block-title">${title}</div>`
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  const line = (nm, fn, cls, fmt) => `<tr class="${cls}"><td>${nm}</td>`
+    + cols.map(d => { const v = fn(d);
+      return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : (fmt || k0)(v)}</td>`; }).join('') + '</tr>';
+
+  // JOB OPENINGS — 레벨 (천건). 구인·총이직은 하위를 접을 수 있다
+  out += head('JOB OPENINGS — 구인·채용·이직 (천건)' + treeBtns('jlE', 'jlC'));
+  treeVisible(JLT_LVL, joltsCol).forEach(([nm, lv, kid]) => {
+    out += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td>${treeCaret(nm, kid, joltsCol, 'jlCar')}${nm}</td>`
+      + cols.map(d => { const v = lvl(S[nm], d);
+        return `<td>${v == null ? '' : k0(v)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+
+  // Rates — 시트 순서: 구인율 · 이직률 · 구인/실업자 · 채용률 · 총이직률 · 해고율
+  out += head('RATES — 비율 (%)')
+    + line('구인율', d => lvl(S['구인율'], d), 'flat lv0', f1)
+    + line('자발적 이직률', d => lvl(S['이직률'], d), 'flat lv0', f1)
+    + line('구인 / 실업자 (배)', ratio, 'flat lv0 sep-solid', f2)
+    + line('채용률', d => lvl(S['채용률'], d), 'flat lv0', f1)
+    + line('총 이직률', d => lvl(S['총 이직률'], d), 'flat lv0', f1)
+    + line('해고율', d => lvl(S['해고율'], d), 'flat lv0', f1)
+    + '</tbody></table></div>';
+
+  out += head('UNEMPLOYED — 실업자 (천명, 가계조사)')
+    + line('실업자', d => lvl(unemp, d), 'flat lv0')
+    + line('구인 − 실업자 (천명)', d => { const a = S['구인'].get(d), b = unemp.get(d);
+        return a != null && b != null ? a - b : null; }, 'flat lv0')
+    + '</tbody></table></div>';
+
+  // 검증 — 총 이직 = 자발적 + 해고 + 기타(퇴직·사망 등)
+  out += head('점검 — 총 이직 구성 (천건)')
+    + line('총 이직', d => lvl(S['총 이직'], d), 'flat lv0 sep-solid')
+    + line('자발적 이직 + 해고·감원', d => { const a = S['자발적 이직'].get(d), b = S['해고·감원'].get(d);
+        return a != null && b != null ? a + b : null; }, 'flat lv0')
+    + line('기타 (퇴직·사망 등)', d => { const t = S['총 이직'].get(d), a = S['자발적 이직'].get(d), b = S['해고·감원'].get(d);
+        return t != null && a != null && b != null ? t - a - b : null; }, 'flat lv0')
+    + '</tbody></table></div>';
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  bindTreeJ(box);
+
+  const mk = (i, title, datasets, extra) => {
+    if (joltsCharts[i]) { joltsCharts[i].destroy(); joltsCharts[i] = null; }
+    joltsCharts[i] = new Chart(box.querySelector('#jlC' + i), {
+      data: { labels: cols, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 },
+          callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } }, extra || {}),
+    });
+  };
+  const dualX = { ticks: { maxTicksLimit: 9, font: { size: 9 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
+  const ln = (label, m, col, w) => ({ type: 'line', label, data: cols.map(d => lvl(m, d)),
+    borderColor: col, borderWidth: w || 2, pointRadius: 0, tension: 0.15, spanGaps: true });
+
+  mk(0, '구인 vs 실업자 (천명) · 배수(우)', [
+    ln('구인', S['구인'], '#1a4fa0', 2.4),
+    ln('실업자', unemp, '#c0392b', 2),
+    { type: 'line', label: '구인/실업자 (배, 우)', data: cols.map(ratio),
+      borderColor: '#e0a036', borderWidth: 1.6, borderDash: [4, 3], pointRadius: 0, tension: 0.15, spanGaps: true, yAxisID: 'y2' },
+  ], { scales: { x: dualX, y: { position: 'left', ticks: { font: { size: 10 } } },
+      y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false },
+            title: { display: true, text: '배', font: { size: 10 } } } } });
+
+  mk(1, '자발적 이직률 vs 해고율 (%)', [
+    ln('자발적 이직률', S['이직률'], '#1a6fc4', 2.4),
+    ln('해고율', S['해고율'], '#c0392b', 2),
+    ln('채용률', S['채용률'], '#a8b4c2', 1.4),
+  ]);
+
+  // 베버리지 곡선 — 구인율(세로) vs 실업률(가로). 노동시장 긴장도의 궤적
+  const unr = M(joltsData['us_lf'], '실업자'), pop = M(joltsData['us_lf'], '경제활동인구');
+  const pts = cols.map(d => { const o = S['구인율'].get(d), u = unr.get(d), l = pop.get(d);
+    return (o != null && u != null && l) ? { x: u / l * 100, y: o, d } : null; }).filter(Boolean);
+  if (joltsCharts[2]) { joltsCharts[2].destroy(); joltsCharts[2] = null; }
+  joltsCharts[2] = new Chart(box.querySelector('#jlC2'), {
+    data: { datasets: [
+      { type: 'line', label: '베버리지 곡선 (구인율 vs 실업률)', data: pts, showLine: true,
+        borderColor: '#8ba6c9', borderWidth: 1.2, pointRadius: 2.2,
+        pointBackgroundColor: pts.map((_p, i) => i === pts.length - 1 ? '#c0392b' : '#1a4fa0') },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: '베버리지 곡선 — 실업률(가로) vs 구인율(세로), 빨강=최근', font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${dateLabel(it.raw.d)}: 실업률 ${it.raw.x.toFixed(1)}% · 구인율 ${it.raw.y.toFixed(1)}%` } } },
+      scales: { x: { type: 'linear', title: { display: true, text: '실업률 %', font: { size: 10 } }, ticks: { font: { size: 10 } } },
+        y: { title: { display: true, text: '구인율 %', font: { size: 10 } }, ticks: { font: { size: 10 } } } } },
+  });
+}
+function bindTreeJ(box) {
+  bindTreeGeneric(box, 'jlCar', 'jlE', 'jlC', JLT_LVL, () => joltsCol, v => { joltsCol = v; }, renderJolts);
+}
+// bindTree 의 일반형 — 재렌더 함수를 지정할 수 있다
+function bindTreeGeneric(box, cls, idE, idC, tree, get, set, rerender) {
+  box.querySelectorAll('.' + cls).forEach(el => el.onclick = () => {
+    const n = el.dataset.tg, c = get(); c.has(n) ? c.delete(n) : c.add(n); set(c); rerender(); });
+  const e = box.querySelector('#' + idE), c = box.querySelector('#' + idC);
+  if (e) e.onclick = () => { set(new Set()); rerender(); };
+  if (c) c.onclick = () => { set(treeParents(tree)); rerender(); };
+}
+
+// 월별 고용보고서 분석 — 데이터에서 자동 계산한 요약 + 수작업 뉴스 노트
+// ctx: { d, delta, lvl, yoy, prevN, M, nfp, un, u6, part, epop, lf, earn, ahe, dur }
+function usEmpAnaBlock(c) {
+  const d = c.d, mo = d.slice(0, 7);
+  const n1 = v => v == null ? '–' : (v >= 0 ? '+' : '') + Math.round(v).toLocaleString('ko-KR');
+  const f1 = v => v == null ? '–' : v.toFixed(1);
+  const f2 = v => v == null ? '–' : v.toFixed(2);
+  const avg = (m, k) => { const a = []; for (let i = 0; i < k; i++) { const dd = c.prevN(d, i);
+    if (!dd) return null; const v = c.delta(m, dd); if (v == null) return null; a.push(v); }
+    return a.reduce((x, y) => x + y, 0) / k; };
+  const chg = (m, k) => { const p = c.prevN(d, k || 1); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
+
+  const tot = c.delta(c.nfpTot, d), m3 = avg(c.nfpTot, 3), m12 = avg(c.nfpTot, 12);
+  const priv = c.delta(c.M(c.nfp, '민간'), d), gov = c.delta(c.M(c.nfp, '정부'), d);
+  const ind = NFP_LEAVES.map(n => [n, c.delta(c.M(c.nfp, n), d)]).filter(x => x[1] != null)
+    .sort((a, b) => b[1] - a[1]);
+  const top = ind.slice(0, 3), bot = ind.slice(-3).reverse();
+  const unL = c.un.get(d), unC = chg(c.un), u6L = c.u6.get(d), u6C = chg(c.u6);
+  const paL = c.part.get(d), paC = chg(c.part), epL = c.epop.get(d), epC = chg(c.epop);
+  const empC = chg(c.L('취업자')), uneC = chg(c.L('실업자')), lfC = chg(c.L('경제활동인구'));
+  const ptC = chg(c.L('시간제 (경제적 사유)'));
+  const wY = c.yoy(c.wkEarn, d), wM = c.mom1(c.wkEarn, d);
+  const aY = c.ahe ? c.yoy(c.M(c.ahe, '민간 전체'), d) : null;
+  const aM3 = c.ahe ? c.ma3(c.M(c.ahe, '민간 전체'), d) : null;
+  const u27 = c.dur ? c.M(c.dur, '27주 이상 (장기실업)').get(d) : null;
+  const unemp = c.L('실업자').get(d);
+  const shLT = (u27 != null && unemp) ? u27 / unemp * 100 : null;
+
+  // 자동 판정
+  const mom = (tot == null || m12 == null) ? null : tot - m12;
+  const verdict = [];
+  if (m3 != null && m12 != null)
+    verdict.push(m3 < m12 - 20 ? ['둔화', '#c0392b', `3개월 평균 ${n1(m3)}천이 12개월 평균 ${n1(m12)}천을 밑돕니다`]
+      : m3 > m12 + 20 ? ['가속', '#2e8b57', `3개월 평균 ${n1(m3)}천이 12개월 평균 ${n1(m12)}천을 웃돕니다`]
+      : ['보합', '#8592a3', `3개월 평균 ${n1(m3)}천이 12개월 평균과 비슷합니다`]);
+  // 실업률은 소수 첫째자리까지만 발표되므로 0.05%p 미만 변화는 '보합'으로 본다
+  const pp = v => (v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(1) + '%p');
+  if (unC != null) {
+    const flat = Math.abs(unC) < 0.05;
+    verdict.push(flat ? ['실업률 보합', '#8592a3', `전월과 같은 ${f1(unL)}%`]
+      : (unC < 0 && paC != null && paC < -0.04)
+        ? ['착시 주의', '#e8930c', `실업률이 ${pp(unC)} 내렸지만 참가율도 ${pp(paC)} 떨어졌습니다 — 구직 포기가 실업률을 낮춘 형태입니다`]
+      : unC > 0 ? ['실업률 상승', '#c0392b', `전월 대비 ${pp(unC)}`]
+      : ['실업률 하락', '#2e8b57', `전월 대비 ${pp(unC)}`]);
+  }
+  if (aY != null) verdict.push(aY < 3.5 ? ['임금 압력 완화', '#2e8b57', `시간당임금 전년비 ${f2(aY)}%`]
+      : ['임금 압력 유지', '#e8930c', `시간당임금 전년비 ${f2(aY)}%`]);
+
+  const NT = (window.__US_EMP_NOTES__ || {})[mo];
+  const row = (k, v) => `<tr><td style="padding:3px 14px 3px 0;color:#5a6b80;white-space:nowrap">${k}</td>`
+    + `<td style="padding:3px 0;font-weight:600">${v}</td></tr>`;
+
+  let h = `<div style="border:1px solid #d7dde8;border-radius:10px;padding:15px 17px;margin-bottom:14px;background:#fbfcfe">`
+    + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">`
+    + `<b style="font-size:14px">${dateLabel(d)} 고용보고서 분석</b>`
+    + `<button class="mini-btn" id="anaClose">닫기</button></div>`;
+
+  // 자동 판정 배지
+  h += '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px">'
+    + verdict.map(([t, col, why]) => `<span title="${why}" style="background:${col};color:#fff;`
+      + `border-radius:999px;padding:3px 11px;font-size:11.5px;font-weight:700">${t}</span>`).join('')
+    + '</div>';
+  h += '<div style="font-size:12.5px;color:#5a6b80;line-height:1.8;margin-bottom:12px">'
+    + verdict.map(v => '· ' + v[2]).join('<br>') + '</div>';
+
+  h += '<div style="display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;line-height:1.75">';
+  h += '<table style="border:0"><tbody>'
+    + row('비농업 전월 증감', `${n1(tot)}천 <span style="color:#8592a3;font-weight:400">(3ma ${n1(m3)} · 12ma ${n1(m12)})</span>`)
+    + row('민간 / 정부', `${n1(priv)}천 / ${n1(gov)}천`)
+    + row('증가 상위', top.map(x => `${x[0]} ${n1(x[1])}`).join(' · '))
+    + row('감소 상위', bot.map(x => `${x[0]} ${n1(x[1])}`).join(' · '))
+    + '</tbody></table>';
+  h += '<table style="border:0"><tbody>'
+    + row('실업률 / U-6', `${f1(unL)}% <span style="color:#8592a3;font-weight:400">(${pp(unC)})</span> / ${f1(u6L)}% <span style="color:#8592a3;font-weight:400">(${pp(u6C)})</span>`)
+    + row('참가율 / 고용률', `${f1(paL)}% <span style="color:#8592a3;font-weight:400">(${pp(paC)})</span> / ${f1(epL)}% <span style="color:#8592a3;font-weight:400">(${pp(epC)})</span>`)
+    + row('가계조사 취업/실업', `${n1(empC)}천 / ${n1(uneC)}천 <span style="color:#8592a3;font-weight:400">(경활 ${n1(lfC)}천)</span>`)
+    + row('경제적 사유 시간제', `${n1(ptC)}천`)
+    + '</tbody></table>';
+  h += '<table style="border:0"><tbody>'
+    + row('시간당임금 AHE', aY == null ? '데이터 없음' : `YoY ${f2(aY)}% · MoM 3ma ${f2(aM3)}%`)
+    + row('주당급여', `YoY ${f2(wY)}% · MoM ${f2(wM)}%`)
+    + row('장기실업(27주+)', shLT == null ? '데이터 없음' : `${Math.round(u27).toLocaleString('ko-KR')}천 (전체의 ${f1(shLT)}%)`)
+    + '</tbody></table></div>';
+
+  // 뉴스 노트
+  if (NT) {
+    const surp = (NT.first != null && NT.cons != null) ? NT.first - NT.cons : null;
+    const rev = (NT.first != null && tot != null) ? tot - NT.first : null;
+    h += `<div style="border-top:1px solid #e3e8ef;margin-top:13px;padding-top:12px">`
+      + `<div style="font-size:12px;color:#8592a3;margin-bottom:5px">발표 ${NT.rel}</div>`
+      + `<div style="font-size:13.5px;font-weight:700;line-height:1.7;margin-bottom:9px">${NT.head}</div>`;
+    if (surp != null) h += `<div style="font-size:12.5px;line-height:1.85;margin-bottom:9px">`
+      + `최초 발표 <b>${n1(NT.first)}천</b> · 컨센서스 <b>${n1(NT.cons)}천</b> → `
+      + `<b style="color:${surp >= 0 ? '#2e8b57' : '#c0392b'}">서프라이즈 ${n1(surp)}천</b>`
+      + (rev != null && Math.abs(rev) >= 1
+          ? ` &nbsp;|&nbsp; 이후 개정 <b style="color:${rev >= 0 ? '#2e8b57' : '#c0392b'}">${n1(rev)}천</b> → 현재 <b>${n1(tot)}천</b>`
+          : '') + '</div>';
+    h += '<ul style="margin:0 0 9px 18px;padding:0;font-size:12.5px;line-height:1.9">'
+      + NT.pts.map(x => `<li>${x}</li>`).join('') + '</ul>'
+      + '<div style="font-size:11.5px;color:#8592a3">출처 · '
+      + NT.src.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener" style="color:#1a4fa0">${t}</a>`).join(' · ')
+      + '</div></div>';
+  } else {
+    h += `<div style="border-top:1px solid #e3e8ef;margin-top:13px;padding-top:12px;font-size:12.5px;color:#8592a3;line-height:1.8">`
+      + `이 달의 뉴스 노트가 없습니다. <b>docs/data/us_emp_notes.js</b> 에 <b>'${mo}'</b> 항목을 추가하면 여기에 표시됩니다.`
+      + `<br>위 수치는 노트와 무관하게 데이터에서 항상 자동 계산됩니다.</div>`;
+  }
+  return h + '</div>';
+}
+
 function renderUsEmpMain() {
   const box = document.getElementById('retailWrap');
   const { nfp, labor, lf, hours, earn } = usEmpData;
@@ -5197,13 +5551,31 @@ function renderUsEmpMain() {
   const un = M(labor, '실업률'), u6 = M(labor, 'U-6 실업률'), part = M(labor, '경제활동참가율'), epop = M(labor, '고용률');
   const nfpTot = M(nfp, '비농업 전체'), wkEarn = M(earn, '민간 전체'), wkHours = M(hours, '민간 전체');
 
-  let out = '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:6px">'
+  // ── 월별 분석 ───────────────────────────────────────────────
+  const anaCur = usAnaMonth && cols.includes(usAnaMonth) ? usAnaMonth : null;
+  let out = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+    + `<button class="mini-btn${anaCur ? ' on' : ''}" id="anaBtn">월별 분석</button>`
+    + '<select id="anaSel" style="padding:5px 9px;font-size:12px;border:1px solid #d7dde8;border-radius:6px">'
+    + cols.slice().reverse().map(d => `<option value="${d}"${d === anaCur ? ' selected' : ''}>${dateLabel(d)}</option>`).join('')
+    + '</select><span style="color:#8592a3">표의 <b>날짜를 클릭</b>해도 그달 분석이 열립니다</span></div>';
+  if (anaCur) out += usEmpAnaBlock({
+    d: anaCur, delta, lvl, yoy, prevN, M, nfp, nfpTot, un, u6, part, epop, dur: usEmpData.dur,
+    ahe: usEmpData.ahe, L: name => M(lf, name), wkEarn,
+    mom1: (m, dd) => { const p = prevN(dd, 1); if (!p) return null;
+      const a = m.get(dd), c2 = m.get(p); return a != null && c2 ? (a / c2 - 1) * 100 : null; },
+    ma3: (m, dd) => { const v = []; for (let k = 0; k < 3; k++) { const x = prevN(dd, k); if (!x) return null;
+      const p = prevN(x, 1); if (!p) return null; const a = m.get(x), c2 = m.get(p);
+      if (a == null || !c2) return null; v.push((a / c2 - 1) * 100); }
+      return v.reduce((x, y) => x + y, 0) / 3; },
+  });
+  out += '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:6px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:320px"><div class="cchart" style="height:250px"><canvas id="usE${i}"></canvas></div></div>`).join('')
     + '</div><div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px">'
     + [2, 3].map(i => `<div style="flex:1;min-width:320px"><div class="cchart" style="height:250px"><canvas id="usE${i}"></canvas></div></div>`).join('') + '</div>';
   const tbl = (title, rows, fmt) => {
     let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
-      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+      + cols.map(d => `<th data-ana="${d}" style="cursor:pointer" title="클릭하면 이 달 분석이 열립니다">${dateLabel(d)}</th>`).join('')
+      + '</tr></thead><tbody>';
     rows.forEach(([nm, m, fn, cls, rowFmt]) => {
       const f = rowFmt || fmt;
       h += `<tr class="${cls || 'lv1'}"><td>${nm}</td>` + cols.map(d => { const v = fn(m, d); const t = v == null ? '' : f(v);
@@ -5255,31 +5627,62 @@ function renderUsEmpMain() {
     ['전일제 일자리 부족', L('· 전일제 일자리 부족'), lvl, 'flat lv1 sep-solid', k0],
     ['비경제적 사유', L('시간제 (비경제적 사유)'), lvl, 'flat lv0', k0],
   ], k0);
-  out += tbl('임금·근로시간 (민간)', [
-    ['주당급여 (민간) YoY %', wkEarn, yoy, 'lv1', v => v.toFixed(2)],
-    ['주당근로시간 (민간, 시간)', wkHours, lvl, 'lv1', v => v.toFixed(1)],
-    ['제조업 주당근로시간 (시간)', M(hours, '제조업'), lvl, 'lv1', v => v.toFixed(1)],
+  const momOf = (m, d) => { const p = prevN(d, 1); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+  out += tbl('주당급여 (민간 전체)', [
+    ['전년동월비 (%)', wkEarn, yoy, 'flat lv0', v => v.toFixed(2)],
+    ['전월비 (%)', wkEarn, momOf, 'flat lv0', v => v.toFixed(2)],
   ], v => v.toFixed(2));
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   bindTree(box, 'ueCar', 'ueExpand', 'ueCollapse', NFP_TREE,
            () => usMainCol, v => { usMainCol = v; });
+  const anaSel = box.querySelector('#anaSel');
+  box.querySelector('#anaBtn').onclick = () => {
+    usAnaMonth = anaCur ? null : (anaSel ? anaSel.value : cols[cols.length - 1]); renderUsEmp(); };
+  if (anaSel) anaSel.onchange = () => { usAnaMonth = anaSel.value; renderUsEmp(); };
+  const anaX = box.querySelector('#anaClose');
+  if (anaX) anaX.onclick = () => { usAnaMonth = null; renderUsEmp(); };
+  box.querySelectorAll('th[data-ana]').forEach(th =>
+    th.onclick = () => { usAnaMonth = th.dataset.ana; renderUsEmp(); });
 
-  const mkChart = (i, title, datasets) => {
+  const mkChart = (i, title, datasets, extra) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
     usEmpCharts[i] = new Chart(box.querySelector('#usE' + i), {
       data: { labels: cols, datasets },
-      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } }, title: { display: true, text: title, font: { size: 12 } },
           tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}` } } },
-        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } }, extra || {}),
     });
   };
   const ln = (label, m, col, tf) => ({ type: 'line', label, data: cols.map(d => tf === 'yoy' ? yoy(m, d) : lvl(m, d)), borderColor: col, backgroundColor: col, borderWidth: 2, pointRadius: 0, tension: 0.15, spanGaps: true });
-  mkChart(0, '실업률 · U-6 (%)', [ln('실업률', un, PALETTE[0]), ln('U-6', u6, PALETTE[1])]);
+  // U-3 과 U-6 은 수준 차이가 커서(4% vs 8%) 한 축에 두면 움직임이 묻힌다 → 이중축
+  mkChart(0, 'U-3 (협의) · U-6 (광의) 실업률 (%)',
+    [Object.assign(ln('U-3 (협의) 실업률', un, PALETTE[0]), { yAxisID: 'y' }),
+     Object.assign(ln('U-6 (광의) 실업률(우)', u6, '#7fb2e5'), { yAxisID: 'y2' })],
+    { scales: {
+        x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { position: 'left', ticks: { font: { size: 10 } } },
+        y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } } } });
   mkChart(1, '비농업 취업자 전월 증감 (천명)', [{ type: 'bar', label: '전월 증감', data: cols.map(d => delta(nfpTot, d)), backgroundColor: PALETTE[2] }]);
-  mkChart(2, '경제활동참가율 · 고용률 (%)', [ln('참가율', part, PALETTE[3]), ln('고용률', epop, PALETTE[4])]);
-  mkChart(3, '주당급여 전년동월비 (%)', [ln('주당급여', wkEarn, PALETTE[5], 'yoy')]);
+  // 참가율(62%대)과 고용률(59%대)도 폭이 달라 한 축이면 한쪽이 눌린다 → 이중축
+  mkChart(2, '경제활동참가율 · 고용률(우) (%)',
+    [Object.assign(ln('경제활동참가율', part, PALETTE[3]), { yAxisID: 'y' }),
+     Object.assign(ln('고용률(우)', epop, PALETTE[4]), { yAxisID: 'y2' })],
+    { scales: {
+        x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { position: 'left', ticks: { font: { size: 10 } } },
+        y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } } } });
+  // 전년비(선, 좌)와 전월비(막대, 우)는 스케일이 10배쯤 달라 축을 나눈다
+  mkChart(3, '주당급여 — 전년동월비(선) · 전월비(막대, 우) (%)', [
+    Object.assign(ln('전년동월비', wkEarn, PALETTE[5], 'yoy'), { yAxisID: 'y', order: 1 }),
+    { type: 'bar', label: '전월비(우)', data: cols.map(d => momOf(wkEarn, d)),
+      backgroundColor: '#c8cfd8', yAxisID: 'y2', order: 2 },
+  ], { scales: {
+      x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+      y: { position: 'left', ticks: { font: { size: 10 } } },
+      y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } } } });
 }
 
 // 비농업 취업자 산업별 전월 증감 분해 (14산업 스택 = 총 증감)
@@ -7480,6 +7883,12 @@ document.getElementById('endSel').onchange = e => {
           b.id = 'usEmpBtn'; b.textContent = US_EMP.name; b.onclick = enterUsEmp;
           nav.appendChild(b); usEmpInserted = true;
         }
+        return;
+      }
+      if (item.id === 'us_jolts') {   // JOLTS → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'joltsBtn'; b.textContent = JOLTS.name; b.onclick = enterJolts;
+        nav.appendChild(b);
         return;
       }
       if (RETAIL.ids.includes(item.id)) {   // 소매판매 2종 → "소매판매" 하나로

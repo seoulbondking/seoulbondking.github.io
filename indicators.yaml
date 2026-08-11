@@ -344,10 +344,29 @@ indicators:
     source: ecos
     unit: 지수·%
     freq: M
-    lookback_years: 10
+    start_year: 2010          # 적정가치 회귀 표본을 늘리기 위해 2010년부터 (lookback 10년이면 2016부터라 표본이 잘렸음)
+    refetch_years: 2
     params:
       stat_code: "511Y002"
       item_codes: ["FME"]
+
+  # 경제심리지수 ESI — 기업(BSI)과 소비자(CSI) 심리를 합성한 지표.
+  # 메리츠 'Fair Value' 모형이 쓴 심리 변수가 이것이다(우리는 그동안 CSI로 대체했다).
+  # 통계표: 기업경기실사지수·경제심리지수. 코드가 틀리면 ECOS가 오류를 돌려주므로,
+  # 그때는 ECOS 통계표 화면의 '통계코드'를 알려주면 맞춘다.
+  # 경제심리지수 ESI — ECOS API(513Y001)는 2024년부터만 제공해서, 화면에서 받은
+  # 엑셀(2010/01~)을 직접 읽는다. 새 달 데이터가 나오면 엑셀만 다시 받아 덮어쓰면 된다.
+  #   data/경제심리지수.xlsx  (통계표 6.3 · E1000 원계열 · E2000 순환변동치)
+  - id: kr_esi
+    name: 경제심리지수 (ESI)
+    source: ecos_xlsx
+    unit: 지수
+    freq: M
+    params:
+      file: 경제심리지수.xlsx
+      header_row: 1
+      name_col: 3
+      first_data_col: 6
 
   - id: kr_infl_expect
     name: 기대인플레이션율
@@ -660,7 +679,11 @@ indicators:
     freq: M
     start_year: 2000
     refetch_years: 2
-    series_first: ["경제활동인구"]
+    # Empsit 시트 순서 (EMPLOYMENT STATUS → FULL/PART TIME → PERSONS AT WORK PART TIME)
+    series_first: ["생산가능인구", "경제활동인구", "취업자", "실업자",
+                   "전일제 취업자", "시간제 취업자",
+                   "시간제 (경제적 사유)", "· 경기부진·업황", "· 전일제 일자리 부족",
+                   "시간제 (비경제적 사유)"]
     params:
       series:
         LNU00000000: 생산가능인구
@@ -674,6 +697,28 @@ indicators:
         LNS12032199: · 전일제 일자리 부족
         LNS12032200: 시간제 (비경제적 사유)
 
+  # 실업기간별 실업자 (Empsit 시트 'Number of Unemployed' 블록)
+  #   주(週) 구간은 서로 겹치지 않는 3분할: 5주 미만 / 5~14주 / 15주 이상
+  #   15주 이상은 다시 15~26주 + 27주 이상(장기실업)으로 나뉜다
+  - id: us_unemp_dur
+    name: 미국 실업기간별 실업자
+    source: bls
+    unit: 천명·주
+    freq: M
+    start_year: 2000
+    refetch_years: 2
+    series_first: ["5주 미만", "5~14주", "15주 이상", "15~26주", "27주 이상 (장기실업)",
+                   "평균 실업기간", "중위 실업기간"]
+    params:
+      series:
+        LNS13008396: 5주 미만
+        LNS13008756: 5~14주
+        LNS13008516: 15주 이상
+        LNS13008876: 15~26주
+        LNS13008636: 27주 이상 (장기실업)
+        LNS13008275: 평균 실업기간
+        LNS13008276: 중위 실업기간
+
   # JOLTS — 구인·채용·이직·해고 (전산업, 천건 및 %)
   - id: us_jolts
     name: 미국 JOLTS (구인·이직)
@@ -682,7 +727,9 @@ indicators:
     freq: M
     start_year: 2001
     refetch_years: 2
-    series_first: ["구인"]
+    # US_macro.xlsm 의 JOLTS 시트 순서 (JOB OPENINGS 레벨 → Rates)
+    series_first: ["구인", "구인 (민간)", "구인 (정부)", "채용", "총 이직", "자발적 이직", "해고·감원",
+                   "구인율", "이직률", "채용률", "총 이직률", "해고율"]
     params:
       series:
         JTS000000000000000JOL: 구인

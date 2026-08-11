@@ -76,7 +76,8 @@ def fetch(indicator: dict) -> list[dict]:
     y0, m0, d0 = (int(x) for x in str(start).split("-"))
     cur = date(y0, m0, d0)
     end = date.today()
-    have = _have(indicator["id"])
+    # --full 이면 이미 받은 날짜도 무시하고 처음부터 다시 받는다 (아카이브 복구용)
+    have = set() if indicator.get("_full") else _have(indicator["id"])
 
     todo = []
     while cur <= end:
@@ -85,6 +86,8 @@ def fetch(indicator: dict) -> list[dict]:
         cur += timedelta(days=1)
     if not todo:
         print(f"  [krx] {indicator['id']}: 새로 받을 날짜 없음 (보유 {len(have)}일)")
+        # 조회완료 목록을 그대로 넘겨줘야 fetch.py 가 _checked 를 잃지 않는다
+        indicator["_krx_checked"] = sorted(have)
         return []
 
     hdr = {"AUTH_KEY": _key()}

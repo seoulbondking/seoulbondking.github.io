@@ -20,7 +20,8 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax, acm, krx
+from fetchers import (kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax,
+                      acm, krx, ecos_xlsx)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -38,6 +39,7 @@ SOURCES = {
     "infomax": infomax.fetch,
     "acm": acm.fetch,
     "krx": krx.fetch,
+    "ecos_xlsx": ecos_xlsx.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -157,6 +159,7 @@ def main():
             ind["_start_year"] = (
                 this_year - ind.get("refetch_years", 2) if incremental else target_start
             )
+            ind["_full"] = force_full      # 수집기가 '이미 받은 날짜 건너뛰기'를 무시할 수 있게
 
             try:
                 series = fetch_fn(ind)
@@ -167,7 +170,15 @@ def main():
 
             # merge_always: 일별 소스(FREESIS 등)는 최근치만 받아도 항상 아카이브에 병합
             if incremental or (ind.get("merge_always") and old is not None):
-                series = merge_series(old["series"], series)
+                # 새로 받은 게 없으면(예: KRX '남을 날짜 0일') 아카이브를 그대로 둔다.
+                # merge_series 는 신규 목록 기준이라 빈 결과가 오면 아카이브가 통째로 지워진다.
+                if not series and old.get("series"):
+                    print(f"  [keep] {ind['id']}: 신규 수집 0건 — 기존 아카이브 유지")
+                    series = old["series"]
+                    if old.get("_checked"):
+                        ind["_krx_checked"] = old["_checked"]
+                else:
+                    series = merge_series(old["series"], series)
 
         # series_first 에 지정된 항목(총계 등)을 맨 앞으로 정렬
         pinned = ind.get("series_first", [])

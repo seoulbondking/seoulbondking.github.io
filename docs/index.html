@@ -79,11 +79,13 @@
     border-right: 1px solid #e8ecf1;
     border-bottom: 1px solid #dbe2ea;   /* 모든 행 가로선 (기본보다 선명하게) */
   }
+  table.data tbody tr.flat td { font-weight: 400; }   /* 형제 행 — 첫 행 자동 굵게 해제 */
   table.data tr.sep-solid td { border-bottom: 2px solid #9aa7b8; }   /* 실선 */
   table.data tr.sep-dot td { border-bottom: 1px dotted #b0bac7; }    /* 점선 */
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
   table.data tr.lv3 td:first-child { padding-left: 56px; }
+  table.data tr.lv4 td:first-child { padding-left: 72px; }
   table.data tr.rlv1 td:first-child { padding-left: 22px; }
   table.data tr.rlv2 td:first-child { padding-left: 38px; }
   table.data tr.rlv3 td:first-child { padding-left: 54px; color: #445; }
@@ -4856,6 +4858,7 @@ const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '
   '도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
 let usEmpSel = null, usIndCharts = [null, null];
+let usMainCol = null;   // 종합 탭 전월증감 트리에서 접어둔 그룹
 // 비농업 트리 [이름, 레벨]. 14개 말단(레벨3 + 정부)이 배타적 분할 → 합 = 총 비농업 증감
 const NFP_TREE = [
   ['비농업 전체', 0], ['민간', 1],
@@ -5144,32 +5147,54 @@ function renderUsEmpMain() {
   // 표 순서는 US_macro.xlsm 의 Empsit 시트를 그대로 따른다.
   //   EMPLOYMENT STATUS → OVER THE MONTH CHANGE → FULL OR PART TIME STATUS
   //   → PERSONS AT WORK PART TIME  (그 뒤 payroll·시간·급여는 별도 탭)
+  // 표 순서·계층은 US_macro.xlsm 의 Empsit 시트를 따른다.
   out += tbl('고용 현황 (EMPLOYMENT STATUS)', [
-    ['생산가능인구 (천명)', L('생산가능인구'), lvl, 'lv0 sep-solid', k0],
-    ['경제활동인구 (천명)', L('경제활동인구'), lvl, 'lv1', k0],
-    ['취업자 (천명)', L('취업자'), lvl, 'lv1', k0],
-    ['실업자 (천명)', L('실업자'), lvl, 'lv1', k0],
-    ['경제활동참가율 (%)', part, lvl, 'lv1 sep-solid', p1],
-    ['고용률 (%)', epop, lvl, 'lv1', p1],
-    ['실업률 (%)', un, lvl, 'lv1', p1],
-    ['U-6 실업률 (%)', u6, lvl, 'lv1', p1],
+    ['생산가능인구 (천명)', L('생산가능인구'), lvl, 'flat lv0', k0],
+    ['경제활동인구 (천명)', L('경제활동인구'), lvl, 'flat lv0', k0],
+    ['취업자 (천명)', L('취업자'), lvl, 'flat lv1', k0],
+    ['실업자 (천명)', L('실업자'), lvl, 'flat lv1 sep-solid', k0],
+    ['경제활동참가율 (%)', part, lvl, 'flat lv0', p1],
+    ['고용률 (%)', epop, lvl, 'flat lv0', p1],
+    ['실업률 (%)', un, lvl, 'flat lv0', p1],
+    ['U-6 실업률 (%)', u6, lvl, 'flat lv0', p1],
   ], k0);
-  out += tbl('전월 증감 (OVER THE MONTH CHANGE, 천명)', [
-    ['비농업 전체', nfpTot, delta, 'lv0 sep-solid'],
-    ['민간', M(nfp, '민간'), delta, 'lv1'],
-    ['정부', M(nfp, '정부'), delta, 'lv1'],
-    ['임시직알선 (선행·참고)', M(nfp, '임시직알선'), delta, 'lv2'],
-    ['트럭운송 (선행·참고)', M(nfp, '트럭운송'), delta, 'lv2'],
-  ], k0);
+
+  // ── OVER THE MONTH CHANGE — 전 카테고리 트리 (그룹 단위 접기/펼치기) ──
+  if (usMainCol === null)   // 기본은 대분류만 펼친 상태
+    usMainCol = new Set(['재화생산', '민간 서비스업', '운송·창고', '전문·비즈니스', '교육·보건']);
+  const parentOf = i => NFP_TREE[i + 1] && NFP_TREE[i + 1][1] > NFP_TREE[i][1];
+  const vis = []; let hideLv = null;
+  NFP_TREE.forEach(([nm, lv], i) => {
+    if (hideLv != null && lv > hideLv) return;   // 접힌 그룹의 하위는 건너뛴다
+    hideLv = null;
+    vis.push([nm, lv, parentOf(i)]);
+    if (usMainCol.has(nm)) hideLv = lv;
+  });
+  out += '<div class="block-title">전월 증감 (OVER THE MONTH CHANGE, 천명) '
+    + '<button class="mini-btn" id="ueExpand">전체 펼치기</button> '
+    + '<button class="mini-btn" id="ueCollapse">전체 접기</button></div>'
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>'
+    + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  vis.forEach(([nm, lv, kid]) => {
+    const m = M(nfp, nm);
+    const car = kid
+      ? `<span class="ueCar" data-ueg="${nm}" style="cursor:pointer;color:#1a4fa0;font-weight:700;margin-right:5px">${usMainCol.has(nm) ? '▸' : '▾'}</span>`
+      : '<span style="margin-right:5px;color:transparent">·</span>';
+    out += `<tr class="flat lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td>${car}${nm}</td>`
+      + cols.map(d => { const v = delta(m, d);
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : k0(v)}</td>`; }).join('') + '</tr>';
+  });
+  out += '</tbody></table></div>';
+
   out += tbl('전일제·시간제 (FULL OR PART TIME STATUS, 천명)', [
-    ['전일제 취업자', L('전일제 취업자'), lvl, 'lv0 sep-solid', k0],
-    ['시간제 취업자', L('시간제 취업자'), lvl, 'lv1', k0],
+    ['전일제 취업자', L('전일제 취업자'), lvl, 'flat lv0', k0],
+    ['시간제 취업자', L('시간제 취업자'), lvl, 'flat lv0', k0],
   ], k0);
   out += tbl('시간제 사유 (PERSONS AT WORK PART TIME · 비농업, 천명)', [
-    ['경제적 사유', L('시간제 (경제적 사유)'), lvl, 'lv0 sep-solid', k0],
-    ['· 경기부진·업황', L('· 경기부진·업황'), lvl, 'lv2', k0],
-    ['· 전일제 일자리 부족', L('· 전일제 일자리 부족'), lvl, 'lv2', k0],
-    ['비경제적 사유', L('시간제 (비경제적 사유)'), lvl, 'lv1', k0],
+    ['경제적 사유', L('시간제 (경제적 사유)'), lvl, 'flat lv0', k0],
+    ['경기부진·업황', L('· 경기부진·업황'), lvl, 'flat lv1', k0],
+    ['전일제 일자리 부족', L('· 전일제 일자리 부족'), lvl, 'flat lv1 sep-solid', k0],
+    ['비경제적 사유', L('시간제 (비경제적 사유)'), lvl, 'flat lv0', k0],
   ], k0);
   out += tbl('임금·근로시간 (민간)', [
     ['주당급여 (민간) YoY %', wkEarn, yoy, 'lv1', v => v.toFixed(2)],
@@ -5178,6 +5203,12 @@ function renderUsEmpMain() {
   ], v => v.toFixed(2));
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('.ueCar').forEach(el => el.onclick = () => {
+    const n = el.dataset.ueg; usMainCol.has(n) ? usMainCol.delete(n) : usMainCol.add(n); renderUsEmp(); });
+  const ueE = box.querySelector('#ueExpand'), ueC = box.querySelector('#ueCollapse');
+  if (ueE) ueE.onclick = () => { usMainCol = new Set(); renderUsEmp(); };
+  if (ueC) ueC.onclick = () => { usMainCol = new Set(
+    NFP_TREE.filter((r, i) => NFP_TREE[i + 1] && NFP_TREE[i + 1][1] > r[1]).map(r => r[0])); renderUsEmp(); };
 
   const mkChart = (i, title, datasets) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
@@ -5218,7 +5249,7 @@ function renderUsNfpIndustry() {
       let mark = '', attr = '';
       if (isLeaf) { mark = usEmpSel.has(name) ? '● ' : ''; attr = ` data-sel="${name}" style="cursor:context-menu"`; }
       else if (grp) { const sc = grp.filter(x => usEmpSel.has(x)).length; mark = sc === grp.length ? '● ' : (sc > 0 ? '◐ ' : ''); attr = ` data-agg="${name}" style="cursor:context-menu"`; }
-      const cls = lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(lv, 3)}`;
+      const cls = lv === 0 ? 'lv0 sep-solid' : `lv${lv}`;
       h += `<tr class="${cls}"${attr}><td style="padding-left:${8 + lv * 13}px">${mark}${name}</td>`
         + cols.map(d => { const v = valFn(name, d); const t = v == null ? '' : k0(v); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
     });

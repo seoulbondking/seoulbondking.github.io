@@ -204,15 +204,20 @@ def fetch(indicator: dict) -> list[dict]:
     for code in item_codes:
         all_rows.extend(_fetch_rows(key, p["stat_code"], cycle, start, end, code))
 
-    # 시리즈명 = ITEM_NAME1 [+ ITEM_NAME2 가 여럿이면 병기]
+    # 시리즈명 = ITEM_NAME1 [+ NAME2 + NAME3 중 값이 여럿인 축만 병기]
+    #   901Y052(산업×항목×규모)처럼 축이 3개인 표는 NAME3 까지 붙여야 이름이 겹치지 않는다.
+    #   item_codes 에 "A/I72BK/1" 처럼 슬래시로 이어 쓰면 ECOS 가 3축으로 받아준다.
     name2s = {r.get("ITEM_NAME2") for r in all_rows if r.get("ITEM_NAME2")}
-    multi2 = len(name2s) > 1
+    name3s = {r.get("ITEM_NAME3") for r in all_rows if r.get("ITEM_NAME3")}
+    multi2, multi3 = len(name2s) > 1, len(name3s) > 1
 
     series: dict[str, list] = {}
     for r in all_rows:
         name = (r.get("ITEM_NAME1") or "값").strip()
         if multi2 and r.get("ITEM_NAME2"):
             name = f"{name} · {r['ITEM_NAME2'].strip()}"
+        if multi3 and r.get("ITEM_NAME3"):
+            name = f"{name} · {r['ITEM_NAME3'].strip()}"
         try:
             value = float(r["DATA_VALUE"])
         except (KeyError, TypeError, ValueError):

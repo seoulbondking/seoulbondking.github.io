@@ -66,6 +66,16 @@ def fetch(indicator: dict) -> list[dict]:
                     else f"{today.year}{today.month:02d}")
         return f"{y}04" if freq == "Q" else f"{y}12"
 
+    # params.tables : 산업분류 개편 등으로 통계표가 갈린 계열을 이어 붙인다.
+    #   예) 사업체노동력조사 임금 = 2020~2025 는 10차(MON051), 2026~ 은 11차(MON054)
+    #   각 항목은 base 파라미터를 덮어쓰며, from/to 로 그 표의 수록 연도를 제한한다.
+    #     tables:
+    #       - {tblId: DT_118N_MON051, objL1: "...10S0 ", to: 2025}
+    #       - {tblId: DT_118N_MON054, objL1: "...11S0 ", from: 2026}
+    #   시리즈명이 같으면 자동으로 한 계열로 합쳐진다.
+    p = dict(indicator["params"])
+    segments = p.pop("tables", None) or [{}]
+
     base_params = {
         "method": "getList",
         "apiKey": _api_key(),
@@ -73,13 +83,14 @@ def fetch(indicator: dict) -> list[dict]:
         "jsonVD": "Y",
         "prdSe": freq,
         "outputFields": OUTPUT_FIELDS,
-        **indicator["params"],
+        **p,
     }
 
-    def get_range(y0, y1):
+    def get_range(y0, y1, seg):
         """y0~y1 구간 수집. 40,000셀 초과(err 31)면 반으로 쪼개 재귀."""
         resp = requests.get(BASE_URL, params={
-            **base_params, "startPrdDe": prd(y0, False), "endPrdDe": prd(y1, True),
+            **base_params, **{k: v for k, v in seg.items() if k not in ("from", "to")},
+            "startPrdDe": prd(y0, False), "endPrdDe": prd(y1, True),
         }, timeout=120)
         resp.raise_for_status()
         data = resp.json()
@@ -87,11 +98,27 @@ def fetch(indicator: dict) -> list[dict]:
             if str(data.get("err", "")).strip() == "31" and y1 > y0:
                 mid = (y0 + y1) // 2
                 print(f"  [kosis {indicator['id']}] 셀 한도 초과 → {y0}~{mid} / {mid+1}~{y1} 분할")
-                return get_range(y0, mid) + get_range(mid + 1, y1)
+                return get_range(y0, mid, seg) + get_range(mid + 1, y1, seg)
             raise KosisError(f"KOSIS API 오류: {data}")
         return data
 
-    rows = get_range(start_year, today.year)
+    rows = []
+    for seg in segments:
+        y0 = max(start_year, int(seg.get("from", start_year)))
+        y1 = min(today.year, int(seg.get("to", today.year)))
+        if y0 > y1:
+            continue
+        try:
+            got = get_range(y0, y1, seg)
+        except KosisError as e:
+            # 표가 여러 개일 때 하나가 비어도 나머지는 살린다 (개편 직후 등)
+            if len(segments) == 1:
+                raise
+            print(f"  [kosis {indicator['id']}] {seg.get('tblId', '?')} {y0}~{y1} 건너뜀: {e}")
+            continue
+        if len(segments) > 1:
+            print(f"  [kosis {indicator['id']}] {seg.get('tblId', '?')} {y0}~{y1} → {len(got)}행")
+        rows += got
 
     # 시리즈명 = 가장 깊은 분류명 (objL2 를 쓰면 C2_NM, 없으면 C1_NM)
     def deepest(r, suffix="_NM"):

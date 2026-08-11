@@ -469,7 +469,7 @@ function refresh() {
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
-  const isTot = view === 'tot';
+  const isTot = view === 'tot', isWg = view === 'wage';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -479,7 +479,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -492,8 +492,8 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
     (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || (isCombo && tab === 'chart')) ? '' : 'none';
@@ -512,6 +512,7 @@ function refresh() {
   else if (isRet) renderRetail();
   else if (isJlt) renderJolts();
   else if (isTot) renderTot();
+  else if (isWg) renderWage();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -5258,6 +5259,240 @@ function renderUsDur() {
       y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false }, title: { display: true, text: '주', font: { size: 10 } } } } } });
 }
 
+// ── 임금·근로시간 (한국판 AHE) ───────────────────────────────────
+// 한국은 시간당임금을 월 단위로 발표하지 않는다. 임금 ÷ 근로시간으로 만들고,
+// 분기 공식계열(시간당 명목임금지수)로 검산한다.
+//   · 특별급여(상여)가 설·추석·연말에 몰려 임금총액 MoM 은 못 쓴다 → 정액급여로 본다
+//   · 근로시간은 그 달 공휴일 수에 좌우된다 → 시간당값도 달력 효과를 탄다
+const WAGE = { id: 'wage', name: '임금·근로시간', ids: ['kr_wage', 'kr_wage_hourly'] };
+// 시리즈명 접두사는 소스에 따라 다르다 (ECOS '전체 · …', KOSIS '전규모(1인이상) · …')
+// → 항목명만 넘기고 아래 M() 이 ' · ' 뒤쪽으로 찾는다
+const W = n => n;
+let wageData = null, wageTab = 'main', wageCharts = [null, null, null], wageDen = '상용소정실근로시간';
+
+async function enterWage() {
+  const got = await Promise.all(WAGE.ids.map(id => loadIndicator(id).catch(() => null)));
+  wageData = {}; WAGE.ids.forEach((id, i) => wageData[id] = got[i]);
+  if (!wageData['kr_wage']) { alert('임금 데이터가 없습니다. python fetch.py kr_wage 실행 필요.'); return; }
+  const w = wageData['kr_wage'];
+  current = { id: WAGE.id, name: WAGE.name, freq: 'M', unit: '원·시간', updated_at: w.updated_at, series: [] };
+  view = 'wage'; wageTab = 'main';
+  document.getElementById('title').textContent = WAGE.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + w.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'wageBtn'));
+  const ds = new Set();
+  w.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderWage() {
+  const box = document.getElementById('retailWrap');
+  wageCharts.forEach((c, i) => { if (c) { c.destroy(); wageCharts[i] = null; } });
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, k) => { const i = idx.get(d); return i >= k ? periodDates[i - k] : null; };
+  // ' · ' 뒤 항목명으로 찾는다 — 앞쪽 접두사(전체 / 전규모(1인이상))는 소스마다 다르다
+  const M = (id, nm) => { const x = wageData[id]; if (!x) return new Map();
+    const tail = y => (y.name.split(' · ').pop() || '').trim();
+    const s = x.series.find(y => tail(y) === nm)
+           || x.series.find(y => y.name === nm)
+           || x.series.find(y => y.name.includes(nm));
+    return s ? new Map(s.data.map(p => [p.d, p.v])) : new Map(); };
+  const lvl = (m, d) => m.get(d) ?? null;
+  const yoy = (m, d) => { const p = prevN(d, 12); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+  const mom = (m, d) => { const p = prevN(d, 1); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a != null && b ? (a / b - 1) * 100 : null; };
+
+  const reg = M('kr_wage', W('상용정액급여'));
+  const ovt = M('kr_wage', W('상용초과급여'));
+  const spc = M('kr_wage', W('상용특별급여'));
+  const totW = M('kr_wage', W('상용임금총액'));
+  const allW = M('kr_wage', W('전체임금총액'));
+  const hrReg = M('kr_wage', W('상용소정실근로시간'));
+  const hrOvt = M('kr_wage', W('상용초과근로시간'));
+  const hrTot = M('kr_wage', W('상용총근로시간'));
+  const days = M('kr_wage', W('전체근로일수'));
+  const den = wageDen === '상용소정실근로시간' ? hrReg : hrTot;
+  // 시간당임금 — 분모를 소정실(초과 제외)로 하면 정액급여와, 총근로시간이면 임금총액과 짝이 맞는다
+  const hrlyReg = d => { const a = reg.get(d), b = den.get(d); return a != null && b ? a / b : null; };
+  const hrlyTot = d => { const a = totW.get(d), b = hrTot.get(d); return a != null && b ? a / b : null; };
+  const asMap = fn => new Map(periodDates.map(d => [d, fn(d)]).filter(x => x[1] != null));
+  const mHrlyReg = asMap(hrlyReg), mHrlyTot = asMap(hrlyTot);
+
+  const k0 = v => Math.round(v).toLocaleString('ko-KR');
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+
+  const tabs = [['main', '종합'], ['hr', '시간당임금'], ['chk', '검산 (분기)']];
+  let out = '<div class="mode" style="margin-bottom:10px">'
+    + tabs.map(([k, t]) => `<button data-wt="${k}" class="${wageTab === k ? 'active' : ''}">${t}</button>`).join('')
+    + '</div>';
+
+  const tbl = (title, rows) => {
+    let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
+      + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(([nm, fn, cls, fmt]) => {
+      h += `<tr class="${cls || 'flat lv0'}"><td>${nm}</td>` + cols.map(d => { const v = fn(d);
+        return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : (fmt || k0)(v)}</td>`; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  };
+
+  if (wageTab === 'main') {
+    out += '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+      + '한국은 미국 AHE 같은 <b>월별 시간당임금</b>을 발표하지 않습니다. 임금과 근로시간을 따로 주므로 '
+      + '나눠서 만들어야 합니다.<br><span style="color:#8592a3">'
+      + '<b>특별급여(상여)</b>가 설·추석·연말에 몰려 임금총액 MoM 은 수십 %씩 튑니다. '
+      + '추세는 <b>정액급여</b>로 보는 게 맞습니다.</span></div>'
+      + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="wgC${i}"></canvas></div></div>`).join('')
+      + '</div>';
+    out += tbl('임금 (원)', [
+      ['상용정액급여', d => lvl(reg, d), 'flat lv0 sep-solid'],
+      ['상용초과급여', d => lvl(ovt, d), 'flat lv1'],
+      ['상용특별급여 (상여)', d => lvl(spc, d), 'flat lv1'],
+      ['상용임금총액', d => lvl(totW, d), 'flat lv0'],
+      ['전체임금총액 (임시일용 포함)', d => lvl(allW, d), 'flat lv0 sep-solid'],
+    ]);
+    out += tbl('임금 전년동월비 (%)', [
+      ['상용정액급여 YoY', d => yoy(reg, d), 'flat lv0 sep-solid', f2],
+      ['상용임금총액 YoY', d => yoy(totW, d), 'flat lv0', f2],
+      ['전체임금총액 YoY', d => yoy(allW, d), 'flat lv0', f2],
+      ['상용특별급여 YoY', d => yoy(spc, d), 'flat lv1', f2],
+    ]);
+    out += tbl('근로시간·일수', [
+      ['상용소정실근로시간', d => lvl(hrReg, d), 'flat lv0 sep-solid', f1],
+      ['상용초과근로시간', d => lvl(hrOvt, d), 'flat lv1', f1],
+      ['상용총근로시간', d => lvl(hrTot, d), 'flat lv0', f1],
+      ['전체근로시간', d => lvl(hrTot, d) == null ? null : lvl(M('kr_wage', W('전체근로시간')), d), 'flat lv0', f1],
+      ['전체근로일수 (일)', d => lvl(days, d), 'flat lv0 sep-solid', f1],
+    ]);
+  } else if (wageTab === 'hr') {
+    out += '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+      + '<b>시간당임금 = 임금 ÷ 근로시간.</b> 분모를 무엇으로 잡느냐로 정의가 갈립니다.<br>'
+      + '<span style="color:#8592a3"><b>소정실근로시간</b>(초과 제외)은 정액급여와 짝이 맞고, '
+      + '<b>총근로시간</b>은 임금총액과 짝이 맞습니다. 근로시간이 그 달 공휴일 수에 좌우되므로 '
+      + '<b>MoM 은 달력 효과</b>를 크게 탑니다 — YoY 로 보세요.</span></div>'
+      + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:12px">'
+      + '<b>정액급여의 분모</b><div class="mode" id="wgDen">'
+      + ['상용소정실근로시간', '상용총근로시간'].map(v =>
+          `<button data-wd="${v}" class="${wageDen === v ? 'active' : ''}">${v.replace('상용', '')}</button>`).join('')
+      + '</div></div>'
+      + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:275px"><canvas id="wgC${i}"></canvas></div></div>`).join('')
+      + '</div>';
+    out += tbl('시간당임금 (원/시간)', [
+      [`정액급여 ÷ ${wageDen.replace('상용', '')}`, hrlyReg, 'flat lv0 sep-solid'],
+      ['임금총액 ÷ 총근로시간', hrlyTot, 'flat lv0'],
+    ]);
+    out += tbl('시간당임금 증감률 (%)', [
+      [`정액 기준 YoY`, d => yoy(mHrlyReg, d), 'flat lv0 sep-solid', f2],
+      [`정액 기준 MoM`, d => mom(mHrlyReg, d), 'flat lv1', f2],
+      ['총액 기준 YoY', d => yoy(mHrlyTot, d), 'flat lv0', f2],
+      ['총액 기준 MoM', d => mom(mHrlyTot, d), 'flat lv1', f2],
+    ]);
+  } else {
+    // 분기 공식계열과 대조 — 월별 파생값을 분기 평균으로 접어서 비교
+    const hq = wageData['kr_wage_hourly'];
+    const qKey = d => `${d.slice(0, 4)}Q${Math.ceil(+d.slice(5, 7) / 3)}`;
+    const qAvg = fn => { const acc = {};
+      periodDates.forEach(d => { const v = fn(d); if (v == null) return;
+        (acc[qKey(d)] = acc[qKey(d)] || []).push(v); });
+      const out2 = {}; Object.entries(acc).forEach(([k, a]) => {
+        if (a.length === 3) out2[k] = a.reduce((x, y) => x + y, 0) / 3; });
+      return out2; };
+    const derived = qAvg(hrlyReg);
+    const off = new Map();
+    if (hq) { const s = hq.series.find(x => x.name === '비농전산업');
+      if (s) s.data.forEach(p => off.set(`${p.d.slice(0, 4)}Q${Math.ceil(+p.d.slice(5, 7) / 3)}`, p.v)); }
+    const qs = [...new Set([...Object.keys(derived), ...off.keys()])].sort()
+      .filter(q => q >= qKey(cols[0] || '2020-01-01'));
+    const dYoY = q => { const y = +q.slice(0, 4) - 1, p = `${y}${q.slice(4)}`;
+      return (derived[q] != null && derived[p]) ? (derived[q] / derived[p] - 1) * 100 : null; };
+    const oYoY = q => { const y = +q.slice(0, 4) - 1, p = `${y}${q.slice(4)}`;
+      return (off.get(q) != null && off.get(p)) ? (off.get(q) / off.get(p) - 1) * 100 : null; };
+    out += '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+      + '월별 파생값(정액급여 ÷ 소정실근로시간)을 <b>분기 평균</b>으로 접어, 한국은행 공식 '
+      + '<b>시간당 명목임금지수</b>와 증감률을 맞춰봅니다.<br><span style="color:#8592a3">'
+      + '수준은 다릅니다 — 하나는 원/시간, 하나는 지수입니다. <b>증감률이 비슷하면</b> 파생 방식이 타당한 것입니다.</span></div>'
+      + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+      + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="wgC0"></canvas></div></div></div>'
+      + '<div class="block-title">분기 전년동기비 비교 (%)</div>'
+      + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+      + qs.map(q => `<th>${q}</th>`).join('') + '</tr></thead><tbody>'
+      + '<tr class="flat lv0 sep-solid"><td>파생 (정액÷소정실, 월별→분기평균)</td>'
+      + qs.map(q => { const v = dYoY(q); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : f2(v)}</td>`; }).join('') + '</tr>'
+      + '<tr class="flat lv0"><td>공식 시간당 명목임금지수 (비농전산업)</td>'
+      + qs.map(q => { const v = oYoY(q); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : f2(v)}</td>`; }).join('') + '</tr>'
+      + '<tr class="flat lv0"><td>차이 (%p)</td>'
+      + qs.map(q => { const a = dYoY(q), b = oYoY(q); const v = (a != null && b != null) ? a - b : null;
+          return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : f2(v)}</td>`; }).join('') + '</tr>'
+      + '</tbody></table></div>';
+    wageData._qs = qs; wageData._dYoY = dYoY; wageData._oYoY = oYoY;
+  }
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-wt]').forEach(b => b.onclick = () => { wageTab = b.dataset.wt; renderWage(); });
+  box.querySelectorAll('#wgDen button').forEach(b => b.onclick = () => { wageDen = b.dataset.wd; renderWage(); });
+
+  const mk = (i, labels, title, datasets, extra) => {
+    const el = box.querySelector('#wgC' + i);
+    if (!el) return;
+    wageCharts[i] = new Chart(el, {
+      data: { labels, datasets },
+      options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}` } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 } } },
+          y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#33333388' : '#eee' } } } }, extra || {}),
+    });
+  };
+  const dLab = { ticks: { maxTicksLimit: 9, font: { size: 9 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
+  const ln = (label, fn, col, w, dash) => ({ type: 'line', label, data: cols.map(fn),
+    borderColor: col, backgroundColor: col, borderWidth: w || 2, pointRadius: 0, tension: 0.15,
+    spanGaps: true, borderDash: dash || [] });
+
+  if (wageTab === 'main') {
+    mk(0, cols, '임금 전년동월비 (%)', [
+      ln('상용정액급여', d => yoy(reg, d), '#1a4fa0', 2.8),
+      ln('상용임금총액', d => yoy(totW, d), '#7fb2e5', 1.8),
+      ln('전체임금총액', d => yoy(allW, d), '#a8b4c2', 1.4, [4, 3]),
+    ], { scales: { x: dLab, y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#33333388' : '#eee' } } } });
+    mk(1, cols, '임금 구성 (원) — 특별급여가 튀는 달을 확인', [
+      { type: 'bar', label: '정액급여', data: cols.map(d => lvl(reg, d)), backgroundColor: '#1a4fa0', stack: 's' },
+      { type: 'bar', label: '초과급여', data: cols.map(d => lvl(ovt, d)), backgroundColor: '#7fb2e5', stack: 's' },
+      { type: 'bar', label: '특별급여', data: cols.map(d => lvl(spc, d)), backgroundColor: '#e0a036', stack: 's' },
+    ], { scales: { x: Object.assign({ stacked: true }, dLab), y: { stacked: true, ticks: { font: { size: 10 } } } } });
+  } else if (wageTab === 'hr') {
+    mk(0, cols, `시간당임금 (원/시간)`, [
+      ln(`정액 ÷ ${wageDen.replace('상용', '')}`, hrlyReg, '#1a4fa0', 2.6),
+      ln('총액 ÷ 총근로시간', hrlyTot, '#e0a036', 2),
+    ], { scales: { x: dLab, y: { ticks: { font: { size: 10 } } } } });
+    mk(1, cols, '시간당임금 전년동월비 (%)', [
+      ln('정액 기준', d => yoy(mHrlyReg, d), '#1a4fa0', 2.6),
+      ln('총액 기준', d => yoy(mHrlyTot, d), '#e0a036', 2),
+    ], { scales: { x: dLab, y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? '#33333388' : '#eee' } } } });
+  } else {
+    const qs = wageData._qs, dY = wageData._dYoY, oY = wageData._oYoY;
+    mk(0, qs, '분기 전년동기비 — 파생 vs 공식 (%)', [
+      { type: 'line', label: '파생 (정액÷소정실)', data: qs.map(dY), borderColor: '#1a4fa0',
+        borderWidth: 2.6, pointRadius: 2, tension: 0.15, spanGaps: true },
+      { type: 'line', label: '공식 시간당 명목임금지수', data: qs.map(oY), borderColor: '#c0392b',
+        borderWidth: 2.2, pointRadius: 2, tension: 0.15, spanGaps: true },
+    ]);
+  }
+}
+
 // ── 교역조건·물가 (전달경로) ────────────────────────────────────
 // 유상대 부총재보(2026.08.11) "교역조건이 수출·내수가격을 거쳐 근원물가에 영향".
 // 그 사슬을 한 화면에 모은다: 교역조건 → 수출입물가 → 국내공급물가 → PPI → 근원CPI
@@ -8124,7 +8359,7 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false, wageInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
@@ -8167,6 +8402,14 @@ document.getElementById('endSel').onchange = e => {
           const b = document.createElement('button');
           b.id = 'usEmpBtn'; b.textContent = US_EMP.name; b.onclick = enterUsEmp;
           nav.appendChild(b); usEmpInserted = true;
+        }
+        return;
+      }
+      if (WAGE.ids.includes(item.id)) {   // 임금 2종 → "임금·근로시간" 하나로
+        if (!wageInserted) {
+          const b = document.createElement('button');
+          b.id = 'wageBtn'; b.textContent = WAGE.name; b.onclick = enterWage;
+          nav.appendChild(b); wageInserted = true;
         }
         return;
       }

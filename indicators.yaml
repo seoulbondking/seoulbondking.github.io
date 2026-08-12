@@ -352,7 +352,7 @@ indicators:
     params:
       orgId: "101"
       tblId: "DT_1K41012"
-      itmId: "T1 "
+      itmId: "T1 T2 T3 "      # 경상 · 불변 · 계절조정 지수
       objL1: "ALL"
 
   - id: kr_retail_type
@@ -365,7 +365,7 @@ indicators:
     params:
       orgId: "101"
       tblId: "DT_1K41013"
-      itmId: "T1 "
+      itmId: "T1 T2 T3 "      # 경상 · 불변 · 계절조정 지수
       objL1: "ALL"
 
   # ── 부동산원 R-ONE (주간 아파트 지수, 전국·수도권·서울·서울권역) ──

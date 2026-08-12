@@ -4568,6 +4568,7 @@ function renderKrEmpMain() {
   const unemp = krMap(TOT, '계 · 실업자');
   const erAll = krMap(TOT, '계 · 고용률');
   const ur = krMap(TOT, '계 · 실업률'), pr = krMap(TOT, '계 · 경제활동참가율');
+  const nlf = krMap(TOT, '계 · 비경제활동인구');   // 15세이상인구 = 경활 + 비경활
   // 고용보조지표3 = 확장실업률 (미국 U-6 대응). 계열 스위치를 따르되,
   // 계절조정 계열(DT_1DA9007S)이 없으면 원계열로 내려가고 라벨에 표시한다.
   const pickU6 = src => { const x = krEmpData[src];
@@ -4589,6 +4590,7 @@ function renderKrEmpMain() {
     ['lf', '경제활동인구', lf, PALETTE[0]],
     ['emp', '취업자', emp, PALETTE[2]],
     ['unemp', '실업자', unemp, PALETTE[1]],
+    ['nlf', '비경제활동인구', nlf, PALETTE[4]],
   ];
   if (krPopSel === null) krPopSel = new Set(['emp']);
   if (!krPopSel.size) krPopSel = new Set(['emp']);        // 전부 해제되면 취업자로 복귀
@@ -4640,7 +4642,8 @@ function renderKrEmpMain() {
     ['전년동월 증감', d => yoyDiff(emp, d), 'flat lv0'],
   ], sgn);
   const POPROWS = [['15세 이상 인구', pop, 'lv0 sep-solid'], ['  경제활동인구', lf, 'lv1'],
-                   ['    취업자', emp, 'lv2'], ['    실업자', unemp, 'lv2']];
+                   ['    취업자', emp, 'lv2'], ['    실업자', unemp, 'lv2'],
+                   ['  비경제활동인구', nlf, 'lv1']];
   out += tbl(`인구 구조 (천명, ${SER})`, POPROWS.map(([nm, m, cls]) => [nm, d => lvl(m, d), cls]), k0);
   out += tbl(`인구 구조 — 전월 증감 (천명, ${SER})`,
     POPROWS.map(([nm, m, cls]) => [nm, d => momDiff(m, d), cls]), sgn);
@@ -6621,6 +6624,8 @@ function renderUsNfpIndustry() {
 }
 
 // ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────
+let retIdxType = null;   // 소매판매 지수 종류 (경상/불변/계절조정)
+let retAnaMonth = null;  // 소매판매 월별 분석 패널이 열린 달
 const RETAIL = { id: 'retail_all', name: '소매판매',
                  ids: ['kr_retail', 'kr_retail_type'] };
 // 소매판매 계층 (통계청 소매판매액지수 분류) — 항목명 → 들여쓰기 레벨
@@ -6694,11 +6699,91 @@ function monthEnd(ym) {   // 'YYYY-MM' → 'YYYY-MM-DD'(월말)
   return `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`;
 }
 
+// 소매판매 월별 분석 — 경상(P×Q)과 불변(Q)의 차이를 가격 기여로 분해한다.
+// 데이터만으로 계산되므로 어느 달이든 바로 나온다.
+function retailAnalysis(d, goods) {
+  const S = {};
+  goods.series.forEach(x => { const m = /^(.*?)\s*·\s*([^·]*지수)\s*$/.exec(x.name);
+    if (!m) return;
+    (S[m[1].trim()] ||= {})[m[2].trim()] = new Map(x.data.map(p => [p.d, p.v])); });
+  const py = `${+d.slice(0, 4) - 1}${d.slice(4)}`;
+  const yoy = (item, t) => { const m = S[item] && S[item][t];
+    if (!m) return null; const a = m.get(d), b = m.get(py);
+    return a != null && b ? (a / b - 1) * 100 : null; };
+  const rows = Object.keys(S).map(it => {
+    const n = yoy(it, '경상지수'), r = yoy(it, '불변지수');
+    return { it, n, r, p: (n != null && r != null) ? n - r : null };
+  }).filter(x => x.n != null && x.r != null);
+  if (!rows.length) return '';
+  const tot = rows.find(x => x.it === '총지수');
+  const f1 = v => (v > 0 ? '+' : '') + v.toFixed(1);
+  const leaf = rows.filter(x => !['총지수', '합계(승용차 제외)', '내구재', '준내구재', '비내구재'].includes(x.it));
+  const byQ = [...leaf].sort((a, b) => b.r - a.r);
+  const byP = [...leaf].sort((a, b) => b.p - a.p);
+  // 가격이 물량보다 크게 기여했으면 '가격 주도'
+  const priceLed = leaf.filter(x => x.p > Math.abs(x.r) && x.p > 3);
+  const volLed = leaf.filter(x => x.r > 3 && x.r > x.p);
+  const fake = leaf.filter(x => x.n > 3 && x.r < 0);   // 금액은 느는데 물량은 감소
+
+  const badge = (t, c) => `<span style="background:${c};color:#fff;border-radius:999px;`
+    + `padding:3px 11px;font-size:11.5px;font-weight:700;margin-right:6px">${t}</span>`;
+  let h = `<div style="border:1px solid #d7dde8;border-radius:10px;padding:15px 17px;margin-bottom:14px;background:#fbfcfe">`
+    + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">`
+    + `<b style="font-size:14px">${dateLabel(d)} 소매판매 분석 — 가격 vs 물량</b>`
+    + `<button class="mini-btn" id="raClose">닫기</button></div>`;
+  if (tot) {
+    const lead = tot.p > tot.r ? ['가격 주도', '#c0392b'] : tot.r > 2 ? ['물량 주도', '#2e8b57'] : ['보합', '#8592a3'];
+    h += '<div style="margin-bottom:10px">' + badge(lead[0], lead[1])
+      + (fake.length ? badge(`착시 품목 ${fake.length}개`, '#e8930c') : '') + '</div>'
+      + `<div style="font-size:13px;line-height:1.95;margin-bottom:12px">`
+      + `총지수 전년동월비 — 경상 <b>${f1(tot.n)}%</b> · 불변 <b style="color:#1a4fa0">${f1(tot.r)}%</b> · `
+      + `가격 기여 <b style="color:#c0392b">${f1(tot.p)}%p</b><br>`
+      + `<span style="color:#8592a3">명목 증가분의 <b>${(tot.p / tot.n * 100).toFixed(0)}%</b>가 물가입니다. `
+      + `소비 강도는 <b>불변</b>으로 보세요.</span></div>`;
+  }
+  const tbl = (title, list, note) => {
+    let t = `<div style="font-size:12.5px;font-weight:700;margin:10px 0 4px">${title}`
+      + `<span style="font-weight:400;color:#8592a3"> — ${note}</span></div>`
+      + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+      + '<th>품목</th><th>경상</th><th>불변</th><th>가격기여</th></tr></thead><tbody>';
+    list.forEach(x => { t += `<tr class="flat lv0"><td style="text-align:left">${x.it}</td>`
+      + `<td${x.n < 0 ? ' class="neg"' : ''}>${f1(x.n)}%</td>`
+      + `<td${x.r < 0 ? ' class="neg"' : ''}><b>${f1(x.r)}%</b></td>`
+      + `<td${x.p < 0 ? ' class="neg"' : ''}>${f1(x.p)}%p</td></tr>`; });
+    return t + '</tbody></table>';
+  };
+  h += tbl('물량 증가 상위', byQ.slice(0, 5), '실제로 많이 팔린 품목');
+  h += tbl('물량 감소 상위', byQ.slice(-5).reverse(), '판매가 줄어든 품목');
+  if (priceLed.length) h += tbl('가격이 끌어올린 품목', byP.slice(0, 5), '경상만 보면 과대평가된다');
+  if (fake.length) {
+    h += `<div style="margin-top:12px;padding:11px 13px;background:#fffaf0;border-left:3px solid #e8930c;`
+      + `border-radius:6px;font-size:12.5px;line-height:1.85">`
+      + `<b>주의 — 금액은 느는데 물량은 줄어든 품목</b><br>`
+      + fake.sort((a, b) => a.r - b.r).slice(0, 6).map(x =>
+          `${x.it}: 경상 ${f1(x.n)}% 이지만 불변 <b style="color:#c0392b">${f1(x.r)}%</b>`).join('<br>')
+      + `<br><span style="color:#8592a3">값이 올라 지출이 커진 것이지 더 산 게 아닙니다.</span></div>`;
+  }
+  return h + '</div>';
+}
+
 function renderRetail() {
   document.querySelectorAll('#retTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.rt === retailTab));
   if (retailTab === 'card') { renderCard(); return; }
-  const ind = retailTab === 'goods' ? retailData.goods : retailData.type;
+  // 소매판매액지수는 한 표에 경상·불변·계절조정이 함께 온다 (시리즈명 '… · 경상지수').
+  // 고른 종류만 남기고 접미사를 떼어, 아래 트리·표 코드는 예전처럼 이름만 보게 한다.
+  const idxTypes = (() => { const t = new Set();
+    [retailData.goods, retailData.type].forEach(x => x && x.series.forEach(y => {
+      const m = /·\s*([^·]*지수)\s*$/.exec(y.name); if (m) t.add(m[1].trim()); }));
+    return [...t]; })();
+  if (idxTypes.length && (retIdxType == null || !idxTypes.includes(retIdxType)))
+    retIdxType = idxTypes.find(x => x.includes('불변')) || idxTypes[0];
+  const byType = x => { if (!x || !retIdxType) return x;
+    const re = new RegExp('·\\s*' + retIdxType + '\\s*$');
+    const f = x.series.filter(y => re.test(y.name));
+    return f.length ? Object.assign({}, x, { series: f.map(y => Object.assign({}, y,
+      { name: y.name.replace(/\s*·\s*[^·]*지수\s*$/, '').trim() })) }) : x; };
+  const ind = byType(retailTab === 'goods' ? retailData.goods : retailData.type);
   const box = document.getElementById('retailWrap');
   if (!ind) { box.innerHTML = '<div style="padding:24px;color:#888">소매판매 데이터가 없습니다. fetch.py 실행 필요.</div>'; return; }
   const cols = periodDates.filter(inRange);
@@ -6707,7 +6792,7 @@ function renderRetail() {
   // 업태별은 총지수가 없으므로 상품군별의 총지수를 맨 위에 붙임
   let items = ind.series;
   if (retailTab === 'type' && retailData.goods) {
-    const tot = retailData.goods.series.find(s => s.name.trim() === '총지수');
+    const tot = byType(retailData.goods).series.find(s => s.name.trim() === '총지수');
     if (tot && !items.some(s => s.name.trim() === '총지수')) items = [tot, ...items];
   }
   // 계층·자식여부 계산 (트리 접기용)
@@ -6724,7 +6809,26 @@ function renderRetail() {
     return a != null && b ? (a / b - 1) * 100 : null;
   };
   // 차트 컨트롤
-  let out = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'
+  const anaAvail = retailTab === 'goods' && retailData.goods
+    && retailData.goods.series.some(x => /·\s*불변지수\s*$/.test(x.name));
+  const anaCur = anaAvail && retAnaMonth && cols.includes(retAnaMonth) ? retAnaMonth : null;
+  let out = (anaAvail
+      ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+        + `<button class="mini-btn${anaCur ? ' on' : ''}" id="raBtn">월별 분석 (가격 vs 물량)</button>`
+        + '<select id="raSel" style="padding:5px 9px;font-size:12px;border:1px solid #d7dde8;border-radius:6px">'
+        + cols.slice().reverse().map(d => `<option value="${d}"${d === anaCur ? ' selected' : ''}>${dateLabel(d)}</option>`).join('')
+        + '</select><span style="color:#8592a3">경상 − 불변 = 가격 기여</span></div>'
+      : '')
+    + (anaCur ? retailAnalysis(anaCur, retailData.goods) : '')
+    + (idxTypes.length > 1
+      ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'
+        + '<b>지수</b><div class="mode" id="rmIdx">'
+        + idxTypes.map(t => `<button data-ri="${t}" class="${retIdxType === t ? 'active' : ''}">${t.replace('지수', '')}</button>`).join('')
+        + '</div><span style="color:#8592a3">'
+        + '<b>경상</b>=명목 판매액(P×Q) · <b>불변</b>=물가 제거한 물량(Q) · <b>계절조정</b>=불변 계절조정'
+        + '</span></div>'
+      : '')
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'
     + '<div class="mode" id="rmMetric">' + [['yoy', 'YoY'], ['mom', 'MoM'], ['level', '원지수']]
       .map(([v, t]) => `<button data-rm="${v}" class="${retMainMetric === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
     + '<div class="mode" id="rmType">' + [['line', '선'], ['bar', '막대']]
@@ -6789,6 +6893,14 @@ function renderRetail() {
     lb.querySelector('input').onchange = e => { e.target.checked ? retMainSel.add(s.name) : retMainSel.delete(s.name); renderRetail(); };
     chips.appendChild(lb);
   });
+  box.querySelectorAll('#rmIdx button').forEach(b => b.onclick = () => {
+    retIdxType = b.dataset.ri; renderRetail(); });
+  const raSel = box.querySelector('#raSel'), raBtn = box.querySelector('#raBtn');
+  if (raBtn) raBtn.onclick = () => {
+    retAnaMonth = anaCur ? null : (raSel ? raSel.value : cols[cols.length - 1]); renderRetail(); };
+  if (raSel) raSel.onchange = () => { retAnaMonth = raSel.value; renderRetail(); };
+  const raX = box.querySelector('#raClose');
+  if (raX) raX.onclick = () => { retAnaMonth = null; renderRetail(); };
   box.querySelectorAll('#rmMetric button').forEach(b => b.onclick = () => { retMainMetric = b.dataset.rm; renderRetail(); });
   box.querySelectorAll('#rmType button').forEach(b => b.onclick = () => { retMainType = b.dataset.ry; renderRetail(); });
   const lag = retMainMetric === 'mom' ? 1 : 12;

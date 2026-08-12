@@ -198,6 +198,40 @@ indicators:
       itmId: "T30 "
       objL1: "ALL"
 
+  # 산업별 취업자 (원계열) — 통계청 헤드라인은 원계열 전년동월비다.
+  # 계절조정(DT_1DA9003S)은 전월비 모멘텀용, 이 표는 전년동월 증감용으로 쓴다.
+  - id: kr_emp_industry_raw
+    name: 산업별 취업자 (원계열)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2013
+    refetch_years: 2
+    series_first: ["전체"]
+    params:
+      orgId: "101"
+      tblId: "DT_1DA7E06S_NEW"
+      itmId: "T30 "
+      objL1: "ALL"
+
+  # 산업 세부분류 취업자 (지역별고용조사, 반기) — 경제활동인구조사의 확대 조사라
+  # 취업자 정의가 같다. 대분류(A~U) / 중분류(2자리) / 소분류(3자리)가 한 표에 들어 있어
+  # code_suffix 로 분류코드를 이름에 남겨야 계층을 복원할 수 있다.
+  #   월별 대분류는 kr_emp_industry(_raw), 이 표는 구조 변화 확인용.
+  - id: kr_emp_industry_sub
+    name: 산업 세부분류 취업자 (반기)
+    source: kosis
+    unit: 천명
+    freq: H
+    start_year: 2013
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1ES3B31J"
+      itmId: "T00 "            # 취업자 (성별·RSE 는 제외)
+      objL1: "ALL"
+      code_suffix: true
+
   # ── 계절조정 계열 (DT_1DA9xxx) — 전월대비 모멘텀 판단용 ────────
   - id: kr_emp_total_sa
     name: 고용 총괄 (계절조정)

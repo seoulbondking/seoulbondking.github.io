@@ -27,8 +27,10 @@ def _api_key() -> str:
 
 
 def _period_range(freq: str, start_year: int) -> tuple[str, str]:
-    """freq(Q/M)에 맞는 startPrdDe, endPrdDe 문자열 생성."""
+    """freq(H/Q/M)에 맞는 startPrdDe, endPrdDe 문자열 생성."""
     today = date.today()
+    if freq == "H":                      # 반기 (지역별고용조사 등): '20261'=상반기
+        return f"{start_year}1", f"{today.year}{1 if today.month <= 6 else 2}"
     if freq == "Q":
         end_q = (today.month - 1) // 3 + 1
         return f"{start_year}01", f"{today.year}0{end_q}"
@@ -36,10 +38,15 @@ def _period_range(freq: str, start_year: int) -> tuple[str, str]:
 
 
 def _to_date(prd_de: str, freq: str) -> str:
-    """KOSIS PRD_DE('20241' 분기 / '202401' 월) → 'YYYY-MM-DD' (기간 말일)."""
+    """KOSIS PRD_DE → 'YYYY-MM-DD' (기간 말일).
+
+    '20241'=분기 · '202401'=월 · '20261'=반기(H, 1=상반기→6월말, 2=하반기→12월말)
+    """
     year = int(prd_de[:4])
     rest = int(prd_de[4:])
-    if freq == "Q":
+    if freq == "H":
+        month = 6 if rest == 1 else 12
+    elif freq == "Q":
         month = rest * 3
     else:
         month = rest
@@ -59,6 +66,10 @@ def fetch(indicator: dict) -> list[dict]:
 
     def prd(y, last_of_year):
         """연도 y의 시작/끝 기간 코드 (올해면 현재 시점까지)."""
+        if freq == "H":                              # 반기: '20261'/'20262'
+            if not last_of_year:
+                return f"{y}1"
+            return f"{y}{1 if (y >= today.year and today.month <= 6) else 2}"
         if not last_of_year:
             return f"{y}01"
         if y >= today.year:
@@ -75,6 +86,10 @@ def fetch(indicator: dict) -> list[dict]:
     #   시리즈명이 같으면 자동으로 한 계열로 합쳐진다.
     p = dict(indicator["params"])
     segments = p.pop("tables", None) or [{}]
+    # code_suffix: 시리즈명 뒤에 분류코드를 ' [코드]' 로 항상 붙인다.
+    #   산업 대/중/소분류처럼 코드 자릿수로 계층을 알아내야 할 때 쓴다.
+    #   대시보드의 baseName() 이 ' [..]' 를 떼어내므로 표시에는 지장이 없다.
+    code_suffix = bool(p.pop("code_suffix", False))
 
     base_params = {
         "method": "getList",
@@ -82,9 +97,12 @@ def fetch(indicator: dict) -> list[dict]:
         "format": "json",
         "jsonVD": "Y",
         "prdSe": freq,
-        "outputFields": OUTPUT_FIELDS,
         **p,
     }
+    # outputFields 를 지정하면 분류'명'만 오고 분류'코드'(C1/C2…)가 빠진다.
+    # code_suffix 를 쓸 때는 필드를 제한하지 않아 코드까지 받는다.
+    if not code_suffix:
+        base_params["outputFields"] = OUTPUT_FIELDS
 
     def get_range(y0, y1, seg):
         """y0~y1 구간 수집. 40,000셀 초과(err 31)면 반으로 쪼개 재귀."""
@@ -141,7 +159,7 @@ def fetch(indicator: dict) -> list[dict]:
     series: dict[str, list] = {}
     for r in rows:
         name = deepest(r) or r.get("ITM_NM") or "값"
-        if name in dup_names:
+        if code_suffix or name in dup_names:
             name = f"{name} [{deepest(r, '') or ''}]"
         if multi_itm:
             name = f"{name} · {r.get('ITM_NM')}"

@@ -247,6 +247,21 @@ indicators:
       itmId: "T10 T20 T30 T40 T50 T60 T80 T90 "
       objL1: "ALL"
 
+  # 고용보조지표 (계절조정) — 확장실업률의 계절조정 계열.
+  # 원계열(DT_1DA7300S)과 짝을 이뤄 종합탭 계열 스위치를 따른다.
+  - id: kr_emp_supp_sa
+    name: 고용보조지표 (확장실업률, 계절조정)
+    source: kosis
+    unit: '%'
+    freq: M
+    start_year: 2015
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9007S"
+      itmId: "T00 "
+      objL1: "ALL"
+
   # 직업별 취업자 (계절조정)
   - id: kr_emp_occupation
     name: 직업별 취업자 (계절조정)
@@ -261,9 +276,10 @@ indicators:
       itmId: "T30 "
       objL1: "ALL"
 
-  # 연령/활동상태별 비경제활동인구 (계절조정) — '쉬었음' 포함
+  # 연령별 '쉬었음' (계절조정). 활동상태별이 아니라 '쉬었음'을 연령으로 쪼갠 표다.
+  # 활동상태별 계절조정은 아래 kr_emp_inactive_act_sa (DT_1DA9010S) 를 쓴다.
   - id: kr_emp_inactive_sa
-    name: 비경활 활동상태 (계절조정)
+    name: 연령별 쉬었음 (계절조정)
     source: kosis
     unit: 천명
     freq: M
@@ -275,7 +291,41 @@ indicators:
       itmId: "T50 "
       objL1: "ALL"
 
-  # 비경제활동인구 활동상태별 — '쉬었음'(구직 포기·유휴인력) 추적
+  # 활동상태별 비경제활동인구 (계절조정) — kr_emp_inactive(원계열)의 짝.
+  #   objL1 = 활동상태 코드 (10 육아 · 20 가사 · 30 통학 · 40 연로 · 50 심신장애 · 90 그외 · 99 계)
+  - id: kr_emp_inactive_act_sa
+    name: 비경활 활동상태별 (계절조정)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2003
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA9010S"
+      itmId: "T50 "
+      objL1: "ALL"     # 세부(901 취업준비·905 쉬었음 등)까지 있으면 함께 받는다
+
+  # 연령 × 활동상태 비경제활동인구 (원계열) — kr_emp_inactive_sa(계절조정)의 짝.
+  #   축이 둘이라 name_axes 로 '연령 · 활동상태' 형태의 이름을 만든다.
+  - id: kr_emp_rest_age
+    name: 연령·활동상태별 비경활 (원계열)
+    source: kosis
+    unit: 천명
+    freq: M
+    start_year: 2003
+    refetch_years: 2
+    params:
+      orgId: "101"
+      tblId: "DT_1DA7147S"
+      itmId: "T50 "
+      objL1: "00 75 10 20 30 40 50 60 63 70 "
+      objL2: "ALL"
+      name_axes: true
+
+  # 비경제활동인구 활동상태별 (원계열) — '쉬었음'(구직 포기·유휴인력) 추적.
+  #   objL1 = 성별(0 계 · 2 남자 · 3 여자) · objL2 = 활동상태
+  #   objL1 을 ALL 로 두면 성별 3개가 같은 활동상태 이름으로 겹쳐 계열이 뭉개진다 → '계'만 받는다.
   - id: kr_emp_inactive
     name: 비경제활동인구 (활동상태별)
     source: kosis
@@ -286,9 +336,9 @@ indicators:
     params:
       orgId: "101"
       tblId: "DT_1DA7145S"
-      itmId: "ALL"
-      objL1: "ALL"
-      objL2: "ALL"      # 활동상태 전체(쉬었음 포함) — 코드 일부 지정 시 누락되는 항목 방지
+      itmId: "T50 "
+      objL1: "0 "       # 계 (성별 전체)
+      objL2: "ALL"      # 활동상태 전체 (쉬었음 포함)
 
   # ── 소매판매액지수 (통계청) ──────────────────────────────────
   - id: kr_retail

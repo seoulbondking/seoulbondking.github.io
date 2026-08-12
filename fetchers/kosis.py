@@ -90,6 +90,10 @@ def fetch(indicator: dict) -> list[dict]:
     #   산업 대/중/소분류처럼 코드 자릿수로 계층을 알아내야 할 때 쓴다.
     #   대시보드의 baseName() 이 ' [..]' 를 떼어내므로 표시에는 지장이 없다.
     code_suffix = bool(p.pop("code_suffix", False))
+    # name_axes: 분류축이 둘 이상일 때 이름을 'C1_NM · C2_NM' 으로 합친다.
+    #   기본(deepest)은 가장 깊은 축 하나만 써서, 연령×활동상태처럼 두 축이 다 필요한
+    #   표에서는 이름이 겹쳐 시리즈가 뭉개진다.
+    name_axes = bool(p.pop("name_axes", False))
 
     base_params = {
         "method": "getList",
@@ -156,10 +160,14 @@ def fetch(indicator: dict) -> list[dict]:
         name_codes.setdefault(nm, set()).add(deepest(r, "") or "")
     dup_names = {nm for nm, codes in name_codes.items() if len(codes) > 1}
 
+    # 값이 실제로 여러 개인 축만 이름에 넣는다 (한 값으로 고정한 축은 군더더기)
+    axes = [k for k in ("C1", "C2", "C3", "C4")
+            if len({r.get(k + "_NM") for r in rows if r.get(k + "_NM")}) > 1] if name_axes else []
     series: dict[str, list] = {}
     for r in rows:
-        name = deepest(r) or r.get("ITM_NM") or "값"
-        if code_suffix or name in dup_names:
+        name = (" · ".join((r.get(k + "_NM") or "").strip() for k in axes if r.get(k + "_NM"))
+                if axes else None) or deepest(r) or r.get("ITM_NM") or "값"
+        if code_suffix or (not axes and name in dup_names):
             name = f"{name} [{deepest(r, '') or ''}]"
         if multi_itm:
             name = f"{name} · {r.get('ITM_NM')}"

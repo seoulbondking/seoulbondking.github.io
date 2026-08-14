@@ -155,7 +155,11 @@
       <div id="retTabs" class="mode" style="display:none">
         <button data-rt="goods" class="active">상품군별</button>
         <button data-rt="type">업태별</button>
-        <button data-rt="card">카드사용액</button>
+      </div>
+      <div id="cardTabs" class="mode" style="display:none">
+        <button data-cdt="month" class="active">월간 (KOSIS)</button>
+        <button data-cdt="week">주간 (나우캐스트)</button>
+        <button data-cdt="real">실질금리 분석</button>
       </div>
       <div id="ppiTabs" class="mode" style="display:none">
         <button data-pt="main" class="active">종합</button>
@@ -472,17 +476,20 @@ function refresh() {
   const isRet = view === 'retail', isPpi = view === 'ppi', isUsE = view === 'usemp', isFund = view === 'fund';
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
-  const isTot = view === 'tot', isWg = view === 'wage';
+  const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
   document.getElementById('retTabs').style.display = isRet ? '' : 'none';
+  document.getElementById('cardTabs').style.display = isCard ? '' : 'none';
+  document.querySelectorAll('#cardTabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.cdt === cardTab));
   document.getElementById('ppiTabs').style.display = isPpi ? '' : 'none';
   document.getElementById('usEmpTabs').style.display = isUsE ? '' : 'none';
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -495,11 +502,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -516,6 +523,7 @@ function refresh() {
   else if (isJlt) renderJolts();
   else if (isTot) renderTot();
   else if (isWg) renderWage();
+  else if (isCard) renderCard();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -4424,6 +4432,65 @@ function renderKrEmp() {
 }
 
 // 산업별 취업자: 21개 대분류 증감 분해(합=전체 증감) + 취업자 수
+// 산업별 취업자 월별 분석 — 증감을 경기민감 / 정책·공공 / 기타로 갈라 성격을 읽는다.
+//   계절조정이면 전월 증감(모멘텀), 원계열이면 전년동월 증감(통계청 헤드라인)이 주 지표다.
+const KR_IND_CYC = ['제조업', '건설업', '도매및소매업', '운수및창고업', '숙박및음식점업'];
+const KR_IND_POL = ['보건업및사회복지서비스업', '공공행정국방및사회보장행정', '교육서비스업'];
+function krIndAnalysis(d, names, short, mom, yoy, totRef, useSA) {
+  const nk = n => n.replace(/^[*A-U]\s*/, '').replace(/\([^)]*\)\s*$/, '').replace(/[\s·,]/g, '');
+  const prim = useSA ? mom : yoy;                 // 주 지표
+  const primT = useSA ? totRef.mom(d) : totRef.yoy(d);
+  const secT = useSA ? totRef.yoy(d) : totRef.mom(d);
+  const pl = useSA ? '전월 증감' : '전년동월 증감';
+  const sl = useSA ? '전년동월 증감' : '전월 증감';
+  const rows = names.map(n => [short(n), prim(n, d), nk(n)])
+    .filter(r => r[1] != null).sort((a, b) => b[1] - a[1]);
+  const grp = keys => rows.filter(r => keys.includes(r[2])).reduce((a, r) => a + r[1], 0);
+  const cyc = grp(KR_IND_CYC), pol = grp(KR_IND_POL);
+  const all = rows.reduce((a, r) => a + r[1], 0);
+  const etc = all - cyc - pol;
+  const mfg = rows.find(r => r[2] === '제조업'), con = rows.find(r => r[2] === '건설업');
+  const f = v => v == null ? '-' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString('ko-KR');
+  const B = [[`${pl} ${f(primT)}천명 (총괄)`, primT > 0 ? '#2b7a3d' : '#c0392b'],
+             [useSA ? '계절조정' : '원계열', '#5a6b85']];
+  const big = Math.max(Math.abs(primT || 0), 50) * 0.3;   // '주도'라 부를 최소 규모
+  const polLed = pol > big && cyc < 0;
+  if (polLed) B.push(['정책·공공 주도 (경기민감 감소)', '#c0392b']);
+  else if (cyc < -big && pol <= big) B.push(['경기민감 부문 감소', '#c0392b']);
+  else if (cyc > big && cyc > pol) B.push(['경기민감 부문 회복', '#2b7a3d']);
+  else B.push(['특정 부문 주도 아님', '#5a6b85']);
+  if (mfg && mfg[1] < 0 && con && con[1] < 0) B.push(['제조·건설 동반 감소', '#c0392b']);
+  const up = rows.filter(r => r[1] > 0).length;
+  B.push([`증가 산업 ${up}/${rows.length}`, up >= rows.length * 0.6 ? '#2b7a3d' : '#c98a1a']);
+
+  const lead = `<b>${dateLabel(d)}</b> 총괄 취업자 ${pl} <b>${f(primT)}천명</b>`
+    + `(${sl} ${f(secT)}천명). 산업 대분류를 갈라 보면 `
+    + `<b>경기민감(제조·건설·도소매·운수·숙박음식) ${f(cyc)}천명</b>, `
+    + `<b>정책·공공(보건복지·공공행정·교육) ${f(pol)}천명</b>, 그 외 ${f(etc)}천명입니다. `
+    + (polLed
+        ? '고용 증가가 <b>재정이 떠받치는 부문에 몰려</b> 있고 경기민감 부문은 줄고 있습니다. '
+          + '총괄 숫자만 보면 견조해 보여도 <b>민간 수요의 힘은 약하다</b>고 읽는 편이 맞습니다.'
+        : cyc > big && cyc > pol
+          ? '증가분이 <b>경기민감 부문에서</b> 나왔습니다. 민간 수요가 살아나는 신호로 읽을 수 있습니다.'
+          : cyc < -big && pol <= big
+            ? '<b>경기민감 부문이 줄어드는</b> 달입니다. 정책·공공도 받쳐 주지 못해 총괄이 눌립니다.'
+            : '어느 한 부문이 끌고 간다고 보기 어려운 달입니다. 부문 간 상쇄가 커서 총괄만으론 방향을 읽기 어렵습니다.')
+    + ` 대분류 ${rows.length}개 중 <b>${up}개</b>가 증가했습니다.`
+    + (useSA ? '' : ' ※ 원계열 전월 증감에는 계절성이 남아 있으니 모멘텀은 계절조정으로 보세요.');
+
+  const body = '<div style="display:flex;gap:26px;flex-wrap:wrap">'
+    + '<div>' + anaRank('증가 상위 산업', `${pl}, 천명`, rows.slice(0, 8).map(r => [r[0], r[1]]), '') + '</div>'
+    + '<div>' + anaRank('감소 상위 산업', `${pl}, 천명`, rows.slice(-8).reverse().map(r => [r[0], r[1]]), '') + '</div>'
+    + '<div>' + anaRank('부문별 합계', '경기민감 / 정책·공공 / 기타',
+        [['경기민감', cyc], ['정책·공공', pol], ['그 외', etc], ['대분류 합', all]], '') + '</div>'
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-top:10px;line-height:1.8">'
+    + '※ 대분류 합은 총괄과 정확히 일치하지 않습니다'
+    + (useSA ? '(계절조정 비가법성).' : '(반올림·미분류).')
+    + ` 이번 달 차이는 ${f(all - primT)}천명입니다.</div>`;
+  return anaShell(`${dateLabel(d)} 산업별 취업자 ${pl} 분해`, B, lead, body, 'iaClose');
+}
+
 function renderKrEmpIndustry() {
   const box = document.getElementById('retailWrap');
   // 계절조정(DT_1DA9003S)과 원계열(DT_1DA7E06S_NEW)을 계열 스위치로 고른다.
@@ -4433,6 +4500,7 @@ function renderKrEmpIndustry() {
   const ind = useSA ? indSA : (indRW || indSA);
   if (!ind) { box.innerHTML = '<div style="padding:24px;color:#888">산업별 데이터가 없습니다. <b>python fetch.py kr_emp_industry kr_emp_industry_raw</b> 실행 필요.</div>'; return; }
   const cols = periodDates.filter(inRange);
+  const indAnaCur = indAnaMonth && cols.includes(indAnaMonth) ? indAnaMonth : null;
   const idx = new Map(periodDates.map((d, i) => [d, i]));
   const prevN = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
   const S = {}; ind.series.forEach(s => S[baseName(s.name)] = new Map(s.data.map(p => [p.d, p.v])));
@@ -4472,7 +4540,9 @@ function renderKrEmpIndustry() {
     + '한국은행 통방문은 <b>제조업·건설업</b>(경기민감)과 <b>서비스업</b> 흐름을 핵심으로 봅니다.</div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="krI${i}"></canvas></div></div>`).join('')
-    + '</div>';
+    + '</div>'
+    + anaBar('iaBtn', 'iaSel', cols, indAnaCur, '선택한 달의 증감을 경기민감 / 정책·공공 / 기타로 갈라 읽어 줍니다')
+    + '<!--INDANA-->';
   // 종합탭과 대조용 총괄(계절조정) 취업자. 계절조정은 항목별로 따로 하므로
   // 산업 합계 ≠ 총괄 이 정상이다(비가법성). 얼마나 벌어지는지 표에 직접 보여준다.
   const TOTSRC = useSA ? (krEmpData.totSa ? 'totSa' : 'tot') : 'tot';
@@ -4519,7 +4589,17 @@ function renderKrEmpIndustry() {
         : '※ <b>원계열</b>입니다. 전년동월 증감이 통계청 헤드라인 기준이고 산업 합계도 총괄과 잘 맞습니다. '
           + '다만 <b>전월 증감에는 계절성이 그대로 남아</b> 있으니 모멘텀은 계절조정으로 보세요.')
     + '</div>';
+  out = out.replace('<!--INDANA-->', indAnaCur
+    ? krIndAnalysis(indAnaCur, names, short, mom, yoy, totRef, useSA) : '');
   box.innerHTML = out;
+  {
+    const bt = box.querySelector('#iaBtn'), sl = box.querySelector('#iaSel');
+    if (bt) bt.onclick = () => {
+      indAnaMonth = indAnaCur ? null : (sl ? sl.value : cols[cols.length - 1]); renderKrEmp(); };
+    if (sl) sl.onchange = () => { indAnaMonth = sl.value; renderKrEmp(); };
+    const cx = box.querySelector('#iaClose');
+    if (cx) cx.onclick = () => { indAnaMonth = null; renderKrEmp(); };
+  }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
     if (b.disabled) return; krSA = b.dataset.ks; renderKrEmp(); });
@@ -6626,8 +6706,14 @@ function renderUsNfpIndustry() {
 // ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────
 let retIdxType = null;   // 소매판매 지수 종류 (경상/불변/계절조정)
 let retAnaMonth = null;  // 소매판매 월별 분석 패널이 열린 달
+let cpiAnaMonth = null, indAnaMonth = null;   // CPI 기여도 · 산업별 고용 분석 패널
 const RETAIL = { id: 'retail_all', name: '소매판매',
                  ids: ['kr_retail', 'kr_retail_type'] };
+// 카드사용액 — KOSIS 435(월간)를 기본 틀로 하고, 나우캐스트(주간)를 함께 본다.
+const CARD = { id: 'card_all', name: '카드사용액',
+               ids: ['kr_card_approve', 'kr_card_weekly', 'kr_card',
+                     'kr_base_rate', 'kr_cpi_core', 'kr_gdp_real',
+                     'kr_cpi', 'kr_infl_expect', 'kr_card_weekly_ind'] };
 // 소매판매 계층 (통계청 소매판매액지수 분류) — 항목명 → 들여쓰기 레벨
 const RETAIL_LV = {
   goods: {   // 상품군별
@@ -6682,8 +6768,6 @@ async function enterRetail() {
   const ind = inds[0] || inds[1];
   const ds = new Set();
   if (ind) ind.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
-  await loadCardData();
-  Object.keys(cardData).forEach(m => ds.add(monthEnd(m)));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -6697,6 +6781,36 @@ async function enterRetail() {
 function monthEnd(ym) {   // 'YYYY-MM' → 'YYYY-MM-DD'(월말)
   const [y, m] = ym.split('-').map(Number);
   return `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`;
+}
+
+// 분석 패널 공용 틀 — 제목·닫기·배지
+function anaShell(title, badges, lead, body, closeId) {
+  const b = (t, c) => `<span style="background:${c};color:#fff;border-radius:999px;`
+    + `padding:3px 11px;font-size:11.5px;font-weight:700;margin-right:6px">${t}</span>`;
+  return `<div style="border:1px solid #d7dde8;border-radius:10px;padding:15px 17px;margin-bottom:14px;background:#fbfcfe">`
+    + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">`
+    + `<b style="font-size:14px">${title}</b><button class="mini-btn" id="${closeId}">닫기</button></div>`
+    + (badges.length ? '<div style="margin-bottom:10px">' + badges.map(([t, c]) => b(t, c)).join('') + '</div>' : '')
+    + (lead ? `<div style="font-size:13px;line-height:1.95;margin-bottom:12px">${lead}</div>` : '')
+    + body + '</div>';
+}
+// 분석 버튼 + 월 선택 (열려 있으면 cur, 아니면 null)
+function anaBar(btnId, selId, cols, cur, note) {
+  return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+    + `<button class="mini-btn${cur ? ' on' : ''}" id="${btnId}">월별 분석</button>`
+    + `<select id="${selId}" style="padding:5px 9px;font-size:12px;border:1px solid #d7dde8;border-radius:6px">`
+    + cols.slice().reverse().map(d => `<option value="${d}"${d === cur ? ' selected' : ''}>${dateLabel(d)}</option>`).join('')
+    + `</select><span style="color:#8592a3">${note}</span></div>`;
+}
+// 순위표 (항목·값 배열)
+function anaRank(title, note, list, unit) {
+  let t = `<div style="font-size:12.5px;font-weight:700;margin:10px 0 4px">${title}`
+    + `<span style="font-weight:400;color:#8592a3"> — ${note}</span></div>`
+    + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + '<th>항목</th><th>값</th></tr></thead><tbody>';
+  list.forEach(([n, v]) => { t += `<tr class="flat lv0"><td style="text-align:left">${n}</td>`
+    + `<td${v < 0 ? ' class="neg"' : ''}>${(v > 0 ? '+' : '') + v.toFixed(unit === '%p' ? 2 : 0)}${unit}</td></tr>`; });
+  return t + '</tbody></table>';
 }
 
 // 소매판매 월별 분석 — 경상(P×Q)과 불변(Q)의 차이를 가격 기여로 분해한다.
@@ -6769,7 +6883,6 @@ function retailAnalysis(d, goods) {
 function renderRetail() {
   document.querySelectorAll('#retTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.rt === retailTab));
-  if (retailTab === 'card') { renderCard(); return; }
   // 소매판매액지수는 한 표에 경상·불변·계절조정이 함께 온다 (시리즈명 '… · 경상지수').
   // 고른 종류만 남기고 접미사를 떼어, 아래 트리·표 코드는 예전처럼 이름만 보게 한다.
   const idxTypes = (() => { const t = new Set();
@@ -6921,160 +7034,952 @@ function renderRetail() {
   box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
 }
 
-// ── 카드사용액 (직접 입력 → 3개월 이동평균·연누계·증감률 자동계산) ──
-let cardData = {};   // { 'YYYY-MM': 금액 } — 현재 편집중 데이터
-let cardChart = null;
-// 공유 원본 = 커밋된 docs/data/card_data.js (window.__CARD__)
-// 로컬 편집 = localStorage. 로컬 편집이 있으면 그것을, 없으면 커밋 파일을 사용.
-async function loadCardData() {
-  let local = null;
-  try { local = JSON.parse(localStorage.getItem('cardData') || 'null'); } catch (e) {}
-  if (local && Object.keys(local).length) { cardData = local; return; }
-  if (!window.__CARD__) await loadScript('data/card_data.js').catch(() => {});
-  cardData = window.__CARD__ ? { ...window.__CARD__ } : {};
-}
-function saveCardData() { try { localStorage.setItem('cardData', JSON.stringify(cardData)); } catch (e) {} }
-function resetCardToFile() {   // 로컬 편집 버리고 커밋 파일 값으로 되돌리기
-  localStorage.removeItem('cardData');
-  cardData = window.__CARD__ ? { ...window.__CARD__ } : {};
-  renderCard();
-}
+// ── 카드사용액 (KOSIS 435 업종별 카드승인금액, 여신금융협회) ────
+// 소비 관련 8개 업종(도소매·운수·숙박음식·사업지원·교육·보건복지·예술스포츠·협회단체)의
+// 승인금액 합계. 신용+체크가 함께 잡힌다. 총계 계열이 없어 8개를 합해 쓴다.
+// 단위는 백억원이라 표시할 때 100으로 나눠 조원으로 바꾼다.
+//
+// 계절조정이 없어 원계열 MoM 은 명절·영업일수에 흔들린다. 그래서 3개월 이동평균을
+// 먼저 취하고, 그 위에서 YoY·MoM·Z-Score 를 계산한다.
+let cardData = null, cardTab = 'month';
+let cardCharts = [null, null, null];
+let cardWkCharts = [null, null];
+let cardWkWin = 13;      // 주간 이동평균 창 (주) — 13주 = 3개월
 
-function cardComputed() {
-  const months = Object.keys(cardData).sort();
-  const amt = months.map(m => cardData[m]);
-  const ma3 = months.map((m, i) => i >= 2 ? (amt[i] + amt[i - 1] + amt[i - 2]) / 3 : null);
-  // 연누계: 같은 해 1월~당월 누적
-  const ytd = months.map((m, i) => {
-    const y = m.slice(0, 4); let s = 0;
-    for (let j = 0; j <= i; j++) if (months[j].slice(0, 4) === y) s += amt[j];
-    return s;
-  });
-  const mi = new Map(months.map((m, i) => [m, i]));
-  const ma3mom = months.map((m, i) => { const j = i - 1; return j >= 0 && ma3[i] != null && ma3[j] != null ? (ma3[i] / ma3[j] - 1) * 100 : null; });
-  const prevYearIdx = m => { const [y, mm] = m.split('-'); return mi.get(`${+y - 1}-${mm}`); };
-  const ma3yoy = months.map((m, i) => { const j = prevYearIdx(m); return j != null && ma3[i] != null && ma3[j] != null ? (ma3[i] / ma3[j] - 1) * 100 : null; });
-  const ytdyoy = months.map((m, i) => { const j = prevYearIdx(m); return j != null && ytd[j] ? (ytd[i] / ytd[j] - 1) * 100 : null; });
-  return { months, amt, ma3, ytd, ma3mom, ma3yoy, ytdyoy };
+async function enterCard() {
+  const inds = await Promise.all(CARD.ids.map(id => loadIndicator(id).catch(() => null)));
+  cardData = { approve: inds[0], weekly: inds[1], ecos: inds[2], rate: inds[3], core: inds[4],
+               gdp: inds[5], cpi: inds[6], exp: inds[7], weeklyInd: inds[8] };
+  if (!inds[0] && !inds[1]) {
+    alert('카드 데이터가 없습니다. python fetch.py kr_card_approve kr_card_weekly 실행 필요.');
+    return;
+  }
+  view = 'card'; cardTab = 'month';
+  current = { id: CARD.id, name: CARD.name, freq: 'M', unit: '조원·%',
+              updated_at: (inds[0] || inds[1]).updated_at, series: [] };
+  document.getElementById('title').textContent = CARD.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + (inds[0] || inds[1]).updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'cardBtn'));
+  if (!document.getElementById('cardTabs').dataset.bound) {
+    document.getElementById('cardTabs').addEventListener('click', e => {
+      if (!e.target.dataset.cdt) return; cardTab = e.target.dataset.cdt; refresh();
+    });
+    document.getElementById('cardTabs').dataset.bound = '1';
+  }
+  // 기간 축은 월간(KOSIS) 기준. 주간 탭은 startD~endD 를 날짜로 직접 걸러 쓴다.
+  //   다만 주간이 월간보다 빨라(6월 vs 7월) 그대로 두면 최신 주가 잘린다.
+  //   월간 마지막 이후의 주만 축 끝에 덧붙여, 선택 목록은 어지럽히지 않으면서 최신까지 닿게 한다.
+  const ds = new Set();
+  if (inds[0]) inds[0].series.forEach(x => x.data.forEach(pt => ds.add(pt.d)));
+  else if (inds[1]) inds[1].series.forEach(x => x.data.forEach(pt => ds.add(pt.d)));
+  const lastMon = [...ds].sort().pop() || '';
+  if (inds[1]) inds[1].series.forEach(x => x.data.forEach(pt => { if (pt.d > lastMon) ds.add(pt.d); }));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
 }
 
 function renderCard() {
+  if (cardTab === 'week') { renderCardWeek(); return; }
+  if (cardTab === 'real') { renderCardReal(); return; }
+  renderCardMonth();
+}
+const CARD_IND8 = ['도매 및 소매업', '운수업', '숙박 및 음식점업',
+                   '사업시설관리 및 사업지원 서비스업', '교육서비스업',
+                   '보건업 및 사회복지 서비스업', '예술 스포츠 및 여가관련 서비스업',
+                   '협회 및 단체 수리 및 기타 개인 서비스업'];
+
+function renderCardMonth() {
   const box = document.getElementById('retailWrap');
-  const c = cardComputed();
-  const fmtN = v => v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
-  const fmtP = v => v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  let out = '<div style="background:#f6f8fc;border:1px solid #e0e5ec;border-radius:10px;padding:12px;margin-bottom:14px">'
-    + '<b style="font-size:13px">카드사용액 입력 (개인카드지출액, 신용+체크 합계)</b>'
-    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'
-    + '<input type="month" id="cardMonth" style="padding:6px 10px;border:1px solid #d7dde8;border-radius:8px">'
-    + '<input type="number" id="cardAmt" placeholder="금액 (예: 억원 단위 등 자유)" style="padding:6px 10px;border:1px solid #d7dde8;border-radius:8px;width:220px">'
-    + '<button id="cardAdd" style="padding:7px 16px;border:1px solid #1a4fa0;background:#1a4fa0;color:#fff;border-radius:9px;cursor:pointer">입력/수정</button>'
-    + '<span style="flex:1"></span>'
-    + '<button id="cardSaveFile" style="padding:6px 12px;border:1px solid #1a4fa0;background:#eaf1fd;color:#1a4fa0;border-radius:8px;cursor:pointer;font-weight:600">💾 저장파일 만들기 (git)</button>'
-    + '<button id="cardExport" style="padding:6px 12px;border:1px solid #d7dde8;background:#fff;border-radius:8px;cursor:pointer">CSV</button>'
-    + '<label style="padding:6px 12px;border:1px solid #d7dde8;background:#fff;border-radius:8px;cursor:pointer">CSV 불러오기<input type="file" id="cardImport" accept=".csv" style="display:none"></label>'
-    + '<button id="cardReset" style="padding:6px 12px;border:1px solid #d7dde8;background:#fff;border-radius:8px;cursor:pointer" title="로컬 편집 버리고 커밋 파일 값으로">↺ 파일값</button>'
-    + '</div><div id="cardHint" style="font-size:11.5px;color:#8592a3;margin-top:6px"></div></div>';
-
-  out += '<div class="cchart" style="height:300px;margin-bottom:16px"><canvas id="cardChart"></canvas></div>';
-  // 표 (KR_Macro CPI 시트 구성: 지출액·3MA·연누계·3MA MoM·3MA YoY·연누계 YoY)
-  const rows = [
-    ['개인카드지출액(신용+체크)', c.amt, fmtN], ['카드지출 3개월 이동평균', c.ma3, fmtN],
-    ['카드지출 연누계', c.ytd, fmtN], ['3개월 이동평균 MoM (%)', c.ma3mom, fmtP],
-    ['3개월 이동평균 YoY (%)', c.ma3yoy, fmtP], ['연누계 YoY (%)', c.ytdyoy, fmtP],
-  ];
-  out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
-    + c.months.map(m => `<th>${"'" + m.slice(2)}</th>`).join('') + '<th></th></tr></thead><tbody>';
-  rows.forEach(([label, arr, fmt], ri) => {
-    out += `<tr class="${ri === 0 ? 'lv0 sep-solid' : ''}"><td>${label}</td>`
-      + arr.map(v => `<td${(typeof v === 'number' && v < 0) ? ' class="neg"' : ''}>${fmt(v)}</td>`).join('') + '<td></td></tr>';
-  });
-  // 삭제 버튼 행
-  out += '<tr><td style="color:#98a3b6;font-size:11px">삭제</td>'
-    + c.months.map(m => `<td><span class="cardDel" data-m="${m}" style="cursor:pointer;color:#c0392b">✕</span></td>`).join('') + '<td></td></tr>';
-  out += '</tbody></table></div>';
-  if (!c.months.length) out += '<div style="padding:20px;color:#888">위에서 월과 금액을 입력하면 3개월 이동평균·연누계·증감률이 자동 계산됩니다.</div>';
-  box.innerHTML = out;
-
-  const add = () => {
-    const m = document.getElementById('cardMonth').value;
-    const a = parseFloat(document.getElementById('cardAmt').value);
-    if (!m || isNaN(a)) { alert('월과 금액을 입력하세요.'); return; }
-    cardData[m] = a; saveCardData(); renderCard();
-  };
-  box.querySelector('#cardAdd').onclick = add;
-  box.querySelectorAll('.cardDel').forEach(x => x.onclick = () => { delete cardData[x.dataset.m]; saveCardData(); renderCard(); });
-  // 로컬 편집이 커밋 파일과 다른지 표시
-  const baseStr = JSON.stringify(window.__CARD__ || {}), curStr = JSON.stringify(cardData);
-  const dirty = baseStr !== curStr;
-  box.querySelector('#cardHint').innerHTML = dirty
-    ? '⚠ 로컬에 저장된 편집분이 있습니다. 모든 기기에서 공유하려면 <b>💾 저장파일 만들기</b> → 내려받은 <code>card_data.js</code>를 <code>docs/data/</code>에 덮어쓰고 push 하세요.'
-    : '커밋된 파일 값과 동일합니다. (모든 기기 공유 상태)';
-  box.querySelector('#cardSaveFile').onclick = () => {
-    const ordered = {}; Object.keys(cardData).sort().forEach(m => ordered[m] = cardData[m]);
-    const js = 'window.__CARD__=' + JSON.stringify(ordered) + ';\n';
-    const a = document.createElement('a');
-    a.href = 'data:text/javascript;charset=utf-8,' + encodeURIComponent(js);
-    a.download = 'card_data.js'; a.click();
-  };
-  box.querySelector('#cardReset').onclick = () => {
-    if (confirm('로컬 편집분을 버리고 커밋된 파일 값으로 되돌릴까요?')) resetCardToFile();
-  };
-  box.querySelector('#cardExport').onclick = () => {
-    const csv = '월,금액\n' + Object.keys(cardData).sort().map(m => `${m},${cardData[m]}`).join('\n');
-    const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
-    a.download = 'card_usage.csv'; a.click();
-  };
-  box.querySelector('#cardImport').onchange = e => {
-    const f = e.target.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      let n = 0;
-      rd.result.split(/\r?\n/).forEach(line => {
-        // 첫 구분자까지가 날짜, 나머지가 금액 (금액에 쉼표가 있어도 안전)
-        const cut = line.search(/[,\t;]/);
-        if (cut < 0) return;
-        const raw = line.slice(0, cut).trim();
-        const rest = line.slice(cut + 1);
-        // 날짜에서 연-월 추출: 2022-01, 2022-01-31, 2022.01, 2022/1, 202201 모두 허용
-        const mt = raw.match(/(\d{4})[-./]?\s*(\d{1,2})/);
-        const amt = parseFloat(rest.replace(/[^\d.-]/g, ''));   // 쉼표·원·따옴표 제거
-        if (mt && !isNaN(amt)) {
-          cardData[`${mt[1]}-${String(+mt[2]).padStart(2, '0')}`] = amt; n++;
-        }
-      });
-      saveCardData(); renderCard();
-      alert(n ? `${n}개월 불러왔습니다.` : '인식된 행이 없습니다. (첫 열=날짜, 둘째 열=금액)');
-    };
-    rd.readAsText(f);
-  };
-  // 표를 최신월(오른쪽 끝)로 스크롤
-  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
-  // 차트: 3개월 이동평균 + 연누계 YoY
-  if (cardChart) { cardChart.destroy(); cardChart = null; }
-  if (c.months.length) {
-    // 막대 y축: 데이터 범위에 맞춰 0이 아닌 구간으로 확대
-    const vals = c.amt.concat(c.ma3).filter(v => v != null);
-    const lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.15 || hi * 0.05;
-    cardChart = new Chart(box.querySelector('#cardChart'), {
-      data: { labels: c.months, datasets: [
-        { type: 'bar', label: '개인카드지출액', data: c.amt, backgroundColor: '#c3d5f0',
-          yAxisID: 'y', order: 3 },
-        { type: 'line', label: '3개월 이동평균', data: c.ma3, borderColor: '#1a4fa0', backgroundColor: '#1a4fa0',
-          borderWidth: 2.5, pointRadius: 0, tension: 0.15, yAxisID: 'y', order: 1 },
-        { type: 'line', label: '연누계 YoY (%)', data: c.ytdyoy, borderColor: '#c0392b', backgroundColor: '#c0392b',
-          borderWidth: 2.5, pointRadius: 0, tension: 0.15, yAxisID: 'y1', order: 0 },
-      ] },
-      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } },
-        scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 }, callback: function (v) { return "'" + this.getLabelForValue(v).slice(2); } } },
-          y: { position: 'left', beginAtZero: false, min: Math.floor((lo - pad) / 1000) * 1000,
-               max: Math.ceil((hi + pad) / 1000) * 1000,
-               ticks: { font: { size: 10 }, callback: v => v.toLocaleString('ko-KR') } },
-          y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, callback: v => v + '%' } } } },
-    });
+  const ind = cardData && cardData.approve;
+  if (!ind) {
+    box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.9">'
+      + '카드승인금액 데이터가 없습니다.<br>'
+      + 'PC에서 <b>python fetch.py kr_card_approve</b> 실행 후 새로고침해 주세요.<br>'
+      + '<span style="color:#8592a3;font-size:12.5px">KOSIS orgId 435 · DT_435001N_001</span></div>';
+    return;
   }
+  const S = {}; ind.series.forEach(x => S[baseName(x.name)] = new Map(x.data.map(pt => [pt.d, pt.v])));
+  const names = Object.keys(S);
+
+  // 파생값은 전 구간에서 계산한 뒤 화면 기간으로 자른다
+  const sumAt = d => { let t = 0, ok = false;
+    names.forEach(n => { const v = S[n].get(d); if (v != null) { t += v; ok = true; } });
+    return ok ? t : null; };
+  const allM = periodDates.filter(d => sumAt(d) != null);
+  if (!allM.length) { box.innerHTML = '<div style="padding:28px;color:#555">카드 데이터가 없습니다.</div>'; return; }
+  const amt = allM.map(sumAt);
+  const ma3 = amt.map((_, i) => i >= 2 && amt[i] != null && amt[i-1] != null && amt[i-2] != null
+    ? (amt[i] + amt[i-1] + amt[i-2]) / 3 : null);
+  const mi = new Map(allM.map((d, i) => [d.slice(0, 7), i]));
+  const pyIdx = d => { const [y, m] = d.slice(0, 7).split('-'); return mi.get(`${+y - 1}-${m}`); };
+  const ma3yoy = allM.map((d, i) => { const j = pyIdx(d);
+    return j != null && ma3[i] != null && ma3[j] ? (ma3[i] / ma3[j] - 1) * 100 : null; });
+  const ma3mom = allM.map((d, i) => i > 0 && ma3[i] != null && ma3[i-1]
+    ? (ma3[i] / ma3[i-1] - 1) * 100 : null);
+  // Z-Score — 3개월 이동평균 YoY 를 전 표본 평균·표준편차로 표준화
+  const ok = ma3yoy.filter(v => v != null);
+  const mu = ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : 0;
+  const sd = ok.length ? Math.sqrt(ok.reduce((a, b) => a + (b - mu) ** 2, 0) / ok.length) || 1 : 1;
+  const zsc = ma3yoy.map(v => v == null ? null : (v - mu) / sd);
+
+  const keep = allM.map((d, i) => inRange(d) ? i : -1).filter(i => i >= 0);
+  if (!keep.length) { box.innerHTML = '<div style="padding:28px;color:#555">선택한 기간에 카드 데이터가 없습니다.</div>'; return; }
+  const cut = a => keep.map(i => a[i]);
+  const cols = cut(allM);
+  const cAmt = cut(amt), cMa3 = cut(ma3), cYoy = cut(ma3yoy), cMom = cut(ma3mom), cZ = cut(zsc);
+
+  const fmtJ = v => v == null ? '' : (v / 100).toLocaleString('ko-KR',
+    { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const fmtP = v => v == null ? '' : v.toLocaleString('ko-KR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const li = allM.length - 1;
+
+  let out = '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + 'KOSIS <b>435 여신금융협회</b> 업종별 카드승인금액 8개 업종 합계(조원). '
+    + '<b>신용+체크</b>가 함께 잡히지만 <b>소비 관련 업종만</b> 담겨 있어 전산업 승인액은 아닙니다. '
+    + '계절조정이 없어 명절·영업일수에 흔들리므로 <b>3개월 이동평균을 먼저 취한 뒤</b> '
+    + '증감률과 Z-Score를 계산합니다. 수록기간은 2017-03부터입니다.</div>';
+
+  // 요약 카드
+  const kbox = (t, v, sub, c) => `<div style="flex:1;min-width:150px;border:1px solid #e0e5ec;`
+    + `border-radius:10px;padding:11px 14px;background:#fbfcfe">`
+    + `<div style="font-size:11.5px;color:#8592a3">${t}</div>`
+    + `<div style="font-size:19px;font-weight:700;color:${c || '#1a2b4a'};margin:2px 0">${v}</div>`
+    + `<div style="font-size:11.5px;color:#8592a3">${sub}</div></div>`;
+  const sgn = v => v == null ? '#1a2b4a' : v > 0 ? '#2b7a3d' : '#c0392b';
+  const pp = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+  out += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'
+    + kbox(`${dateLabel(allM[li])} 이용금액`, fmtJ(amt[li]) + '조', '8업종 합계 · 원계열', '#1a2b4a')
+    + kbox('3개월 이동평균', fmtJ(ma3[li]) + '조', '단월 변동 제거', '#1a2b4a')
+    + kbox('3ma 전년동월비', pp(ma3yoy[li]), '소비 모멘텀', sgn(ma3yoy[li]))
+    + kbox('3ma 전월비', pp(ma3mom[li]), '단기 방향', sgn(ma3mom[li]))
+    + kbox('Z-Score', zsc[li] == null ? '-' : (zsc[li] > 0 ? '+' : '') + zsc[li].toFixed(2) + 'σ',
+           `평균 ${mu.toFixed(2)}% · 표준편차 ${sd.toFixed(2)}%p`,
+           zsc[li] == null ? '#1a2b4a' : zsc[li] > 0.5 ? '#2b7a3d' : zsc[li] < -0.5 ? '#c0392b' : '#1a2b4a')
+    + '</div>';
+
+  // 차트 3개
+  out += '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">'
+    + [0, 1, 2].map(i => `<div style="flex:1;min-width:300px"><div class="cchart" style="height:270px">`
+        + `<canvas id="cardC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // 표 하나
+  const th = '<th>지표</th>' + cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const row = (nm, arr, f) => `<tr class="flat lv0"><td style="text-align:left">${nm}</td>`
+    + arr.map(v => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`).join('') + '</tr>';
+  out += '<div class="block-title">카드승인금액 (8업종 합계)</div>'
+    + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
+    + row('월별 이용금액 (조원)', cAmt, fmtJ)
+    + row('3개월 이동평균 (조원)', cMa3, fmtJ)
+    + row('3개월 이동평균 YoY (%)', cYoy, fmtP)
+    + row('3개월 이동평균 MoM (%)', cMom, fmtP)
+    + row('Z-Score (σ)', cZ, fmtP)
+    + '</tbody></table></div>';
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+
+  cardCharts.forEach(c => c && c.destroy());
+  cardCharts = [null, null, null];
+  const xTick = { maxTicksLimit: 10, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const mk = (id, title, data, color, unit, extra) => new Chart(box.querySelector(id), {
+    type: 'line',
+    data: { labels: cols, datasets: [{ label: title, data, borderColor: color,
+      backgroundColor: color, borderWidth: 2.5, pointRadius: 0, tension: .15 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+          label: it => ` ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}${unit}` } } },
+      scales: { x: { ticks: xTick },
+        y: Object.assign({ ticks: { font: { size: 10 }, callback: v => v + unit } }, extra || {}) } },
+  });
+  cardCharts[0] = mk('#cardC0', '3개월 이동평균 전년동월비', cYoy, '#1a4fa0', '%');
+  cardCharts[1] = mk('#cardC1', '3개월 이동평균 전월비', cMom, '#2b7a3d', '%');
+  cardCharts[2] = mk('#cardC2', 'Z-Score (3ma YoY 표준화)', cZ, '#e8722c', 'σ',
+    { suggestedMin: -2.5, suggestedMax: 2.5 });
+}
+
+// ── 주간 카드사용액 (통계청 나우캐스트 → 원자료 신한카드) ──────
+// 포털은 변화율만 준다. 다만 'wklId=0'(2020년 1월 대비)은 기준이 고정이라
+// 지수로 되돌릴 수 있고(수집기가 이미 만들어 둔다), 지수만 있으면 원하는 기간으로 묶을 수 있다.
+//   I_t = 100 × (1 + v_t/100)
+// 주간 원계열은 명절·요일 배열에 크게 흔들려(전년동주비 표준편차 10%p) 그대로 쓰지 않고,
+// 13주(3개월) 이동평균을 기본으로 본다.
+function renderCardWeek() {
+  const box = document.getElementById('retailWrap');
+  const ind = cardData && cardData.weekly;
+  if (!ind) {
+    box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.9">'
+      + '주간 카드 데이터가 없습니다.<br>'
+      + 'PC에서 <b>python fetch.py kr_card_weekly</b> 실행 후 새로고침해 주세요.<br>'
+      + '<span style="color:#8592a3;font-size:12.5px">통계청 나우캐스트 · indcr_id 1</span></div>';
+    return;
+  }
+  const pick = t => { const x = ind.series.find(y => baseName(y.name).endsWith(t)); return x || null; };
+  const idxS = pick('지수 (2020년 1월=100)');
+  if (!idxS) {
+    box.innerHTML = '<div style="padding:28px;color:#c0392b;line-height:1.9">'
+      + '지수 계열이 없습니다. 수집기를 갱신한 뒤 <b>python fetch.py kr_card_weekly</b> 를 다시 실행해 주세요.'
+      + '<br><span style="color:#8592a3;font-size:12.5px">indicators.yaml 의 wkl_ids 에 0 이 있어야 지수가 만들어집니다.</span></div>';
+    return;
+  }
+  const allW = idxS.data.map(p => p.d);
+  const I = idxS.data.map(p => p.v);
+  const n = allW.length;
+  const W = cardWkWin;
+  // 이동평균 → 그 전년동기비(52주 전)
+  const ma = I.map((_, i) => i >= W - 1 ? I.slice(i - W + 1, i + 1).reduce((a, b) => a + b, 0) / W : null);
+  const yoyOf = arr => arr.map((_, i) => i >= 52 && arr[i] != null && arr[i - 52]
+    ? (arr[i] / arr[i - 52] - 1) * 100 : null);
+  const rawYoy = yoyOf(I), maYoy = yoyOf(ma);
+  const maMom = ma.map((_, i) => i >= 4 && ma[i] != null && ma[i - 4]
+    ? (ma[i] / ma[i - 4] - 1) * 100 : null);   // 4주 전 대비
+
+  const keep = allW.map((d, i) => inRange(d) ? i : -1).filter(i => i >= 0);
+  if (!keep.length) { box.innerHTML = '<div style="padding:28px;color:#555">선택한 기간에 주간 데이터가 없습니다.</div>'; return; }
+  const cut = a => keep.map(i => a[i]);
+  const cols = cut(allW), cI = cut(I), cMa = cut(ma), cRaw = cut(rawYoy), cMY = cut(maYoy), cMM = cut(maMom);
+  const li = keep[keep.length - 1];   // 요약 카드는 '화면에 보이는 마지막 주' 기준 (표와 어긋나지 않게)
+
+  const f2 = v => v == null ? '' : v.toLocaleString('ko-KR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pp = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+  const sgn = v => v == null ? '#1a2b4a' : v > 0 ? '#2b7a3d' : '#c0392b';
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">이동평균: </span><div class="mode" id="cwWin">'
+    + [[4, '4주'], [13, '13주 (3개월)'], [26, '26주 (6개월)']].map(([v, t]) =>
+        `<button data-cw="${v}" class="${W === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><span style="font-size:12px;color:#8592a3">기간 설정은 월 단위지만 표·차트는 주 단위입니다</span></div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + '통계청 <b>나우캐스트</b>(원자료 <b>신한카드</b>) 주간 지표. 공표가 가장 빠릅니다(약 2주 시차). '
+    + '포털은 변화율만 주지만, <b>2020년 1월 대비</b>는 기준이 고정이라 <b>지수로 되돌려</b> 원하는 기간으로 묶었습니다. '
+    + '주간 원계열은 명절·요일 배열에 크게 흔들리므로(전년동주비 표준편차 10%p) '
+    + `<b>${W}주 이동평균</b>을 기본으로 봅니다. `
+    + '<span style="color:#c0392b">신한카드 <b>단일사 표본</b>이라 월간 탭(여신협회 전체)과 모집단이 다릅니다 — '
+    + '수준이 아니라 방향만 비교하세요. 최근 1~2주는 속보치라 다음 수집 때 바뀝니다.</span></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="cwC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const kbox = (t, v, sub, c) => `<div style="flex:1;min-width:150px;border:1px solid #e0e5ec;`
+    + `border-radius:10px;padding:11px 14px;background:#fbfcfe">`
+    + `<div style="font-size:11.5px;color:#8592a3">${t}</div>`
+    + `<div style="font-size:19px;font-weight:700;color:${c || '#1a2b4a'};margin:2px 0">${v}</div>`
+    + `<div style="font-size:11.5px;color:#8592a3">${sub}</div></div>`;
+  out += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'
+    + kbox(`${allW[li]} 지수`, f2(I[li]), '2020년 1월 = 100', '#1a2b4a')
+    + kbox(`${W}주 이동평균`, f2(ma[li]), '단주 변동 제거', '#1a2b4a')
+    + kbox(`${W}주 평균 YoY`, pp(maYoy[li]), '주간 소비 모멘텀', sgn(maYoy[li]))
+    + kbox('4주 전 대비', pp(maMom[li]), `${W}주 평균 기준`, sgn(maMom[li]))
+    + kbox('주간 원계열 YoY', pp(rawYoy[li]), '노이즈 큼 — 참고용', sgn(rawYoy[li]))
+    + '</div>';
+
+  const th = '<th>지표</th>' + cols.map(d => `<th>${d.slice(2)}</th>`).join('');
+  const row = (nm, arr, f) => `<tr class="flat lv0"><td style="text-align:left">${nm}</td>`
+    + arr.map(v => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`).join('') + '</tr>';
+  out += `<div class="block-title">주간 카드사용액 (나우캐스트 · 신한카드)</div>`
+    + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
+    + row('지수 (2020년 1월=100)', cI, f2)
+    + row(`${W}주 이동평균`, cMa, f2)
+    + row(`${W}주 평균 YoY (%)`, cMY, f2)
+    + row(`${W}주 평균 4주전비 (%)`, cMM, f2)
+    + row('주간 원계열 YoY (%)', cRaw, f2)
+    + '</tbody></table></div>';
+
+  // 업종별 — 같은 이동평균 창으로 어느 업종이 늘고 줄었는지
+  out += `<div class="block-title" style="margin-top:24px">업종별 ${W}주 이동평균 전년동기비</div>`
+    + '<div id="cwSec"></div>'
+    + '<div class="block-title" style="margin-top:24px">월간(KOSIS)과 대조</div>'
+    + '<div id="cwCmp" style="font-size:12.5px;line-height:1.95"></div>';
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  box.querySelectorAll('#cwWin button').forEach(b =>
+    b.onclick = () => { cardWkWin = +b.dataset.cw; renderCardWeek(); });
+
+  cardWkCharts.forEach(c => c && c.destroy());
+  cardWkCharts = [null, null];
+  const xTick = { maxTicksLimit: 12, font: { size: 10 },
+    callback: function (v) { const l = this.getLabelForValue(v); return l ? l.slice(2, 7) : ''; } };
+  // 첫 차트 = 전년동기비. 원계열은 노이즈가 커서 기본은 숨기고(범례 클릭으로 켬) 이동평균만 보인다.
+  cardWkCharts[0] = new Chart(box.querySelector('#cwC0'), {
+    type: 'line',
+    data: { labels: cols, datasets: [
+      { label: `${W}주 평균 YoY`, data: cMY, borderColor: '#e8722c', backgroundColor: '#e8722c',
+        borderWidth: 3, pointRadius: 0, tension: .15 },
+      { label: '주간 원계열 YoY (기본 숨김)', data: cRaw, borderColor: '#d7d5cb',
+        backgroundColor: '#d7d5cb', borderWidth: 1.5, pointRadius: 0, tension: .1, hidden: true },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: '전년동기비 (%) — 범례를 눌러 원계열을 켤 수 있습니다' },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+      scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 }, callback: v => v + '%' } } } },
+  });
+  cardWkCharts[1] = new Chart(box.querySelector('#cwC1'), {
+    type: 'line',
+    data: { labels: cols, datasets: [
+      { label: `${W}주 이동평균`, data: cMa, borderColor: '#1a4fa0', backgroundColor: '#1a4fa0',
+        borderWidth: 3, pointRadius: 0, tension: .15 },
+      { label: '주간 지수 (기본 숨김)', data: cI, borderColor: '#c3d5f0', backgroundColor: '#c3d5f0',
+        borderWidth: 1.5, pointRadius: 0, tension: .1, hidden: true },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: '지수 (2020년 1월 = 100)' },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 } } } } },
+  });
+
+  // ── 업종별 ──
+  renderCardWeekSectors(box, W);
+
+  // ── 월간 대조 ──
+  const cmpEl = box.querySelector('#cwCmp');
+  const ap = cardData.approve;
+  if (!ap) { if (cmpEl) cmpEl.innerHTML = '<span style="color:#8592a3">월간(KOSIS) 데이터가 없어 대조를 건너뜁니다.</span>'; return; }
+  // 주간 지수 → 월평균 → 3개월 이동평균 → YoY
+  const wm = new Map();
+  allW.forEach((d, i) => { const k = d.slice(0, 7); (wm.get(k) || wm.set(k, []).get(k)).push(I[i]); });
+  const wMon = [...wm.entries()].filter(([, a]) => a.length >= 4)
+    .map(([k, a]) => [k, a.reduce((x, y) => x + y, 0) / a.length]).sort();
+  // 월간 KOSIS 8업종 합계
+  const S = {};
+  ap.series.forEach(x => { S[baseName(x.name)] = new Map(x.data.map(pt => [pt.d.slice(0, 7), pt.v])); });
+  const kms = [...new Set(ap.series.flatMap(x => x.data.map(pt => pt.d.slice(0, 7))))].sort();
+  const kSum = kms.map(m => { let t = 0, ok = false;
+    Object.values(S).forEach(mp => { const v = mp.get(m); if (v != null) { t += v; ok = true; } });
+    return ok ? t : null; });
+  const m3 = (ks, vs) => vs.map((_, i) => i >= 2 && vs[i] != null && vs[i-1] != null && vs[i-2] != null
+    ? (vs[i] + vs[i-1] + vs[i-2]) / 3 : null);
+  const yoyMon = (ks, vs) => { const mp = new Map(ks.map((k, i) => [k, vs[i]]));
+    return ks.map(k => { const [y, mo] = k.split('-'); const p = mp.get(`${+y - 1}-${mo}`);
+      const c = mp.get(k); return c != null && p ? (c / p - 1) * 100 : null; }); };
+  const wKeys = wMon.map(x => x[0]), wVals = wMon.map(x => x[1]);
+  const wY = yoyMon(wKeys, m3(wKeys, wVals));
+  const kY = yoyMon(kms, m3(kms, kSum));
+  const wMap = new Map(wKeys.map((k, i) => [k, wY[i]])), kMap = new Map(kms.map((k, i) => [k, kY[i]]));
+  const com = wKeys.filter(k => wMap.get(k) != null && kMap.get(k) != null);
+  if (com.length < 12) { if (cmpEl) cmpEl.innerHTML = '<span style="color:#8592a3">겹치는 관측치가 부족합니다.</span>'; return; }
+  const mx = com.reduce((a, k) => a + wMap.get(k), 0) / com.length;
+  const my = com.reduce((a, k) => a + kMap.get(k), 0) / com.length;
+  let sxy = 0, sx = 0, sy = 0;
+  com.forEach(k => { const a = wMap.get(k) - mx, b = kMap.get(k) - my; sxy += a * b; sx += a * a; sy += b * b; });
+  const corr = sx && sy ? sxy / Math.sqrt(sx * sy) : null;
+  const tail = com.slice(-6);
+  if (cmpEl) cmpEl.innerHTML =
+    '주간 지수를 <b>월평균</b>으로 묶고 월간 탭과 같은 방식(3개월 이동평균 → 전년동월비)으로 맞춘 결과입니다. '
+    + `상관계수 <b>${corr == null ? '-' : corr.toFixed(3)}</b>(공통 ${com.length}개월), `
+    + `평균 수준은 나우캐스트 <b>${mx.toFixed(1)}%</b> vs KOSIS <b>${my.toFixed(1)}%</b>로 `
+    + `${Math.abs(mx - my) > 0.5 ? `나우캐스트가 <b>${(my - mx).toFixed(1)}%p 낮습니다</b> — 표본 구성 차이입니다. 수준이 아니라 방향을 보세요.`
+        : '거의 같습니다.'}`
+    + '<div class="tscroll" style="margin-top:8px"><table class="data vlines" style="width:auto">'
+    + '<thead><tr><th>월</th>' + tail.map(k => `<th>${k.slice(2)}</th>`).join('') + '</tr></thead><tbody>'
+    + `<tr class="flat lv0"><td style="text-align:left">나우캐스트 3ma YoY</td>`
+    + tail.map(k => { const v = wMap.get(k); return `<td${v < 0 ? ' class="neg"' : ''}>${v.toFixed(2)}</td>`; }).join('') + '</tr>'
+    + `<tr class="flat lv0"><td style="text-align:left">KOSIS 8업종 3ma YoY</td>`
+    + tail.map(k => { const v = kMap.get(k); return `<td${v < 0 ? ' class="neg"' : ''}>${v.toFixed(2)}</td>`; }).join('') + '</tr>'
+    + '</tbody></table></div>';
+}
+
+// 업종별 주간 카드사용액 — 나우캐스트 COICOP 7개 업종.
+// 전체와 같은 방식(지수 → W주 이동평균 → 전년동기비)으로 맞춰 어느 쪽이 부진하고 늘었는지 본다.
+let cardSecChart = null;
+function renderCardWeekSectors(box, W) {
+  const el = box.querySelector('#cwSec');
+  if (cardSecChart) { cardSecChart.destroy(); cardSecChart = null; }
+  const ind = cardData && cardData.weeklyInd;
+  if (!ind) {
+    if (el) el.innerHTML = '<div style="padding:14px;color:#555;line-height:1.9">'
+      + '업종별 데이터가 없습니다. PC에서 <b>python fetch.py kr_card_weekly_ind</b> 실행 후 새로고침해 주세요.'
+      + '<br><span style="color:#8592a3;font-size:12.5px">나우캐스트 cd2=A00029 · COICOP 대분류 7개</span></div>';
+    return;
+  }
+  const secs = ind.series
+    .filter(x => baseName(x.name).endsWith('지수 (2020년 1월=100)'))
+    .map(x => ({ name: baseName(x.name).split(' · ')[0], data: x.data }));
+  if (!secs.length) {
+    if (el) el.innerHTML = '<div style="padding:14px;color:#c0392b">업종별 지수 계열을 찾지 못했습니다. '
+      + '<b>python fetch.py kr_card_weekly_ind</b> 를 다시 실행해 주세요.</div>';
+    return;
+  }
+  // 각 업종: 지수 → W주 이동평균 → 52주 전 대비
+  const calc = d => {
+    const v = d.map(p => p.v), n = v.length;
+    const ma = v.map((_, i) => i >= W - 1 ? v.slice(i - W + 1, i + 1).reduce((a, b) => a + b, 0) / W : null);
+    const yo = ma.map((_, i) => i >= 52 && ma[i] != null && ma[i - 52] ? (ma[i] / ma[i - 52] - 1) * 100 : null);
+    return { d: d.map(p => p.d), yo };
+  };
+  const rows = secs.map(s => { const c = calc(s.data);
+    const li = c.yo.length - 1;
+    const prev = c.yo[li - 13] ?? null;          // 13주 전과 비교해 개선/악화
+    return { name: s.name, dates: c.d, yo: c.yo, last: c.yo[li], d13: c.yo[li] != null && prev != null ? c.yo[li] - prev : null };
+  }).filter(r => r.last != null).sort((a, b) => b.last - a.last);
+  if (!rows.length) { if (el) el.innerHTML = '<div style="padding:14px;color:#8592a3">계산 가능한 업종이 없습니다.</div>'; return; }
+
+  const lastDate = rows[0].dates[rows[0].dates.length - 1];
+  const up = rows.filter(r => r.last > 0), dn = rows.filter(r => r.last <= 0);
+  const f = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+  const fp = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%p';
+  const barW = r => Math.min(100, Math.abs(r) / Math.max(...rows.map(x => Math.abs(x.last)), 1) * 100);
+
+  let h = `<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:8px">`
+    + `<b>${lastDate}</b> 기준 · 전체와 같은 방식(지수 → ${W}주 이동평균 → 전년동기비)으로 맞췄습니다. `
+    + `<b>13주 변화</b>는 같은 지표를 13주 전과 비교한 것으로, <b>추세가 개선 중인지 악화 중인지</b>를 봅니다.</div>`
+    + '<div class="tscroll"><table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + `<th>업종</th><th>${W}주 평균 YoY</th><th style="width:170px">크기</th><th>13주 변화</th></tr></thead><tbody>`
+    + rows.map(r => `<tr class="flat lv0"><td style="text-align:left">${r.name}</td>`
+        + `<td${r.last < 0 ? ' class="neg"' : ''}>${f(r.last)}</td>`
+        + `<td><div style="background:${r.last < 0 ? '#c0392b' : '#2b7a3d'};height:9px;`
+        + `width:${barW(r.last)}%;border-radius:2px;min-width:1px"></div></td>`
+        + `<td${r.d13 != null && r.d13 < 0 ? ' class="neg"' : ''}>${fp(r.d13)}</td></tr>`).join('')
+    + '</tbody></table></div>';
+
+  // 자동 해석
+  const best = rows[0], worst = rows[rows.length - 1];
+  const imp = rows.filter(r => r.d13 != null).sort((a, b) => b.d13 - a.d13);
+  h += '<div style="font-size:12.5px;line-height:1.95;margin-top:10px">'
+    + `<b>${up.length}개 업종이 증가, ${dn.length}개가 감소</b>했습니다. `
+    + `가장 강한 곳은 <b>${best.name}(${f(best.last)})</b>, 가장 부진한 곳은 <b>${worst.name}(${f(worst.last)})</b>입니다. `
+    + (imp.length ? `추세로 보면 <b>${imp[0].name}</b>가 13주 전보다 <b>${fp(imp[0].d13)}</b> 개선돼 가장 좋아졌고, `
+        + `<b>${imp[imp.length - 1].name}</b>가 <b>${fp(imp[imp.length - 1].d13)}</b>로 가장 나빠졌습니다.` : '')
+    + '<div style="color:#8592a3;margin-top:6px">※ 신한카드 표본이라 업종 구성이 전체 시장과 다를 수 있습니다. '
+    + '업종 간 <b>상대 비교</b>로 보시고 절대 수준은 조심하세요. 최근 1~2주는 속보치입니다.</div></div>'
+    + '<div class="cchart" style="height:300px;margin-top:12px"><canvas id="cwSecC"></canvas></div>';
+  el.innerHTML = h;
+
+  // 추이 차트 — 화면 기간만
+  const base0 = rows[0];
+  const keep = base0.dates.map((d, i) => inRange(d) ? i : -1).filter(i => i >= 0);
+  const labels = keep.map(i => base0.dates[i]);
+  cardSecChart = new Chart(box.querySelector('#cwSecC'), {
+    type: 'line',
+    data: { labels, datasets: rows.map((r, i) => ({
+      label: r.name, data: keep.map(j => r.yo[j] ?? null),
+      borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, tension: .15 })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: `업종별 ${W}주 이동평균 전년동기비 (%)` },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+      scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
+                 callback: function (v) { const l = this.getLabelForValue(v); return l ? l.slice(2, 7) : ''; } } },
+        y: { ticks: { font: { size: 10 }, callback: v => v + '%' } } } },
+  });
+}
+
+// ── 실질금리 분석 ─────────────────────────────────────────────
+// 실질정책금리 = 기준금리 − 근원물가(식료품·에너지 제외) 전년동월비.
+// 카드 Z-Score 를 역축에 놓으면 두 선이 같은 방향으로 움직이는 것처럼 보인다.
+//
+// 다만 동행(k=0)으로 겹쳐 보이는 부분은 상당수가 인과가 아니라 '정의상 되먹임'이다.
+//   소비 강함 → 물가 상승 → 근원물가(뺄셈 항)가 커짐 → 실질금리가 기계적으로 하락
+// 실제로 카드 Z 와의 상관을 분해하면 기준금리와는 +, 근원물가와는 + 로,
+// 실질금리와의 − 상관은 전적으로 근원물가에서 나온다.
+// 진짜 긴축 효과는 시차에 있다 — 실질금리를 9~12개월 앞당길 때 상관이 가장 강해진다.
+// 그래서 이 탭은 시차를 직접 움직여 보게 만든다.
+let cardRRChart = null, cardRRLead = 9;   // 실질금리를 몇 개월 앞당겨 볼지
+let cardRRDef = 'core';                  // 실질금리 정의: core | head | exp
+// 실질정책금리 = 기준금리 − 물가. 무엇을 빼느냐로 셋이 갈린다.
+//   core : − 근원물가(식료품·에너지 제외) YoY — 기조적 물가. 2011~
+//   head : − 헤드라인 CPI YoY               — 실제 체감 물가. 2011~
+//   exp  : − 기대인플레(향후1년)              — 의사결정에 실제로 쓰이는 사전적 금리. 2016~
+const CARD_RR_DEF = [
+  ['core', '근원물가', '기준금리 − 근원 CPI YoY (식료품·에너지 제외)'],
+  ['head', '헤드라인', '기준금리 − 총지수 CPI YoY'],
+  ['exp',  '기대인플레', '기준금리 − 기대인플레(향후1년) · 2016~'],
+];
+
+function cardRealSeries() {
+  const rateInd = cardData && cardData.rate, coreInd = cardData && cardData.core,
+        cInd = cardData && cardData.ecos;
+  const miss = [];
+  if (!rateInd) miss.push('kr_base_rate');
+  if (!coreInd) miss.push('kr_cpi_core');
+  if (!cInd) miss.push('kr_card');
+  if (miss.length) return { miss };
+  // 'YYYY-MM' 으로 맞춘다. 월말일로 매칭하면 윤년 2월(02-29 vs 02-28)에 그 달이 통째로 빈다.
+  const ymMap = ser => new Map(ser.data.map(pt => [pt.d.slice(0, 7), pt.v]));
+  const RB = ymMap(rateInd.series[0]);
+  const coreS = coreInd.series.find(x => baseName(x.name).indexOf('식료품 및 에너지제외') === 0);
+  if (!coreS) return { miss: ['kr_cpi_core (식료품 및 에너지제외)'] };
+  const CO = ymMap(coreS);
+  const pick = n => { const x = cInd.series.find(y => baseName(y.name) === n); return x ? ymMap(x) : null; };
+  const A = pick('개인 일반구매 이용금액'), B = pick('개인 할부구매 이용금액');
+  if (!A || !B) return { miss: ['kr_card (개인 구매실적)'] };
+
+  // 축은 '모든 원천의 합집합'으로 잡는다. 지표마다 공표 시점이 달라(카드 5월 vs 기준금리·물가 7월)
+  // 카드 기준으로 축을 잡으면 나머지가 최신 두 달을 통째로 잃는다. 각 계열은 자기 마지막까지 그린다.
+  const expSer0 = cardData.exp && cardData.exp.series.find(x => baseName(x.name).indexOf('향후1년') === 0);
+  const cpiSer0 = cardData.cpi && (cardData.cpi.series.find(x => baseName(x.name) === '총지수'));
+  const mset = new Set();
+  [RB, CO, A, B, expSer0 ? ymMap(expSer0) : null, cpiSer0 ? ymMap(cpiSer0) : null]
+    .forEach(mp => { if (mp) mp.forEach((_, m) => mset.add(m)); });
+  const ms = [...mset].sort();
+  const buy = ms.map(m => (A.has(m) && B.has(m)) ? A.get(m) + B.get(m) : null);
+  const ma3 = buy.map((_, i) => i >= 2 && buy[i] != null && buy[i-1] != null && buy[i-2] != null
+    ? (buy[i] + buy[i-1] + buy[i-2]) / 3 : null);
+  const idx = new Map(ms.map((m, i) => [m, i]));
+  const pm = m => { const [y, mo] = m.split('-'); return `${+y - 1}-${mo}`; };
+  const yoy = ms.map((m, i) => { const j = idx.get(pm(m));
+    return j != null && ma3[i] != null && ma3[j] ? (ma3[i] / ma3[j] - 1) * 100 : null; });
+  const ok = yoy.filter(v => v != null);
+  const mu = ok.reduce((a, b) => a + b, 0) / (ok.length || 1);
+  const sd = Math.sqrt(ok.reduce((a, b) => a + (b - mu) ** 2, 0) / (ok.length || 1)) || 1;
+  const z = yoy.map(v => v == null ? null : (v - mu) / sd);
+  const base = ms.map(m => RB.get(m) ?? null);
+  const cy = ms.map(m => { const c = CO.get(m), c0 = CO.get(pm(m));
+    return c != null && c0 ? (c / c0 - 1) * 100 : null; });
+  // 실질금리 3종
+  const yoyOfInd = (ind, nm) => { if (!ind) return null;
+    const ser = ind.series.find(x => baseName(x.name) === nm)
+             || ind.series.find(x => baseName(x.name).indexOf(nm) === 0);
+    if (!ser) return null;
+    const M = ymMap(ser);
+    return m => { const c = M.get(m), b = M.get(pm(m)); return c != null && b ? (c / b - 1) * 100 : null; };
+  };
+  const headFn = yoyOfInd(cardData.cpi, '총지수');
+  const expSer = cardData.exp && cardData.exp.series.find(x => baseName(x.name).indexOf('향후1년') === 0);
+  const expM = expSer ? ymMap(expSer) : null;
+  const hy = ms.map(m => headFn ? headFn(m) : null);
+  const ey = ms.map(m => expM ? (expM.get(m) ?? null) : null);
+  const sub = (a, b) => ms.map((m, i) => a[i] != null && b[i] != null ? a[i] - b[i] : null);
+  const REAL = {
+    core: sub(base, cy),
+    head: headFn ? sub(base, hy) : null,
+    exp: expM ? sub(base, ey) : null,
+  };
+  const real = REAL[cardRRDef] || REAL.core;
+
+  // 민간소비(실질, 분기) — GDP 최종소비지출 아래 '민간'. 전년동기비를 표준화한다.
+  //   카드는 월별 대용치, 민간소비는 실제 국민계정 항목이다. 둘의 시차 구조를 비교하면
+  //   카드가 소비 대용치로 쓸 만한지 검증된다.
+  let pcZ = null;
+  const gi = cardData && cardData.gdp;
+  const gs = gi && gi.series.find(x => baseName(x.name) === '민간');
+  if (gs) {
+    const PC = new Map(gs.data.map(pt => [pt.d.slice(0, 7), pt.v]));
+    const qs = [...PC.keys()].sort();
+    const qi = new Map(qs.map((q, i) => [q, i]));
+    const pq = q => { const [y, mo] = q.split('-'); return `${+y - 1}-${mo}`; };
+    const gy = qs.map(q => { const c = PC.get(q), b = PC.get(pq(q));
+      return c != null && b ? (c / b - 1) * 100 : null; });
+    const gok = gy.filter(v => v != null);
+    const gmu = gok.reduce((a, b) => a + b, 0) / (gok.length || 1);
+    const gsd = Math.sqrt(gok.reduce((a, b) => a + (b - gmu) ** 2, 0) / (gok.length || 1)) || 1;
+    pcZ = { qs, z: gy.map(v => v == null ? null : (v - gmu) / gsd), mu: gmu, sd: gsd, qi };
+  }
+  // 나우캐스트(주간) — 지수를 월평균으로 묶어 카드와 같은 방식(3ma YoY → 표준화)으로 맞춘다.
+  //   ECOS 카드보다 두 달 빠르므로(7월 vs 5월) 오른쪽 끝을 메워 준다.
+  //   다만 원자료가 신한카드 단일사 표본이라 모집단이 다르다 — 방향만 본다.
+  let nwZ = null;
+  const wk = cardData && cardData.weekly;
+  const wkIdx = wk && wk.series.find(x => baseName(x.name).endsWith('지수 (2020년 1월=100)'));
+  if (wkIdx) {
+    const acc = new Map();
+    wkIdx.data.forEach(pt => { const k = pt.d.slice(0, 7);
+      (acc.get(k) || acc.set(k, []).get(k)).push(pt.v); });
+    // 주가 4개 미만인 달은 부분월이라 제외
+    const mv = new Map([...acc].filter(([, a]) => a.length >= 4)
+      .map(([k, a]) => [k, a.reduce((x, y) => x + y, 0) / a.length]));
+    const wks = [...mv.keys()].sort();
+    const wi = new Map(wks.map((m, i) => [m, i]));
+    const w3 = wks.map((m, i) => i >= 2 ? (mv.get(wks[i]) + mv.get(wks[i-1]) + mv.get(wks[i-2])) / 3 : null);
+    const wy = wks.map((m, i) => { const j = wi.get(pm(m));
+      return j != null && w3[i] != null && w3[j] ? (w3[i] / w3[j] - 1) * 100 : null; });
+    const wok = wy.filter(v => v != null);
+    if (wok.length >= 24) {
+      const wmu = wok.reduce((a, b) => a + b, 0) / wok.length;
+      const wsd = Math.sqrt(wok.reduce((a, b) => a + (b - wmu) ** 2, 0) / wok.length) || 1;
+      const zmap = new Map(wks.map((m, i) => [m, wy[i] == null ? null : (wy[i] - wmu) / wsd]));
+      nwZ = ms.map(m => zmap.get(m) ?? null);
+    }
+  }
+
+  // 왼쪽 빈 구간 잘라내기 — 기준금리는 2006년부터지만 물가·카드는 2011년부터라
+  // 그대로 두면 앞쪽 5년이 기준금리 한 줄만 있는 여백이 된다.
+  const alive = i => [REAL.core, REAL.head, REAL.exp, z, nwZ].some(a => a && a[i] != null);
+  let s0 = 0; while (s0 < ms.length && !alive(s0)) s0++;
+  const trim = a => a ? a.slice(s0) : a;
+  const ms2 = ms.slice(s0);
+  const out = { ms: ms2, z: trim(z), base: trim(base), cy: trim(cy), hy: trim(hy), ey: trim(ey),
+                REAL: { core: trim(REAL.core), head: trim(REAL.head), exp: trim(REAL.exp) },
+                nwZ: trim(nwZ), mu, sd, pcZ };
+  out.real = out.REAL[cardRRDef] || out.REAL.core;
+  const lastOf = arr => { if (!arr) return null;
+    for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return ms2[i]; return null; };
+  out.lastM = { 기준금리: lastOf(out.base), 근원물가: lastOf(out.cy), 헤드라인: lastOf(out.hy),
+                기대인플레: lastOf(out.ey), 카드: lastOf(out.z), 나우캐스트: lastOf(out.nwZ) };
+  return out;
+}
+
+// 분기 계열(민간소비)과 월별 계열(실질금리)의 시차 상관.
+//   k 는 '개월'이며 3의 배수만 의미가 있다. 실질금리는 분기 평균으로 묶어 맞춘다.
+function cardCorrQ(pc, ms, real, kMonths) {
+  if (!pc) return null;
+  const qkey = m => { const [y, mo] = m.split('-'); return `${y}-Q${Math.floor((+mo - 1) / 3) + 1}`; };
+  const acc = new Map();
+  ms.forEach((m, i) => { if (real[i] == null) return;
+    const k = qkey(m); (acc.get(k) || acc.set(k, []).get(k)).push(real[i]); });
+  const RQ = new Map([...acc].filter(([, a]) => a.length === 3)
+    .map(([k, a]) => [k, a.reduce((x, y) => x + y, 0) / a.length]));
+  const kq = Math.round(kMonths / 3);
+  const X = [], Y = [];
+  pc.qs.forEach((q, i) => {
+    const j = i + kq;
+    if (j < 0 || j >= pc.qs.length) return;
+    const a = pc.z[i], b = RQ.get(qkey(pc.qs[j]));
+    if (a != null && b != null) { X.push(a); Y.push(b); }
+  });
+  if (X.length < 12) return null;
+  const mx = X.reduce((a, b) => a + b, 0) / X.length, my = Y.reduce((a, b) => a + b, 0) / Y.length;
+  let sxy = 0, sx = 0, sy = 0;
+  X.forEach((v, i) => { const a = v - mx, b = Y[i] - my; sxy += a * b; sx += a * a; sy += b * b; });
+  return sx && sy ? { r: sxy / Math.sqrt(sx * sy), n: X.length } : null;
+}
+
+// corr(A_t , B_{t+k}) — k>0 이면 A 가 B 를 선행
+function cardCorr(A, B, k) {
+  const X = [], Y = [];
+  for (let i = 0; i < A.length; i++) {
+    const j = i + k;
+    if (j < 0 || j >= B.length) continue;
+    if (A[i] == null || B[j] == null) continue;
+    X.push(A[i]); Y.push(B[j]);
+  }
+  if (X.length < 24) return null;
+  const mx = X.reduce((a, b) => a + b, 0) / X.length, my = Y.reduce((a, b) => a + b, 0) / Y.length;
+  let sxy = 0, sx = 0, sy = 0;
+  X.forEach((v, i) => { const a = v - mx, b = Y[i] - my; sxy += a * b; sx += a * a; sy += b * b; });
+  return sx && sy ? { r: sxy / Math.sqrt(sx * sy), n: X.length } : null;
+}
+
+function renderCardReal() {
+  const box = document.getElementById('retailWrap');
+  const D = cardRealSeries();
+  if (D.miss) {
+    box.innerHTML = `<div style="padding:28px;color:#c0392b;line-height:1.9">데이터가 없습니다. `
+      + `<b>python fetch.py ${D.miss.join(' ')}</b> 실행 필요.</div>`;
+    return;
+  }
+  const { ms, z, real, base, cy, hy, ey, REAL, pcZ, nwZ, lastM } = D;
+  const defMeta = CARD_RR_DEF.find(x => x[0] === cardRRDef) || CARD_RR_DEF[0];
+  const firstOf = arr => { if (!arr) return null;
+    for (let i = 0; i < arr.length; i++) if (arr[i] != null) return ms[i]; return null; };
+  const nwFirst = firstOf(nwZ), zFirst = firstOf(z);
+  const LEADS = [0, 3, 6, 9, 12];
+  const k = cardRRLead;
+  // 실질금리를 k개월 앞당겨 그린다: t 시점에 real[t-k] 를 얹는다.
+  //   이때 원계열의 마지막 k개월은 축 오른쪽 밖으로 밀려나 사라진다.
+  //   그 구간이 곧 '아직 소비에 반영되지 않은 긴축·완화'라 가장 중요한 부분이므로,
+  //   x축을 k개월 늘려 앞당긴 선이 미래 구간까지 뻗게 하고, 원계열도 함께 그린다.
+  const nextM = m => { const [y, mo] = m.split('-').map(Number);
+    return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; };
+  const fut = [];
+  for (let i = 0, m = ms[ms.length - 1]; i < k; i++) { m = nextM(m); fut.push(m); }
+  const labels = ms.concat(fut);
+  const pad = arr => arr.concat(new Array(k).fill(null));
+  const shifted = labels.map((_, i) => i - k >= 0 && i - k < real.length ? real[i - k] : null);
+  const realRaw = pad(real);          // 앞당기지 않은 원계열 (뒷단이 보이도록)
+  const zPad = pad(z);
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">실질금리 정의: </span><div class="mode" id="crDef">'
+    + CARD_RR_DEF.map(([v, t]) => `<button data-cd="${v}" class="${cardRRDef === v ? 'active' : ''}"`
+        + `${REAL[v] ? '' : ' disabled'}>${t}</button>`).join('')
+    + `</div><span style="font-size:12px;color:#8592a3">${defMeta[2]}</span></div>`
+    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">실질금리 선행: </span><div class="mode" id="crLead">'
+    + LEADS.map(v => `<button data-cl="${v}" class="${k === v ? 'active' : ''}">${v === 0 ? '동행' : v + '개월'}</button>`).join('')
+    + '</div><span style="font-size:12px;color:#8592a3">실질금리를 앞당겨 얹습니다 — 긴축의 파급 시차를 눈으로 봅니다</span></div>'
+    + (k ? '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:8px">'
+        + `연한 주황이 <b>원계열</b>, 진한 주황이 <b>${k}개월 앞당긴 것</b>입니다. `
+        + `x축을 ${k}개월 늘려서, 앞당긴 선의 <b>오른쪽 끝 ${k}개월</b>이 잘리지 않게 했습니다 — `
+        + '이 구간이 <b>이미 결정됐지만 아직 소비에 반영되지 않은 긴축·완화</b>입니다.</div>' : '')
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.95;margin-bottom:12px">'
+    + `<b>실질정책금리 = ${defMeta[2]}</b>. `
+    + '카드 Z-Score를 <b>역축</b>에 놓아 긴축이 셀수록 두 선이 같이 올라가게 그렸습니다. '
+    + '<span style="color:#c0392b"><b>주의</b> — 동행으로 겹쳐 보이는 부분은 상당수가 인과가 아닙니다. '
+    + '소비가 강하면 물가가 오르고, 물가가 오르면 뺄셈 항이 커져 실질금리가 <b>기계적으로</b> 내려갑니다. '
+    + '아래 분해표를 함께 보세요.</span></div>'
+    + '<div class="cchart" style="height:360px;margin-bottom:6px"><canvas id="cardRR"></canvas></div>'
+    + '<div id="cardRRNote" style="font-size:12.5px;line-height:1.95;margin-bottom:18px"></div>';
+
+  // ── 시차별 상관표 ──
+  const KS = [-12, -9, -6, -3, 0, 3, 6, 9, 12];
+  const lag = KS.map(kk => [kk, cardCorr(z, real, kk)]).filter(x => x[1]);
+  const best = lag.reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a);
+  const bar = r => { const w = Math.round(Math.abs(r) * 100);
+    return `<div style="background:${r < 0 ? '#c0392b' : '#2b7a3d'};height:9px;width:${w}%;`
+      + `border-radius:2px;min-width:1px"></div>`; };
+  // 민간소비(분기)도 같은 시차로 계산해 나란히 놓는다
+  const lagQ = new Map(KS.map(kk => [kk, cardCorrQ(pcZ, ms, real, kk)]));
+  const bq = [...lagQ].filter(x => x[1]).reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a,
+    [null, { r: 0 }]);
+  out += '<div class="block-title">시차별 상관 — 카드 vs 민간소비</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">'
+    + 'corr(소비지표 Z<sub>t</sub> , 실질금리<sub>t+k</sub>) · <b>k가 음수면 실질금리가 소비를 앞선다</b>는 뜻입니다. '
+    + `<b>카드 ECOS</b>는 월별(개인 구매실적 3ma YoY, ${zFirst || '?'}~), `
+    + `<b>나우캐스트</b>는 주간 지수를 월평균으로 묶은 것(신한카드 표본, <b>${nwFirst || '?'}~</b>), `
+    + '<b>민간소비</b>는 분기(국민계정 실질 민간 최종소비지출 YoY)입니다. '
+    + '<span style="color:#c0392b">표본 구간이 서로 달라 상관 수치를 직접 견주면 안 됩니다 — 시차 위치를 보세요.</span></div>'
+    + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + '<th>시차 k</th><th>의미</th><th>카드 ECOS (월)</th><th style="width:120px">크기</th>'
+    + (nwZ ? '<th>나우캐스트 (월)</th><th style="width:120px">크기</th>' : '')
+    + '<th>민간소비 (분기)</th><th style="width:120px">크기</th></tr></thead><tbody>'
+    + lag.map(([kk, c]) => { const q = lagQ.get(kk);
+        const nw = nwZ ? cardCorr(nwZ, real, kk) : null;
+        return `<tr class="flat lv0">`
+        + `<td${kk === best[0] ? ' style="font-weight:700;color:#1a4fa0"' : ''}>${kk > 0 ? '+' : ''}${kk}</td>`
+        + `<td style="text-align:left">${kk < 0 ? `실질금리가 ${-kk}개월 선행` : kk > 0 ? `소비가 ${kk}개월 선행` : '동행'}</td>`
+        + `<td${c.r < 0 ? ' class="neg"' : ''}${kk === best[0] ? ' style="font-weight:700"' : ''}>${c.r.toFixed(3)}</td>`
+        + `<td>${bar(c.r)}</td>`
+        + (nwZ ? `<td${nw && nw.r < 0 ? ' class="neg"' : ''}>${nw ? nw.r.toFixed(3) : '-'}</td>`
+               + `<td>${nw ? bar(nw.r) : ''}</td>` : '')
+        + `<td${q && q.r < 0 ? ' class="neg"' : ''}${bq[0] === kk ? ' style="font-weight:700"' : ''}>${q ? q.r.toFixed(3) : '-'}</td>`
+        + `<td>${q ? bar(q.r) : ''}</td></tr>`; }).join('')
+    + '</tbody></table>'
+    + (nwZ && nwFirst ? (() => {
+        // 나우캐스트 표본 구간으로 카드를 잘라 같은 조건에서 비교한다.
+        //   구간이 짧으면(코로나~긴축 한 사이클) 모든 게 동시에 움직여 시차가 뭉개진다.
+        const i0 = ms.indexOf(nwFirst);
+        const zc = z.map((v, i) => i >= i0 ? v : null);
+        const okN = KS.map(kk => [kk, cardCorr(nwZ, real, kk)]).filter(x => x[1]);
+        const okC = KS.map(kk => [kk, cardCorr(zc, real, kk)]).filter(x => x[1]);
+        if (!okN.length || !okC.length) return '';
+        const bN = okN.reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a);
+        const bC = okC.reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a);
+        return '<div style="font-size:12.5px;line-height:1.95;margin-top:10px;padding:10px 13px;'
+          + 'border:1px solid #f0c0a4;border-radius:8px;background:#fdf7f2">'
+          + `<b>나우캐스트만 시차 구조가 다른 이유</b> — 표본이 <b>${nwFirst}부터</b>라 짧습니다. `
+          + `같은 구간으로 <b>카드 ECOS를 잘라도</b> 최강 시차가 <b>${bC[0]}개월 · ${bC[1].r.toFixed(3)}</b>로 `
+          + `나우캐스트(<b>${bN[0]}개월 · ${bN[1].r.toFixed(3)}</b>)와 비슷해집니다. `
+          + '<b>자료 출처의 차이가 아니라 표본 구간의 차이</b>입니다.<br>'
+          + '이 구간에는 코로나 회복 → 인플레 급등 → 긴축 → 소비 둔화가 <b>한 사이클로 몰려</b> 있어 '
+          + '모든 변수가 거의 동시에 움직입니다. 사이클이 하나뿐이라 시차를 식별할 수 없습니다. '
+          + `<b>나우캐스트의 강한 동행 상관을 "더 좋은 지표"로 읽으면 안 됩니다.</b> `
+          + '시차 구조는 표본이 긴 카드 ECOS(2011~)로 보세요.</div>';
+      })() : '')
+    + (pcZ ? '' : '<div style="font-size:12px;color:#c0392b;margin-top:6px">'
+        + '민간소비 계열이 없습니다. <b>python fetch.py kr_gdp_real</b> 실행 필요.</div>');
+
+  // ── 정의별 시차 비교 ──
+  //   무엇을 빼느냐(근원/헤드라인/기대)로 시차 구조가 달라진다. 셋을 나란히 놓는다.
+  const defLag = CARD_RR_DEF.map(([v, t]) => [v, t,
+    KS.map(kk => [kk, REAL[v] ? cardCorr(z, REAL[v], kk) : null])]);
+  out += '<div class="block-title" style="margin-top:22px">실질금리 정의별 시차 비교</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">'
+    + 'corr(카드 Z<sub>t</sub> , 실질금리<sub>t+k</sub>) · 같은 카드 지표에 <b>실질금리 정의만 바꿔</b> 계산했습니다. '
+    + '<b>기대인플레는 2016년부터</b>라 표본이 짧습니다(표본이 다르면 상관 수준을 직접 비교할 수 없습니다).</div>'
+    + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr><th>시차 k</th>'
+    + defLag.map(([, t]) => `<th>${t}</th>`).join('') + '</tr></thead><tbody>'
+    + KS.map(kk => `<tr class="flat lv0"><td>${kk > 0 ? '+' : ''}${kk}</td>`
+        + defLag.map(([v, , arr]) => { const c = (arr.find(x => x[0] === kk) || [])[1];
+            const on = v === cardRRDef;
+            return `<td${c && c.r < 0 ? ' class="neg"' : ''}`
+              + `${on ? ' style="background:#eaf1fd"' : ''}>${c ? c.r.toFixed(3) : '-'}</td>`; }).join('')
+        + '</tr>').join('')
+    + '<tr class="flat lv0" style="border-top:2px solid #d7dde8"><td><b>최강 시차</b></td>'
+    + defLag.map(([v, , arr]) => { const ok = arr.filter(x => x[1]);
+        if (!ok.length) return '<td>-</td>';
+        const b = ok.reduce((a, x) => Math.abs(x[1].r) > Math.abs(a[1].r) ? x : a);
+        return `<td${v === cardRRDef ? ' style="background:#eaf1fd;font-weight:700"' : ' style="font-weight:700"'}>`
+          + `${b[0]}개월 · ${b[1].r.toFixed(3)}</td>`; }).join('')
+    + '</tr>'
+    + '<tr class="flat lv0"><td>표본 시작</td>'
+    + defLag.map(([v]) => { const a = REAL[v];
+        if (!a) return '<td>-</td>';
+        const i = a.findIndex(x => x != null);
+        return `<td${v === cardRRDef ? ' style="background:#eaf1fd"' : ''}>${i < 0 ? '-' : ms[i]}</td>`; }).join('')
+    + '</tr></tbody></table>'
+    + '<div id="crDefRead" style="font-size:12.5px;line-height:1.95;margin-top:10px"></div>';
+
+  // ── 구성요소 분해 ──
+  const subName = cardRRDef === 'head' ? '헤드라인 CPI YoY'
+                : cardRRDef === 'exp' ? '기대인플레(향후1년)' : '근원물가 YoY';
+  const subArr = cardRRDef === 'head' ? hy : cardRRDef === 'exp' ? ey : cy;
+  const comp = [[`실질정책금리 (기준 − ${defMeta[1]})`, real], ['기준금리', base], [subName, subArr]];
+  out += '<div class="block-title" style="margin-top:22px">구성요소 분해 (동행 기준)</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">'
+    + '실질금리와의 음(−) 상관이 <b>어디서 나오는지</b> 봅니다.</div>'
+    + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + '<th>카드 Z-Score 와의 상관</th><th>동행 (k=0)</th><th>최강 시차</th><th>그때 상관</th></tr></thead><tbody>'
+    + comp.map(([nm, arr]) => {
+        const c0 = cardCorr(z, arr, 0);
+        const all = KS.map(kk => [kk, cardCorr(z, arr, kk)]).filter(x => x[1]);
+        const bb = all.reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a);
+        return `<tr class="flat lv0"><td style="text-align:left">${nm}</td>`
+          + `<td${c0 && c0.r < 0 ? ' class="neg"' : ''}>${c0 ? c0.r.toFixed(3) : '-'}</td>`
+          + `<td>${bb[0] > 0 ? '+' : ''}${bb[0]}개월</td>`
+          + `<td${bb[1].r < 0 ? ' class="neg"' : ''}>${bb[1].r.toFixed(3)}</td></tr>`;
+      }).join('')
+    + '</tbody></table>'
+    + '<div id="crRead" style="font-size:12.5px;line-height:1.95;margin-top:12px"></div>'
+    + '<div class="block-title" style="margin-top:22px">계열별 최신 시점</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">'
+    + '지표마다 공표 시점이 다릅니다. 차트는 <b>각 계열을 자기 마지막까지</b> 그립니다 — '
+    + '오른쪽 끝에서 선이 먼저 끊기는 계열이 있는 게 정상입니다.</div>'
+    + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + '<th>계열</th><th>최신</th><th>비고</th></tr></thead><tbody>'
+    + [['기준금리', lastM.기준금리, 'ECOS 722Y001'],
+       ['헤드라인 CPI', lastM.헤드라인, 'kr_cpi 총지수'],
+       ['근원 CPI', lastM.근원물가, 'kr_cpi_core 식료품·에너지 제외'],
+       ['기대인플레(1년)', lastM.기대인플레, 'kr_infl_expect · 2016~'],
+       ['카드 (ECOS 601Y003)', lastM.카드, '개인 구매실적 3ma YoY'],
+       ['나우캐스트 (주간)', lastM.나우캐스트,
+        `신한카드 표본 · 주간→월평균 · ${nwFirst || '?'}~`],
+       ['민간소비 (국민계정)', pcZ ? pcZ.qs[pcZ.qs.length - 1] : null, '분기 · 실질 민간 최종소비지출'],
+      ].map(([n, m, note]) => `<tr class="flat lv0"><td style="text-align:left">${n}</td>`
+        + `<td${m ? '' : ' style="color:#c0392b"'}>${m || '없음'}</td>`
+        + `<td style="text-align:left;color:#8592a3">${note}</td></tr>`).join('')
+    + '</tbody></table>';
+
+  box.innerHTML = out;
+  box.querySelectorAll('#crLead button').forEach(b =>
+    b.onclick = () => { cardRRLead = +b.dataset.cl; renderCardReal(); });
+  box.querySelectorAll('#crDef button').forEach(b =>
+    b.onclick = () => { if (!b.disabled) { cardRRDef = b.dataset.cd; renderCardReal(); } });
+
+  // ── 차트 ──
+  if (cardRRChart) { cardRRChart.destroy(); cardRRChart = null; }
+  cardRRChart = new Chart(box.querySelector('#cardRR'), {
+    type: 'line',
+    data: { labels, datasets: [
+      ...(k ? [{ label: '실질정책금리 — 원계열 (앞당기지 않음)', data: realRaw,
+        borderColor: '#f0c0a4', backgroundColor: '#f0c0a4', borderWidth: 1.5,
+        pointRadius: 0, tension: .15, yAxisID: 'y', order: 0 }] : []),
+      { label: `실질정책금리 (기준 − ${defMeta[1]}, %p)${k ? ` — ${k}개월 앞당김` : ''}`, data: shifted,
+        borderColor: '#e8722c', backgroundColor: '#e8722c', borderWidth: 2.5,
+        pointRadius: 0, tension: .15, yAxisID: 'y', order: 1 },
+      { label: '카드 Z-Score (개인 구매실적 3ma YoY, 역축, σ)', data: zPad,
+        borderColor: '#a9c6e8', backgroundColor: '#a9c6e8', borderWidth: 2.5,
+        pointRadius: 0, tension: .15, yAxisID: 'y1', order: 2 },
+      ...(nwZ ? [{ label: '나우캐스트 Z-Score (주간→월평균 3ma YoY, 역축, σ)', data: pad(nwZ),
+        borderColor: '#8e44ad', backgroundColor: '#8e44ad', borderWidth: 2,
+        borderDash: [2, 2], pointRadius: 0, tension: .15, spanGaps: false,
+        yAxisID: 'y1', order: 4 }] : []),
+      ...(pcZ ? [{ label: '민간소비 Z-Score (실질 YoY, 분기, 역축, σ)',
+        data: labels.map(m => { const i = pcZ.qi.get(m); return i == null ? null : pcZ.z[i]; }),
+        borderColor: '#2b7a3d', backgroundColor: '#2b7a3d', borderWidth: 2,
+        borderDash: [6, 3], pointRadius: 0, tension: .15, spanGaps: true,
+        yAxisID: 'y1', order: 3 }] : []),
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 },
+          text: `실질정책금리(${defMeta[1]})`
+            + (k ? ` ${k}개월 선행 vs 소비 Z-Score (역축)` : ' vs 소비 Z-Score (역축) — 동행') },
+        tooltip: { callbacks: { title: it => it[0].label,
+          label: it => ` ${it.dataset.label.split(' (')[0]}: `
+            + (it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)) } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 16, font: { size: 10 },
+             callback: function (v) { const l = this.getLabelForValue(v);
+               return l.slice(5, 7) === '01' ? "'" + l.slice(2, 4) : ''; } } },
+        y: { position: 'left', ticks: { font: { size: 10 }, callback: v => v + '%p' },
+             title: { display: true, text: '(%p)', font: { size: 10 } } },
+        y1: { position: 'right', reverse: true, grid: { drawOnChartArea: false },
+              ticks: { font: { size: 10 }, callback: v => v + 'σ' },
+              title: { display: true, text: '(역축, σ)', font: { size: 10 } } } } },
+  });
+
+  // ── 현재 시차 해설 ──
+  const cur = cardCorr(z, real, -k);
+  const lastIdx = arr => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return i; return -1; };
+  const ri = lastIdx(real), zi = lastIdx(z);
+  const nz = zi < 0 ? null : z[zi];
+  const nr = ri < 0 ? null : real[ri];
+  const noteEl = box.querySelector('#cardRRNote');
+  if (noteEl) noteEl.innerHTML =
+    `실질정책금리 <b>${ri < 0 ? '-' : ms[ri]}</b> 기준 <b>${nr == null ? '-' : nr.toFixed(2)}%p</b>, `
+    + `카드 Z-Score <b>${zi < 0 ? '-' : ms[zi]}</b> 기준 <b>${nz == null ? '-' : (nz > 0 ? '+' : '') + nz.toFixed(2)}σ</b>`
+    + `(${nz == null ? '' : nz > 0.5 ? '평균보다 뚜렷이 강함' : nz < -0.5 ? '평균보다 뚜렷이 약함' : '평균 수준'}). `
+    + (cur ? `지금 설정(${k === 0 ? '동행' : `실질금리 ${k}개월 선행`})에서 상관은 <b>${cur.r.toFixed(3)}</b>입니다`
+        + `(관측치 ${cur.n}개).` : '')
+    + (k ? (() => {
+        if (ri < 0) return '';
+        const seg = real.slice(Math.max(0, ri - k + 1), ri + 1).filter(v => v != null);
+        if (!seg.length) return '';
+        const a = seg[0], b = seg[seg.length - 1], dv = b - a;
+        return `<br><b>아직 반영되지 않은 구간</b>(최근 ${k}개월 실질금리 → ${fut[0]}~${fut[fut.length - 1]}): `
+          + `<b>${a.toFixed(2)}%p → ${b.toFixed(2)}%p</b> (${dv > 0 ? '+' : ''}${dv.toFixed(2)}%p). `
+          + (Math.abs(dv) < 0.2 ? '거의 변화가 없어 방향을 시사하지 않습니다.'
+             : dv > 0 ? '실질금리가 <b>올라간</b> 구간이라, 시차 관계가 유지된다면 앞으로 소비에 <b>부담</b>으로 작용합니다.'
+             : '실질금리가 <b>내려간</b> 구간이라, 시차 관계가 유지된다면 앞으로 소비에 <b>완화</b> 요인입니다.')
+          + ' <span style="color:#8592a3">단순 외삽이며 예측이 아닙니다.</span>';
+      })() : '');
+
+  // ── 자동 해석 ──
+  const c0r = (cardCorr(z, real, 0) || {}).r;
+  const cbr = (cardCorr(z, base, 0) || {}).r;
+  const ccr = (cardCorr(z, cy, 0) || {}).r;
+  // 정의별 비교 해설
+  const dRead = box.querySelector('#crDefRead');
+  if (dRead) {
+    const rows = CARD_RR_DEF.map(([v, t]) => {
+      const a = REAL[v]; if (!a) return null;
+      const ok = KS.map(kk => [kk, cardCorr(z, a, kk)]).filter(x => x[1]);
+      if (!ok.length) return null;
+      const b = ok.reduce((x, y) => Math.abs(y[1].r) > Math.abs(x[1].r) ? y : x);
+      const c0 = ok.find(x => x[0] === 0);
+      return { v, t, k: b[0], r: b[1].r, r0: c0 ? c0[1].r : null };
+    }).filter(Boolean);
+    const hd = rows.find(x => x.v === 'head'), cr = rows.find(x => x.v === 'core');
+    dRead.innerHTML =
+      rows.map(x => `<b>${x.t}</b> ${x.k}개월에서 ${x.r.toFixed(3)}`
+        + `(동행 ${x.r0 == null ? '-' : x.r0.toFixed(3)})`).join(' · ')
+      + '.<br>세 정의 모두 <b>실질금리가 소비를 앞설 때</b> 상관이 가장 강합니다 — 정의를 바꿔도 시차 구조는 같습니다. '
+      + (hd && cr && hd.k > cr.k
+          ? `다만 <b>헤드라인</b>의 최강 시차가 <b>${hd.k}개월</b>로 근원(${cr.k}개월)보다 <b>짧습니다</b>. `
+            + '헤드라인에는 유가·농산물처럼 소비에 즉각 닿는 항목이 들어 있어 반응이 빠른 것으로 보입니다. '
+            + '동행 상관도 헤드라인이 가장 큰데, 같은 이유로 <b>정의상 되먹임도 더 셉니다</b>.'
+          : '')
+      + (rows.find(x => x.v === 'exp')
+          ? ' <b>기대인플레</b>는 이론적으로 가장 타당한 정의(사전적 실질금리)지만 <b>2016년부터</b>라 표본이 짧습니다 — '
+            + '다른 둘과 상관 수치를 직접 견주면 안 됩니다.'
+          : '')
+      + `<div style="color:#8592a3;margin-top:6px">※ 현재 선택은 <b>${defMeta[1]}</b>이며, 위 차트와 아래 표가 이 정의를 따릅니다.</div>`;
+  }
+
+  const readEl = box.querySelector('#crRead');
+  if (readEl) readEl.innerHTML =
+    `동행 기준으로 카드 Z-Score는 <b>기준금리와 ${cbr == null ? '-' : (cbr > 0 ? '+' : '') + cbr.toFixed(3)}</b>, `
+    + `<b>근원물가와 ${ccr == null ? '-' : (ccr > 0 ? '+' : '') + ccr.toFixed(3)}</b>입니다. `
+    + (cbr != null && ccr != null && cbr > 0 && ccr > 0
+        ? `둘 다 <b>양(+)</b>인데 실질금리와는 ${c0r == null ? '' : `<b>${c0r.toFixed(3)}</b>로 `}음(−)이 나옵니다. `
+          + '음수를 만드는 건 <b>근원물가가 뺄셈 항으로 들어가기 때문</b>입니다. '
+          + '소비가 세면 물가가 오르고, 그러면 실질금리가 자동으로 내려갑니다 — <b>정의상의 되먹임</b>이지 긴축 효과가 아닙니다.'
+        : '')
+    + `<br>반면 시차를 넣으면 <b>${best[0] < 0 ? `실질금리가 ${-best[0]}개월 선행할 때` : best[0] > 0 ? `카드가 ${best[0]}개월 선행할 때` : '동행에서'}</b> `
+    + `상관이 <b>${best[1].r.toFixed(3)}</b>로 가장 강합니다`
+    + (best[0] < 0
+        ? ' — 긴축이 시차를 두고 소비에 파급된다는 통화정책 시차(보통 4~6분기)와 맞습니다. <b>이쪽이 인과에 가깝습니다.</b>'
+        : '.')
+    + (bq[0] == null ? ''
+        : `<br><b>민간소비(국민계정)로 바꿔도 결론이 같습니다.</b> 최강 시차가 `
+          + `<b>${bq[0] < 0 ? `실질금리 ${-bq[0]}개월 선행` : bq[0] > 0 ? `소비 ${bq[0]}개월 선행` : '동행'}</b>에서 `
+          + `<b>${bq[1].r.toFixed(3)}</b>입니다`
+          + (bq[0] === best[0]
+              ? ' — 카드와 <b>정확히 같은 지점</b>입니다. 카드가 소비 대용치로 쓸 만하다는 근거가 됩니다.'
+              : ` (카드는 ${best[0]}개월). 지표가 달라도 방향은 같습니다.`)
+          + ` 카드 쪽 상관이 더 센 것은 월별이라 관측치가 많고, 국민계정보다 변동이 커 신호가 또렷하기 때문입니다.`)
+    + '<div style="color:#8592a3;margin-top:6px">※ 기준금리 자체도 물가·소비에 반응해 움직이므로(내생성) '
+    + '이 상관들을 인과의 크기로 읽으면 안 됩니다. 방향과 시차 구조를 보는 용도입니다.</div>';
 }
 
 // ── 소비자물가 종합 (총지수·근원·생활물가 + 품목성질별) ────────
@@ -7398,6 +8303,68 @@ function renderCpiItems() {
 
 // 기여도 탭: 품목 단위 기여도 트리 — 품목 합 = 각 지수의 MoM/YoY (CPI상세 계층)
 let cpiCtbLag = 1, cpiCtbCollapsed = {};
+// CPI 기여도 월별 분석 — 이미 계산된 기여도(chartCap)를 그대로 쓰므로 표와 값이 항상 같다.
+//   상품(농축수산물·공업제품·전기가스수도) vs 서비스(집세·공공·개인) 로 갈라 주도 부문을 판정하고,
+//   공급충격 성격(농축수산물+에너지)과 확산도(상승 품목 비중)를 함께 본다.
+function cpiAnalysis(d, cap, cols, lag) {
+  const k = cols.indexOf(d); if (k < 0) return '';
+  const tot = cap.totRow[k];
+  const catV = {}; cap.cats.forEach(([n, arr]) => { catV[n] = arr && arr[k] != null ? arr[k] : 0; });
+  const sum = ns => ns.reduce((a, n) => a + (catV[n] || 0), 0);
+  const GOODS = ['농축수산물', '공업제품', '전기 · 가스 · 수도'];
+  const SVC = ['집세', '공공서비스', '개인서비스'];
+  const g = sum(GOODS), sv = sum(SVC), supply = sum(['농축수산물', '전기 · 가스 · 수도']);
+  // 확산도 — 개별 품목(leaf) 중 상승 품목 비중
+  let up = 0, nn = 0;
+  cap.contribs.forEach(arr => { const v = arr[k]; if (v != null) { nn++; if (v > 0) up++; } });
+  const diff = nn ? up / nn * 100 : null;
+  // 비중은 총지수와 부호가 같고 총지수가 충분히 클 때만 뜻이 있다.
+  //   (총지수 -0.18% 인데 서비스 +0.19%p 면 '비중 103%' 같은 무의미한 값이 나온다)
+  const per = v => (tot == null || Math.abs(tot) < 0.25 || v == null || v / tot <= 0) ? ''
+    : `(${(v / tot * 100).toFixed(0)}%)`;
+  const supLed = tot && supply / tot > 0.35 && Math.abs(supply) >= 0.05;
+  const B = [];
+  if (tot != null) B.push([`총지수 ${lag === 1 ? 'MoM' : 'YoY'} ${(tot > 0 ? '+' : '') + tot.toFixed(2)}%`,
+    tot >= 2 ? '#c0392b' : tot >= 1 ? '#c98a1a' : '#2b7a3d']);
+  if (Math.abs(sv) > Math.abs(g) * 1.3) B.push(['서비스 주도', '#1a4fa0']);
+  else if (Math.abs(g) > Math.abs(sv) * 1.3) B.push(['상품 주도', '#8e44ad']);
+  else B.push(['상품·서비스 동반', '#5a6b85']);
+  if (supLed) B.push([(tot > 0 ? '상승' : '하락') + ' 주도: 농축수산물·에너지', tot > 0 ? '#c0392b' : '#2b7a3d']);
+  if (diff != null) B.push([`상승 품목 ${diff.toFixed(0)}%`,
+    diff >= 70 ? '#c0392b' : diff >= 55 ? '#c98a1a' : '#2b7a3d']);
+
+  const lead = `<b>${dateLabel(d)}</b> ${cap.label} ${lag === 1 ? '전월비' : '전년동월비'} `
+    + `<b>${tot == null ? '-' : (tot > 0 ? '+' : '') + tot.toFixed(2)}%</b> 중, `
+    + `서비스가 <b>${(sv > 0 ? '+' : '') + sv.toFixed(2)}%p</b>${per(sv)}, `
+    + `상품이 <b>${(g > 0 ? '+' : '') + g.toFixed(2)}%p</b>${per(g)}. `
+    + `이 가운데 농축수산물·에너지(전기·가스·수도)가 <b>${(supply > 0 ? '+' : '') + supply.toFixed(2)}%p</b>`
+    + `${per(supply)}로, ${supLed
+      ? `이번 ${tot > 0 ? '상승' : '하락'}은 상당 부분 <b>날씨·국제유가 같은 공급요인</b>에서 나왔습니다. `
+        + '통화정책이 직접 다루기 어려운 부분이라 근원 흐름을 함께 봐야 합니다.'
+      : '<b>공급요인이 주도한 달은 아닙니다.</b> 흐름의 대부분이 수요·비용에 걸린 기조적 부분입니다.'}`
+    + (diff == null ? '' : ` 개별 품목 ${nn}개 중 <b>${up}개(${diff.toFixed(0)}%)</b>가 상승해, `
+      + `${diff >= 70 ? '오름세가 <b>광범위</b>합니다.' : diff >= 55
+        ? '오름세가 <b>절반을 넘는</b> 품목에 퍼져 있습니다.'
+        : '오름세가 <b>일부 품목에 국한</b>돼 있습니다.'}`);
+
+  // 품목 순위 (집계행 제외)
+  const leaf = [];
+  cap.contribs.forEach((arr, n) => { const v = arr[k]; if (v != null && Math.abs(v) >= 0.005) leaf.push([n, v]); });
+  leaf.sort((a, b) => b[1] - a[1]);
+  const catRows = [...GOODS, ...SVC].map(n => [n, catV[n] || 0]).sort((a, b) => b[1] - a[1]);
+
+  const body = '<div style="display:flex;gap:26px;flex-wrap:wrap">'
+    + '<div>' + anaRank('카테고리 기여도', '6대 부문, 합 = 총지수 변화율', catRows, '%p') + '</div>'
+    + '<div>' + anaRank('물가를 끌어올린 품목', '기여도 상위 10', leaf.slice(0, 10), '%p') + '</div>'
+    + '<div>' + anaRank('물가를 눌러준 품목', '기여도 하위 10', leaf.slice(-10).reverse(), '%p') + '</div>'
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-top:10px;line-height:1.8">'
+    + '※ 기여도 = 품목 변화율 × 가중치. 위 표의 값은 기여도 표와 동일한 계산입니다. '
+    + '카테고리 합이 총지수와 미세하게 다를 수 있는 건 가중치 개편(2020↔2022) 연결 때문입니다.</div>';
+  return anaShell(`${dateLabel(d)} ${cap.label} ${lag === 1 ? '전월비' : '전년동월비'} 분해`,
+    B, lead, body, 'caClose');
+}
+
 function renderCpiContrib() {
   const box = document.getElementById('multiWrap');
   if (!window.__CPI_STRUCT__) {
@@ -7433,6 +8400,7 @@ function renderCpiContrib() {
       nd => nd.liv || nd.jw],
   ];
   let chartCap = null;   // 누적막대 차트용 데이터 (선택된 지수)
+  const anaCur = cpiAnaMonth && cols.includes(cpiAnaMonth) ? cpiAnaMonth : null;
   const CATS6 = ['농축수산물', '공업제품', '전기 · 가스 · 수도', '집세', '공공서비스', '개인서비스'];
   let out = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">`
     + `<div class="mode"><button id="ctbM" class="${lag === 1 ? 'active' : ''}">MoM</button>`
@@ -7441,7 +8409,9 @@ function renderCpiContrib() {
       .map(([k, t]) => `<button data-ci="${k}" class="${cpiCtbChartIdx === k ? 'active' : ''}">${t}</button>`).join('')
     + `</div><span style="font-size:12px;color:#8592a3">누적막대=카테고리 기여도 · 선=실제 변화율 · <b>표에서 행 클릭=해당 항목만 차트 표시</b> (± 는 접기)</span>`
     + `<span id="ctbFocusChips" style="display:flex;gap:5px;flex-wrap:wrap"></span></div>`
-    + `<div class="cchart" style="height:330px;margin-bottom:18px"><canvas id="cpiCtbChart"></canvas></div>`;
+    + `<div class="cchart" style="height:330px;margin-bottom:18px"><canvas id="cpiCtbChart"></canvas></div>`
+    + anaBar('caBtn', 'caSel', cols, anaCur, '선택한 달의 기여도를 상품/서비스·공급/근원으로 갈라 읽어 줍니다')
+    + '<!--CPIANA-->';
 
   // ≤2021-12: 2020가중치·원지수(2020평균=100 그대로)
   // 2022-01~: 2022가중치 + "2022년 연평균=100" 리레이팅 (KR_Macro 방식 — 검증 결과 오차 최소)
@@ -7540,7 +8510,16 @@ function renderCpiContrib() {
     }
     out += '</tbody></table></div>';
   });
+  out = out.replace('<!--CPIANA-->', anaCur && chartCap ? cpiAnalysis(anaCur, chartCap, cols, lag) : '');
   box.innerHTML = out;
+  {
+    const bt = box.querySelector('#caBtn'), sl = box.querySelector('#caSel');
+    if (bt) bt.onclick = () => {
+      cpiAnaMonth = anaCur ? null : (sl ? sl.value : cols[cols.length - 1]); renderCpiCombo(); };
+    if (sl) sl.onchange = () => { cpiAnaMonth = sl.value; renderCpiCombo(); };
+    const cx = box.querySelector('#caClose');
+    if (cx) cx.onclick = () => { cpiAnaMonth = null; renderCpiCombo(); };
+  }
   box.querySelector('#ctbM').onclick = () => { cpiCtbLag = 1; renderCpiCombo(); };
   box.querySelector('#ctbY').onclick = () => { cpiCtbLag = 12; renderCpiCombo(); };
   // 행 클릭 = 차트에 해당 항목 표시(토글) · ± 클릭 = 접기/펴기
@@ -8874,9 +9853,13 @@ document.getElementById('endSel').onchange = e => {
           const b = document.createElement('button');
           b.id = 'retailBtn'; b.textContent = RETAIL.name; b.onclick = enterRetail;
           nav.appendChild(b); retInserted = true;
+          const c = document.createElement('button');   // 카드사용액을 소매판매 바로 뒤에
+          c.id = 'cardBtn'; c.textContent = CARD.name; c.onclick = enterCard;
+          nav.appendChild(c);
         }
         return;
       }
+      if (CARD.ids.includes(item.id)) return;   // 카드 관련 지표는 개별 버튼을 만들지 않음
       if (CPI_COMBO.ids.includes(item.id)) {
         // CPI 3종은 "소비자물가 종합" 하나로 묶음
         if (!cpiInserted) {

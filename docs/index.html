@@ -156,6 +156,11 @@
         <button data-rt="goods" class="active">상품군별</button>
         <button data-rt="type">업태별</button>
       </div>
+      <div id="usCpiTabs" class="mode" style="display:none">
+        <button data-uc="chg" class="active">증감률</button>
+        <button data-uc="idx">지수</button>
+        <button data-uc="ctb">기여도</button>
+      </div>
       <div id="cardTabs" class="mode" style="display:none">
         <button data-cdt="month" class="active">월간 (KOSIS)</button>
         <button data-cdt="week">주간 (나우캐스트)</button>
@@ -283,13 +288,22 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
-const NAV_OFF = ['ppi', 'apt'];
+const NAV_OFF = ['ppi'];
 const navOn = k => !NAV_OFF.includes(k);
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
 let visible = new Set();   // 표시 중인 시리즈명 (차트 전용, 표는 전체 항목 표시)
 let genSel = null, genCharts = [null, null, null, null];   // 원자료·종합 차트: 우클릭 선택 항목
 
+// 축 눈금 포매터 — Chart.js 가 만든 눈금값(-0.30000000000000004 같은 부동소수)을
+// 그대로 문자열에 붙이면 축이 지저분해진다. 유효자리만 남기고 -0 도 없앤다.
+const axFmt = (v, unit = '') => {
+  if (v == null || !isFinite(v)) return '';
+  let n = Math.abs(v) >= 100 ? Math.round(v) : +v.toPrecision(12);
+  n = +n.toFixed(6);
+  if (Object.is(n, -0)) n = 0;
+  return n.toLocaleString('ko-KR', { maximumFractionDigits: 6 }) + unit;
+};
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
 const lagYoY = () =>
   ({ Q: 4, A: 1, W: 52, M: 12 }[current.freq] || 12);
@@ -477,11 +491,15 @@ function refresh() {
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
+  const isUCpi = view === 'uscpi';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
   document.getElementById('retTabs').style.display = isRet ? '' : 'none';
   document.getElementById('cardTabs').style.display = isCard ? '' : 'none';
+  document.getElementById('usCpiTabs').style.display = isUCpi ? '' : 'none';
+  document.querySelectorAll('#usCpiTabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.uc === usCpiTab));
   document.querySelectorAll('#cardTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.cdt === cardTab));
   document.getElementById('ppiTabs').style.display = isPpi ? '' : 'none';
@@ -489,7 +507,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -502,11 +520,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -524,6 +542,7 @@ function refresh() {
   else if (isTot) renderTot();
   else if (isWg) renderWage();
   else if (isCard) renderCard();
+  else if (isUCpi) renderUsCpi();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -5267,6 +5286,338 @@ function renderKrEmpDetail() {
 }
 
 // ── 미국 고용상황 (BLS: 비농업 산업별 + 실업률 + 임금) ──────────
+// ── 미국 소비자물가 (BLS) — US_macro.xlsm CPI 시트 재현 ──────────────
+// 시트는 6블록(MoM 축약/YoY 축약/MoM 전체/YoY 전체/지수 SA/지수 NSA)이지만
+// 앞의 두 블록은 뒤의 부분집합이라 '주요항목만' 토글로 대체하고 항목을 20개로 통일했다.
+//
+// 계열 선택:
+//   · 전월비(MoM)  → 계절조정(CUSR). 미국 헤드라인이 이 기준이다.
+//   · 전년동월비(YoY) → 원계열(CUUR). BLS 공표 관례가 원계열이다.
+//   지수 탭에서는 둘 다 보여준다.
+const US_CPI = { id: 'us_cpi_all', name: '미국 소비자물가',
+                 ids: ['us_cpi', 'us_cpi_nsa'] };
+// 표시 순서·들여쓰기 (시트 순서 그대로). [이름, 레벨, 주요항목여부]
+const US_CPI_ROWS = [
+  ['CPI', 0, true],
+  ['식료품', 1, true],
+  ['가정식(식료품)', 2, false],
+  ['외식', 2, false],
+  ['에너지', 1, true],
+  ['에너지 상품', 2, false],
+  ['에너지 서비스', 2, false],
+  ['전기', 3, false],
+  ['도시가스', 3, false],
+  ['Core CPI', 1, true],
+  ['상품 (식료품·에너지 제외)', 2, true],
+  ['의류', 3, true],
+  ['신차', 3, true],
+  ['중고차', 3, true],
+  ['서비스 (에너지서비스 제외)', 2, true],
+  ['주거', 3, true],
+  ['임차료', 4, false],
+  ['자가주거비 (OER)', 4, false],
+  ['의료 서비스', 3, false],
+  ['교통 서비스', 3, false],
+  ['슈퍼코어 (근원서비스 − 주거)', 0, true],
+];
+// 슈퍼코어 = 근원 서비스(에너지서비스 제외) − 주거.  파월이 말한 'core services ex housing'.
+//   BLS 는 이 조합을 지수로 공표하지 않는다(품목코드 목록에 없음). 그래서 파생한다.
+//     월별 변화율 r_t = [w_svc×(Isvc_t/Isvc_{t-1}−1) − w_sh×(Ish_t/Ish_{t-1}−1)] / (w_svc − w_sh)
+//   이를 이어붙여(chain) 지수를 만들면 12개월 변화가 직접식과 최대 0.04%p 차이로 일치한다.
+//   가중치는 상대중요도(RI)를 쓴다 — 연 1회 개편이라 그 차이만큼 근사다.
+// 공표 공백 탐지 — 2025-10 처럼 BLS 가 아예 내지 못한 달이 있으면 알린다.
+//   그 달은 전월비·전년동월비가 빈칸이 되고, 파생 지수는 앞뒤를 한 스텝으로 이어 붙인다
+//   (수준은 맞지만 그 구간의 '월별' 변화율은 2개월치라는 뜻).
+function usCpiGapNote(SA, NSA) {
+  const M = SA['CPI'] ? SA : NSA;
+  if (!M || !M['CPI']) return '';
+  const ds = [...M['CPI'].keys()].sort();
+  const gaps = [];
+  for (let i = 1; i < ds.length; i++) {
+    const [y0, m0] = ds[i - 1].slice(0, 7).split('-').map(Number);
+    const [y1, m1] = ds[i].slice(0, 7).split('-').map(Number);
+    const step = (y1 - y0) * 12 + (m1 - m0);
+    if (step > 1) for (let k = 1; k < step; k++) {
+      const mm = m0 + k, yy = y0 + Math.floor((mm - 1) / 12);
+      gaps.push(`${yy}-${String(((mm - 1) % 12) + 1).padStart(2, '0')}`);
+    }
+  }
+  if (!gaps.length) return '';
+  return '<div style="font-size:12px;line-height:1.9;margin-bottom:12px;padding:9px 12px;'
+    + 'border:1px solid #f0c0a4;border-radius:8px;background:#fdf7f2">'
+    + `<b>공표 공백: ${gaps.join(', ')}</b> — 해당 월은 BLS 자료 자체가 없습니다. `
+    + '그 달의 전월비·전년동월비는 빈칸이고, 직후 달의 전월비도 비교 대상이 없어 비어 있습니다. '
+    + `<b>${US_CPI_SUPER}</b> 지수는 공백 앞뒤를 한 스텝으로 이어 붙여 <b>수준은 맞지만</b>, `
+    + '그 구간 월별 변화율은 2개월치가 한 번에 반영된 값입니다.</div>';
+}
+const US_CPI_SUPER = '슈퍼코어 (근원서비스 − 주거)';
+const US_CPI_SVC = '서비스 (에너지서비스 제외)', US_CPI_SHELTER = '주거';
+function usCpiAddSupercore(M) {
+  const W = window.__US_CPI_RI__;
+  if (!W || !W.ri) return M;
+  const wS = W.ri[US_CPI_SVC], wH = W.ri[US_CPI_SHELTER];
+  const a = M[US_CPI_SVC], b = M[US_CPI_SHELTER];
+  if (wS == null || wH == null || !a || !b) return M;
+  const w = wS - wH;
+  if (!(w > 0)) return M;
+  const ds = [...a.keys()].filter(d => b.has(d)).sort();
+  if (ds.length < 2) return M;
+  const out = new Map([[ds[0], 100]]);
+  for (let i = 1; i < ds.length; i++) {
+    const d = ds[i], p = ds[i - 1];
+    const r = (wS * (a.get(d) / a.get(p) - 1) - wH * (b.get(d) / b.get(p) - 1)) / w;
+    out.set(d, out.get(p) * (1 + r));
+  }
+  M[US_CPI_SUPER] = out;
+  return M;
+}
+let usCpiData = null, usCpiTab = 'chg', usCpiMain = false, usCpiCharts = [null, null];
+let usCpiSel = null;   // 차트에 표시할 항목
+
+async function enterUsCpi() {
+  const inds = await Promise.all(US_CPI.ids.map(id => loadIndicator(id).catch(() => null)));
+  usCpiData = { sa: inds[0], nsa: inds[1] };
+  if (!inds[0] && !inds[1]) {
+    alert('미국 CPI 데이터가 없습니다. python fetch.py us_cpi us_cpi_nsa 실행 필요.');
+    return;
+  }
+  if (!window.__US_CPI_RI__) await loadScript('data/us_cpi_weights.js').catch(() => {});
+  view = 'uscpi'; usCpiTab = 'chg';
+  const src = inds[0] || inds[1];
+  current = { id: US_CPI.id, name: US_CPI.name, freq: 'M', unit: '지수·%',
+              updated_at: src.updated_at, series: [] };
+  document.getElementById('title').textContent = US_CPI.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + src.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'usCpiBtn'));
+  if (!document.getElementById('usCpiTabs').dataset.bound) {
+    document.getElementById('usCpiTabs').addEventListener('click', e => {
+      if (!e.target.dataset.uc) return; usCpiTab = e.target.dataset.uc; refresh();
+    });
+    document.getElementById('usCpiTabs').dataset.bound = '1';
+  }
+  const ds = new Set();
+  [inds[0], inds[1]].filter(Boolean).forEach(x => x.series.forEach(y => y.data.forEach(pt => ds.add(pt.d))));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 24)];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+// 지표 → {항목명: Map(날짜→값)}
+function usCpiMaps(ind) {
+  const M = {};
+  if (ind) ind.series.forEach(x => { M[baseName(x.name)] = new Map(x.data.map(p => [p.d, p.v])); });
+  return usCpiAddSupercore(M);
+}
+
+function renderUsCpi() {
+  const box = document.getElementById('retailWrap');
+  const SA = usCpiMaps(usCpiData && usCpiData.sa), NSA = usCpiMaps(usCpiData && usCpiData.nsa);
+  if (!Object.keys(SA).length && !Object.keys(NSA).length) {
+    box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.9">'
+      + '미국 CPI 데이터가 없습니다.<br>PC에서 <b>python fetch.py us_cpi us_cpi_nsa</b> 실행 후 새로고침해 주세요.'
+      + '<br><span style="color:#8592a3;font-size:12.5px">BLS CUSR/CUUR · 품목 20개</span></div>';
+    return;
+  }
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevD = (d, lag) => { const i = idx.get(d); return i >= lag ? periodDates[i - lag] : null; };
+  const chg = (M, nm, d, lag) => { const m = M[nm]; if (!m) return null;
+    const p = prevD(d, lag); if (!p) return null;
+    const a = m.get(d), b = m.get(p);
+    return a != null && b ? (a / b - 1) * 100 : null; };
+  const rows = US_CPI_ROWS.filter(r => !usCpiMain || r[2]);
+  if (usCpiSel === null) usCpiSel = new Set(['CPI', 'Core CPI']);
+
+  const fmt2 = v => v == null ? '' : v.toLocaleString('en-US',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt3 = v => v == null ? '' : v.toLocaleString('en-US',
+    { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const th = '<th>항목</th>' + cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const tbl = (title, note, M, lag, f) =>
+    `<div class="block-title" style="margin-top:20px">${title}`
+    + `<span style="font-weight:400;color:#8592a3;font-size:12px"> — ${note}</span></div>`
+    + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
+    + rows.map(([nm, lv]) => {
+        const on = usCpiSel.has(nm);
+        return `<tr class="flat lv${lv}" data-ucr="${nm}" style="cursor:pointer">`
+          + `<td style="text-align:left;padding-left:${6 + lv * 14}px`
+          + `${lv === 0 ? ';font-weight:700' : ''}${on ? ';color:#1a4fa0;font-weight:700' : ''}">${nm}</td>`
+          + cols.map(d => { const v = lag ? chg(M, nm, d, lag) : (M[nm] ? (M[nm].get(d) ?? null) : null);
+              return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`; }).join('')
+          + '</tr>'; }).join('')
+    + '</tbody></table></div>';
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">`
+    + `<input type="checkbox" id="ucMain"${usCpiMain ? ' checked' : ''}> 주요항목만 보기</label>`
+    + '<span style="font-size:12px;color:#8592a3">항목을 <b>클릭</b>하면 차트에 추가/제거됩니다</span></div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + 'BLS · US_macro.xlsm CPI 시트 구성. <b>전월비는 계절조정(CUSR)</b>, '
+    + '<b>전년동월비는 원계열(CUUR)</b>을 씁니다 — BLS 공표 관례입니다. '
+    + '<span style="color:#c0392b">외식은 원계열만 공표되고, 자가주거비(OER)는 1982-12=100 기준이라 '
+    + '다른 항목과 지수 <b>수준</b>을 직접 비교하면 안 됩니다. '
+    + `<b>${US_CPI_SUPER}</b>는 BLS 공표 지수가 없어 <b>파생</b>한 값입니다 — 지수는 첫 달=100 기준이라 `
+    + '수준에 의미가 없고 증감률만 보세요.</span></div>'
+    + usCpiGapNote(SA, NSA)
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ucC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  if (usCpiTab === 'chg') {
+    out += tbl('전월비 (%)', '계절조정 CUSR', SA, 1, fmt2)
+         + tbl('전년동월비 (%)', '원계열 CUUR', NSA, 12, fmt2);
+  } else if (usCpiTab === 'idx') {
+    out += tbl('지수 (계절조정)', 'CUSR · 1982-84=100', SA, 0, fmt3)
+         + tbl('지수 (원계열)', 'CUUR · 1982-84=100', NSA, 0, fmt3);
+  } else {
+    out += usCpiContribHtml(SA, NSA, cols, rows, prevD, fmt2);
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  box.querySelector('#ucMain').onchange = e => { usCpiMain = e.target.checked; renderUsCpi(); };
+  box.querySelectorAll('[data-ucr]').forEach(tr => tr.onclick = () => {
+    const n = tr.dataset.ucr;
+    usCpiSel.has(n) ? usCpiSel.delete(n) : usCpiSel.add(n);
+    renderUsCpi();
+  });
+
+  usCpiCharts.forEach(c => c && c.destroy());
+  usCpiCharts = [null, null];
+  const sel = [...usCpiSel].filter(n => SA[n] || NSA[n]);
+  const xTick = { maxTicksLimit: 12, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const mk = (id, title, M, lag, unit) => new Chart(box.querySelector(id), {
+    type: 'line',
+    data: { labels: cols, datasets: sel.map((n, i) => ({
+      label: n, data: cols.map(d => lag ? chg(M, n, d, lag) : (M[n] ? (M[n].get(d) ?? null) : null)),
+      borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
+      borderWidth: 2, pointRadius: 0, tension: .15 })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+          label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}${unit}` } } },
+      scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, unit) } } } },
+  });
+  if (usCpiTab === 'chg') {
+    usCpiCharts[0] = mk('#ucC0', '전월비 (%) — 계절조정', SA, 1, '%');
+    usCpiCharts[1] = mk('#ucC1', '전년동월비 (%) — 원계열', NSA, 12, '%');
+  } else if (usCpiTab === 'idx') {
+    usCpiCharts[0] = mk('#ucC0', '지수 — 계절조정', SA, 0, '');
+    usCpiCharts[1] = mk('#ucC1', '지수 — 원계열', NSA, 0, '');
+  } else {
+    usCpiContribCharts(box, SA, NSA, cols, prevD);
+  }
+}
+
+// ── 기여도 ────────────────────────────────────────────────────
+// BLS 공식 방법(Relative Importance 페이지 Table B):
+//   갱신가중치_t = RI_0 × (I_t / I_0)
+//   가중치 변화  = 갱신가중치_t − RI_0  =  RI_0 × (I_t/I_0 − 1)   ← 이게 기여도(%p)
+//   기여 비중(%) = 해당 항목 가중치 변화 / 전체(All items) 가중치 변화
+// RI 는 %이고 CPI=100 이라, 기여도 합이 곧 총지수 변화율(%)에 가깝다.
+//
+// 주의: RI 는 매년 1월에 개편된다. 12개월 변화가 개편을 걸치면 BLS 는 구간을 나눠
+// 계산하라고 안내한다. 여기서는 단일 RI(직전 12월)로 근사하므로 그만큼 오차가 있다.
+const US_CPI_TOP = 'CPI';
+function usCpiContrib(M, nm, d, lag, prevD, RI) {
+  const w = RI[nm]; const m = M[nm];
+  if (w == null || !m) return null;
+  const p = prevD(d, lag); if (!p) return null;
+  const a = m.get(d), b = m.get(p);
+  return a != null && b ? w * (a / b - 1) : null;
+}
+// RI 에 파생 항목(슈퍼코어) 가중치를 얹어 돌려준다.
+function usCpiRI() {
+  const W = window.__US_CPI_RI__;
+  if (!W || !W.ri) return {};
+  const r = Object.assign({}, W.ri);
+  if (r[US_CPI_SVC] != null && r[US_CPI_SHELTER] != null)
+    r[US_CPI_SUPER] = r[US_CPI_SVC] - r[US_CPI_SHELTER];
+  return r;
+}
+function usCpiContribHtml(SA, NSA, cols, rows, prevD, fmt2) {
+  const W = window.__US_CPI_RI__;
+  if (!W || !W.ri) {
+    return '<div style="padding:24px;color:#c0392b;line-height:1.9">'
+      + '가중치 파일이 없습니다 — <b>docs/data/us_cpi_weights.js</b> 를 확인해 주세요.</div>';
+  }
+  const RI = usCpiRI();
+  const th = '<th>항목</th><th>가중치</th>' + cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const blk = (title, note, M, lag) =>
+    `<div class="block-title" style="margin-top:20px">${title}`
+    + `<span style="font-weight:400;color:#8592a3;font-size:12px"> — ${note}</span></div>`
+    + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
+    + rows.map(([nm, lv]) => {
+        const on = usCpiSel.has(nm);
+        return `<tr class="flat lv${lv}" data-ucr="${nm}" style="cursor:pointer">`
+          + `<td style="text-align:left;padding-left:${6 + lv * 14}px`
+          + `${lv === 0 ? ';font-weight:700' : ''}${on ? ';color:#1a4fa0;font-weight:700' : ''}">${nm}</td>`
+          + `<td style="color:#8592a3">${RI[nm] == null ? '-' : RI[nm].toFixed(2)}</td>`
+          + cols.map(d => { const v = usCpiContrib(M, nm, d, lag, prevD, RI);
+              return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt2(v)}</td>`; }).join('')
+          + '</tr>'; }).join('')
+    + '</tbody></table></div>';
+
+  // 최신월 요약 — 기여 비중
+  const d0 = cols[cols.length - 1];
+  const tot = usCpiContrib(NSA, US_CPI_TOP, d0, 12, prevD, RI);
+  const parts = [['식료품', '식료품'], ['에너지', '에너지'], ['상품 (식료품·에너지 제외)', '근원 상품'],
+                 ['서비스 (에너지서비스 제외)', '근원 서비스']];
+  const pv = parts.map(([k, lab]) => [lab, usCpiContrib(NSA, k, d0, 12, prevD, RI)]).filter(x => x[1] != null);
+  const sh = v => tot ? (v / tot * 100).toFixed(0) + '%' : '-';
+  let head = '<div style="font-size:12.5px;line-height:1.95;margin-bottom:10px">'
+    + `<b>${dateLabel(d0)}</b> 전년동월비 <b>${tot == null ? '-' : tot.toFixed(2)}%</b> 를 갈라 보면 `
+    + pv.map(([lab, v]) => `${lab} <b>${v > 0 ? '+' : ''}${v.toFixed(2)}%p</b>(${sh(v)})`).join(', ')
+    + '입니다.'
+    + (pv.length === 4
+        ? ` 합은 ${pv.reduce((a, b) => a + b[1], 0).toFixed(2)}%p 로 총지수와 거의 같습니다.` : '')
+    + '</div>';
+
+  return head + blk('전월비 기여도 (%p)', '계절조정 CUSR', SA, 1)
+    + blk('전년동월비 기여도 (%p)', '원계열 CUUR', NSA, 12)
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-top:10px">'
+    + `가중치 출처: <b>${W.source}</b> (기준 ${W.asof}). `
+    + '기여도 = 가중치 × (지수 변화율). BLS 공표 방식과 같습니다. '
+    + '<span style="color:#c0392b">가중치는 <b>매년 1월 개편</b>되는데 여기서는 단일 가중치로 계산하므로, '
+    + '개편을 걸치는 12개월 변화에는 근사 오차가 있습니다. 계층(식료품+에너지+Core=100)이 맞아 '
+    + '합계는 총지수와 잘 맞지만, 소수점 둘째 자리는 BLS 공표치와 다를 수 있습니다.</span></div>';
+}
+function usCpiContribCharts(box, SA, NSA, cols, prevD) {
+  const W = window.__US_CPI_RI__;
+  if (!W || !W.ri) return;
+  const RI = usCpiRI();
+  const CAT = [['식료품', '#c98a1a'], ['에너지', '#c0392b'],
+               ['상품 (식료품·에너지 제외)', '#8e44ad'], ['서비스 (에너지서비스 제외)', '#1a4fa0']];
+  const stack = (M, lag, title) => new Chart(box.querySelector(lag === 1 ? '#ucC0' : '#ucC1'), {
+    type: 'bar',
+    data: { labels: cols, datasets: CAT.map(([k, c]) => ({
+        label: k, data: cols.map(d => usCpiContrib(M, k, d, lag, prevD, RI)),
+        backgroundColor: c, borderWidth: 0, stack: 's' })).concat([{
+        label: '총지수 (%)', type: 'line',
+        data: cols.map(d => usCpiContrib(M, US_CPI_TOP, d, lag, prevD, RI)),
+        borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 2,
+        pointRadius: 2, tension: .1, order: -1 }]) },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+          label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { stacked: true, ticks: { maxTicksLimit: 12, font: { size: 10 },
+                 callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { stacked: true, ticks: { font: { size: 10 }, callback: v => axFmt(v, '%p') } } } },
+  });
+  usCpiCharts[0] = stack(SA, 1, '전월비 기여도 분해 (%p) — 계절조정');
+  usCpiCharts[1] = stack(NSA, 12, '전년동월비 기여도 분해 (%p) — 원계열');
+}
+
 const US_EMP = { id: 'us_emp', name: '미국 고용상황',
                  ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur', 'us_ahe'] };
 // 실업기간 표시 순서 (Empsit 'Number of Unemployed'). 5주미만+5~14주+15주이상 = 전체 실업자
@@ -6713,7 +7064,10 @@ const RETAIL = { id: 'retail_all', name: '소매판매',
 const CARD = { id: 'card_all', name: '카드사용액',
                ids: ['kr_card_approve', 'kr_card_weekly', 'kr_card',
                      'kr_base_rate', 'kr_cpi_core', 'kr_gdp_real',
-                     'kr_cpi', 'kr_infl_expect', 'kr_card_weekly_ind'] };
+                     'kr_cpi', 'kr_infl_expect', 'kr_card_weekly_ind'],
+               // 카드 화면 '전용' 지표만. 나머지(기준금리·물가·GDP)는 다른 메뉴에서도 쓰므로
+               // 메뉴에서 지우면 안 된다. nav 는 이 목록만 흡수한다.
+               own: ['kr_card_approve', 'kr_card_weekly', 'kr_card_weekly_ind', 'kr_card'] };
 // 소매판매 계층 (통계청 소매판매액지수 분류) — 항목명 → 들여쓰기 레벨
 const RETAIL_LV = {
   goods: {   // 상품군별
@@ -7201,7 +7555,7 @@ function renderCardMonth() {
         tooltip: { callbacks: { title: it => dateLabel(it[0].label),
           label: it => ` ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}${unit}` } } },
       scales: { x: { ticks: xTick },
-        y: Object.assign({ ticks: { font: { size: 10 }, callback: v => v + unit } }, extra || {}) } },
+        y: Object.assign({ ticks: { font: { size: 10 }, callback: v => axFmt(v, unit) } }, extra || {}) } },
   });
   cardCharts[0] = mk('#cardC0', '3개월 이동평균 전년동월비', cYoy, '#1a4fa0', '%');
   cardCharts[1] = mk('#cardC1', '3개월 이동평균 전월비', cMom, '#2b7a3d', '%');
@@ -7326,7 +7680,7 @@ function renderCardWeek() {
       plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
         title: { display: true, font: { size: 13 }, text: '전년동기비 (%) — 범례를 눌러 원계열을 켤 수 있습니다' },
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
-      scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 }, callback: v => v + '%' } } } },
+      scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
   cardWkCharts[1] = new Chart(box.querySelector('#cwC1'), {
     type: 'line',
@@ -7478,7 +7832,7 @@ function renderCardWeekSectors(box, W) {
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
       scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
                  callback: function (v) { const l = this.getLabelForValue(v); return l ? l.slice(2, 7) : ''; } } },
-        y: { ticks: { font: { size: 10 }, callback: v => v + '%' } } } },
+        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
 }
 
@@ -7891,10 +8245,10 @@ function renderCardReal() {
         x: { ticks: { maxTicksLimit: 16, font: { size: 10 },
              callback: function (v) { const l = this.getLabelForValue(v);
                return l.slice(5, 7) === '01' ? "'" + l.slice(2, 4) : ''; } } },
-        y: { position: 'left', ticks: { font: { size: 10 }, callback: v => v + '%p' },
+        y: { position: 'left', ticks: { font: { size: 10 }, callback: v => axFmt(v, '%p') },
              title: { display: true, text: '(%p)', font: { size: 10 } } },
         y1: { position: 'right', reverse: true, grid: { drawOnChartArea: false },
-              ticks: { font: { size: 10 }, callback: v => v + 'σ' },
+              ticks: { font: { size: 10 }, callback: v => axFmt(v, 'σ') },
               title: { display: true, text: '(역축, σ)', font: { size: 10 } } } } },
   });
 
@@ -9788,7 +10142,7 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false, usCpiInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
@@ -9826,6 +10180,14 @@ document.getElementById('endSel').onchange = e => {
         }
         return;
       }
+      if (US_CPI.ids.includes(item.id)) {   // 미국 CPI 2종(SA/NSA) → "미국 소비자물가" 하나로
+        if (!usCpiInserted) {
+          const b = document.createElement('button');
+          b.id = 'usCpiBtn'; b.textContent = US_CPI.name; b.onclick = enterUsCpi;
+          nav.appendChild(b); usCpiInserted = true;
+        }
+        return;
+      }
       if (US_EMP.ids.includes(item.id)) {   // 미국 고용 3종 → "미국 고용상황" 하나로
         if (!usEmpInserted) {
           const b = document.createElement('button');
@@ -9859,7 +10221,7 @@ document.getElementById('endSel').onchange = e => {
         }
         return;
       }
-      if (CARD.ids.includes(item.id)) return;   // 카드 관련 지표는 개별 버튼을 만들지 않음
+      if (CARD.own.includes(item.id)) return;   // 카드 전용 지표만 개별 버튼 생략
       if (CPI_COMBO.ids.includes(item.id)) {
         // CPI 3종은 "소비자물가 종합" 하나로 묶음
         if (!cpiInserted) {

@@ -7,6 +7,7 @@
     "seibro": "node scripts/fetch_seibro_repo.js --limit 30"
   },
   "dependencies": {
+    "jsdom": "^30.0.1",
     "playwright": "^1.61.1"
   }
 }

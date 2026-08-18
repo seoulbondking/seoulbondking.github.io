@@ -858,6 +858,75 @@ indicators:
   # ══════════════════════════════════════════════════════════════
 
   # 고용상황 — 비농업 취업자 (산업별, 천명·계절조정) : 산업별 증감 분해용
+  # ── 미국 소비자물가 (BLS) — US_macro.xlsm 의 CPI 시트 구성 ──────────────
+  #   품목 20개 × 계절조정(CUSR) / 원계열(CUUR).
+  #   미국 헤드라인은 SA 전월비, 전년동월비는 관례상 NSA 를 쓴다. 그래서 둘 다 받는다.
+  #   ※ 자가주거비(OER)만 1982-12=100 기준이라 다른 항목과 지수 수준을 직접 비교하면 안 된다.
+  #   ※ 외식(SEFV)은 원계열만 공표된다 — SA 계열에 값이 비어도 정상이다.
+  # 계절조정 (CUSR) — 전월비 헤드라인용
+  - id: us_cpi
+    name: 미국 소비자물가 (계절조정)
+    source: bls
+    unit: 지수
+    freq: M
+    start_year: 2005
+    refetch_years: 2
+    series_first: ["CPI"]
+    params:
+      series:
+        CUSR0000SA0: CPI
+        CUSR0000SAF1: 식료품
+        CUSR0000SAF11: 가정식(식료품)
+        CUSR0000SEFV: 외식
+        CUSR0000SA0E: 에너지
+        CUSR0000SACE: 에너지 상품
+        CUSR0000SEHF: 에너지 서비스
+        CUSR0000SEHF01: 전기
+        CUSR0000SEHF02: 도시가스
+        CUSR0000SA0L1E: Core CPI
+        CUSR0000SACL1E: 상품 (식료품·에너지 제외)
+        CUSR0000SAA: 의류
+        CUSR0000SETA01: 신차
+        CUSR0000SETA02: 중고차
+        CUSR0000SASLE: 서비스 (에너지서비스 제외)
+        CUSR0000SAH1: 주거
+        CUSR0000SEHA: 임차료
+        CUSR0000SEHC: 자가주거비 (OER)
+        CUSR0000SAM2: 의료 서비스
+        CUSR0000SAS4: 교통 서비스
+
+  # 원계열 (CUUR) — 전년동월비·기여도용
+  - id: us_cpi_nsa
+    name: 미국 소비자물가 (원계열)
+    source: bls
+    unit: 지수
+    freq: M
+    start_year: 2005
+    refetch_years: 2
+    series_first: ["CPI"]
+    params:
+      series:
+        CUUR0000SA0: CPI
+        CUUR0000SAF1: 식료품
+        CUUR0000SAF11: 가정식(식료품)
+        CUUR0000SEFV: 외식
+        CUUR0000SA0E: 에너지
+        CUUR0000SACE: 에너지 상품
+        CUUR0000SEHF: 에너지 서비스
+        CUUR0000SEHF01: 전기
+        CUUR0000SEHF02: 도시가스
+        CUUR0000SA0L1E: Core CPI
+        CUUR0000SACL1E: 상품 (식료품·에너지 제외)
+        CUUR0000SAA: 의류
+        CUUR0000SETA01: 신차
+        CUUR0000SETA02: 중고차
+        CUUR0000SASLE: 서비스 (에너지서비스 제외)
+        CUUR0000SAH1: 주거
+        CUUR0000SEHA: 임차료
+        CUUR0000SEHC: 자가주거비 (OER)
+        CUUR0000SAM2: 의료 서비스
+        CUUR0000SAS4: 교통 서비스
+
   - id: us_nfp
     name: 미국 비농업 취업자 (산업별)
     source: bls

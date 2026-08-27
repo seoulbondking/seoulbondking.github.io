@@ -5,3 +5,4 @@ __pycache__/
 node_modules/
 # 인포맥스 원본 엑셀(13MB+) — 수집 결과 JSON만 커밋하면 되므로 제외
 data/*.xlsx
+tools/update.log

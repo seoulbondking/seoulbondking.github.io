@@ -36,9 +36,18 @@ BASE = "https://data.kostat.go.kr/nowcast"
 DATA_URL = f"{BASE}/listIndcrDataAjax.do"
 INFO_URL = f"{BASE}/listIndcrInfoAjax.do"
 
-# 업종분류 축 (cd2) 과 그 값(val2). 포털 화면에서 확인한 코드다.
-#   COICOP 대분류를 따르며, 신용카드이용금액(indcr_id=1)은 7개 업종만 제공한다.
+# 분류 축(cd2)과 그 값(val2). 포털 화면을 눌러 가며 확인한 코드다.
+#   업종분류(A00029)는 COICOP 대분류를 따르며 7개, 연령대(A00007)는 6구간이다.
 SECTOR_AXIS = "A00029"
+AGE_AXIS = "A00007"
+AGES = {
+    "20": "20대 이하",
+    "30": "30대",
+    "40": "40대",
+    "50": "50대",
+    "60": "60대",
+    "70": "70대 이상",
+}
 SECTORS = {
     "01": "식료품·음료",
     "03": "의류·신발",
@@ -162,13 +171,17 @@ def fetch(indicator: dict) -> list[dict]:
     # wklId=0 이 있으면 지수 계열을 하나 더 만들어 붙인다 (params.index: false 로 끔)
     want_index = p.get("index", True) and 0 in [int(w) for w in wkl_ids]
     val1 = p.get("val1", "")
-    # 업종별: sectors: true 면 SECTORS 전체, 리스트면 그 코드만. 생략하면 전체(합계) 하나.
-    sec = p.get("sectors")
-    if sec is True:
-        targets = [(SECTOR_AXIS, code, nm) for code, nm in SECTORS.items()]
-    elif isinstance(sec, (list, tuple)):
-        targets = [(SECTOR_AXIS, c, SECTORS.get(c, c)) for c in sec]
-    else:
+    # 세분류: sectors(업종) 또는 ages(연령). true 면 전체, 리스트면 그 코드만.
+    #   생략하면 전체(합계) 하나만 받는다.
+    def _targets(key, axis, table):
+        v = p.get(key)
+        if v is True:
+            return [(axis, c, nm) for c, nm in table.items()]
+        if isinstance(v, (list, tuple)):
+            return [(axis, str(c), table.get(str(c), str(c))) for c in v]
+        return []
+    targets = _targets("sectors", SECTOR_AXIS, SECTORS) + _targets("ages", AGE_AXIS, AGES)
+    if not targets:
         targets = [(p.get("cd2", ""), p.get("val2", ""), "")]
 
     s = _session()

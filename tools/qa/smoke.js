@@ -46,7 +46,7 @@ const chk = (name, elId) => {
   await ev('enterCpiCombo()');
   for (const t of ['main', 'items', 'seas', 'contrib']) { ev(`cpiTab='${t}'; renderCpiCombo();`); chk('CPI > ' + t, 'multiWrap'); }
   await ev('enterKrEmp()');
-  for (const t of ['main', 'industry', 'sub', 'age', 'detail', 'wage']) { ev(`krEmpTab='${t}'; refresh();`); chk('고용 > ' + t, 'retailWrap'); }
+  for (const t of ['main', 'industry', 'sub', 'age', 'detail', 'wage', 'vu']) { ev(`krEmpTab='${t}'; refresh();`); chk('고용 > ' + t, 'retailWrap'); }
   if (w.__MACRO__ && w.__MACRO__.us_cpi) {
     await ev('enterUsCpi()');
     for (const t of ['chg', 'idx']) { ev(`usCpiTab='${t}'; refresh();`); chk('미국 소비자물가 > ' + t, 'retailWrap'); }
@@ -69,12 +69,23 @@ const chk = (name, elId) => {
   await new Promise(r => setTimeout(r, 200));
   const btns = [...w.document.querySelectorAll('nav button')].map(b => b.textContent.trim());
   console.log('\n  nav 버튼 ' + btns.length + '개');
-  const wantBtn = ['소매판매', '카드사용액', '실질 국내총생산 (계절조정, 분기)', '주간 아파트 매매&전세 동향'];
+  const wantBtn = ['소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향'];
   wantBtn.forEach(t => {
     const ok = btns.some(b => b === t || b.indexOf(t) === 0);
     if (!ok) fail++;
     console.log('    ' + (ok ? '있음  ' : '⚠ 없음 ') + t);
   });
+
+  // GDP: 4개 조합 전환 + 순수출 파생
+  for (const key of ['real|q', 'nominal|q', 'real|a', 'nominal|a']) {
+    const id = ev(`GDP.id['${key}']`);
+    await ev(`select('${id}')`);
+    const has = ev(`current.series.some(x => x.name === '순수출 (수출 − 수입)')`);
+    const sw = w.document.getElementById('gdpSwitch').style.display;
+    const ok = has && sw === 'flex';
+    if (!ok) fail++;
+    console.log('  GDP ' + key.padEnd(11) + (ok ? '  OK' : '  ⚠ 순수출=' + has + ' 전환바=' + sw));
+  }
 
   console.log(fail ? `\n실패 ${fail}건` : '\n전부 통과');
   process.exit(fail ? 1 : 0);

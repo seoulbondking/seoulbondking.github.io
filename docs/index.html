@@ -156,6 +156,18 @@
         <button data-rt="goods" class="active">상품군별</button>
         <button data-rt="type">업태별</button>
       </div>
+      <div id="gdpSwitch" style="display:none;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:#555">가격:</span>
+        <div class="mode" id="gdpPrice">
+          <button data-gp="real" class="active">실질</button>
+          <button data-gp="nominal">명목</button>
+        </div>
+        <span style="font-size:12px;color:#555;margin-left:6px">주기:</span>
+        <div class="mode" id="gdpFreq">
+          <button data-gf="q" class="active">분기</button>
+          <button data-gf="a">연간</button>
+        </div>
+      </div>
       <div id="usCpiTabs" class="mode" style="display:none">
         <button data-uc="chg" class="active">증감률</button>
         <button data-uc="idx">지수</button>
@@ -191,6 +203,7 @@
         <button data-ke="age">연령별</button>
         <button data-ke="detail">상세</button>
         <button data-ke="wage">임금</button>
+        <button data-ke="vu">빈일자리·물가</button>
       </div>
       <div id="usEmpTabs" class="mode" style="display:none">
         <button data-ue="main" class="active">종합</button>
@@ -274,6 +287,21 @@
 </div>
 
 <script>
+// 막대와 겹치는 선을 또렷하게 — 데이터셋에 pop:true 를 주면 흰 후광을 두른다.
+//   Chart.js 는 order 가 큰 데이터셋부터 그린다(= order 가 작을수록 위). 그것만으로도
+//   가려짐은 풀리지만, 색이 비슷하면 여전히 묻히므로 그림자로 한 겹 더 띄운다.
+const LINE_POP = {
+  id: 'linePop',
+  beforeDatasetDraw(c, a) {
+    const ds = c.data.datasets[a.index]; if (!ds || !ds.pop) return;
+    const x = c.ctx; x.save();
+    x.shadowColor = 'rgba(255,255,255,0.95)'; x.shadowBlur = 5;
+  },
+  afterDatasetDraw(c, a) {
+    const ds = c.data.datasets[a.index]; if (ds && ds.pop) c.ctx.restore();
+  },
+};
+
 const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
                  '#b0486e','#5c6b7a','#8aa832','#c26b1d','#4666d1','#9e3fbf'];
 let catalog = [], current = null, chart = null;
@@ -304,6 +332,16 @@ const axFmt = (v, unit = '') => {
   if (Object.is(n, -0)) n = 0;
   return n.toLocaleString('ko-KR', { maximumFractionDigits: 6 }) + unit;
 };
+// 월별 라벨('YYYY-MM') 축에서 세로 격자를 N개월마다만 그린다.
+//   autoSkip 을 끄면 눈금이 모든 달에 생겨 격자가 촘촘해진다. 라벨은 콜백으로 걸러도
+//   격자선은 남으므로, 여기서 해당 월이 아니면 색을 투명으로 돌려 숨긴다.
+const gridEveryN = (labels, n = 6, color = 'rgba(0,0,0,0.08)') => ({
+  color: ctx => { const l = labels[ctx.index];
+    return l && (+l.slice(5, 7) - 1) % n === 0 ? color : 'transparent'; },
+  tickColor: ctx => { const l = labels[ctx.index];
+    return l && (+l.slice(5, 7) - 1) % n === 0 ? color : 'transparent'; },
+});
+
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
 const lagYoY = () =>
   ({ Q: 4, A: 1, W: 52, M: 12 }[current.freq] || 12);
@@ -498,6 +536,8 @@ function refresh() {
   document.getElementById('retTabs').style.display = isRet ? '' : 'none';
   document.getElementById('cardTabs').style.display = isCard ? '' : 'none';
   document.getElementById('usCpiTabs').style.display = isUCpi ? '' : 'none';
+  if (view !== 'chart' && view !== 'table' && view !== 'multi')
+    document.getElementById('gdpSwitch').style.display = 'none';
   document.querySelectorAll('#usCpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.uc === usCpiTab));
   document.querySelectorAll('#cardTabs button').forEach(b =>
@@ -4344,7 +4384,11 @@ const KR_EMP = { id: 'kr_emp', name: '고용상황',
                  ids: ['kr_emp_total', 'kr_emp_age', 'kr_emp_industry', 'kr_emp_inactive',
                        'kr_emp_total_sa', 'kr_emp_age_sa', 'kr_emp_supp', 'kr_emp_industry_raw', 'kr_emp_industry_sub', 'kr_emp_supp_sa',
                        'kr_emp_inactive_act_sa', 'kr_emp_rest_age', 'kr_emp_inactive_sa'],
-                 wageIds: ['kr_wage', 'kr_wage_it', 'kr_wage_hourly'] };
+                 wageIds: ['kr_wage', 'kr_wage_it', 'kr_wage_hourly'],
+                 vuIds: ['kr_vacancy', 'kr_cpi_core', 'kr_cpi', 'kr_emp_supp'],
+                 // 고용상황 '전용' 지표만 메뉴에서 흡수한다.
+                 // vuIds 의 kr_cpi_core·kr_cpi 는 소비자물가 메뉴에서도 쓰므로 넣으면 안 된다.
+                 own: ['kr_vacancy'] };
 // 계열 선택. 'raw' = 원계열, 'sa' = 계절조정(기본).
 // 원계열 6월 고용률은 계절적으로 연평균보다 +0.8%p 높아, 통계청 발표(계절조정)와 어긋나 보인다.
 // 산업별·직업별은 KOSIS가 계절조정으로만 주므로 스위치와 무관하게 항상 계절조정이다.
@@ -4365,6 +4409,8 @@ async function enterKrEmp() {
   // 임금은 고용상황 '임금' 탭에서 쓴다 (없어도 나머지 탭은 정상 동작)
   const wg = await Promise.all(KR_EMP.wageIds.map(id => loadIndicator(id).catch(() => null)));
   wageData = {}; KR_EMP.wageIds.forEach((id, i) => wageData[id] = wg[i]);
+  const vu = await Promise.all(KR_EMP.vuIds.map(id => loadIndicator(id).catch(() => null)));
+  vuData = {}; KR_EMP.vuIds.forEach((id, i) => vuData[id] = vu[i]);
   if (!totSa && !ageSa) krSA = 'raw';           // 계절조정 데이터가 전혀 없으면 원계열로만
   current = { id: KR_EMP.id, name: KR_EMP.name, freq: 'M', unit: '천명·%',
               updated_at: (tot || age).updated_at, series: [] };
@@ -4447,6 +4493,7 @@ function renderKrEmp() {
   if (krEmpTab === 'age') { renderKrEmpAge(); return; }
   if (krEmpTab === 'detail') { renderKrEmpDetail(); return; }
   if (krEmpTab === 'wage') { renderWage(); return; }
+  if (krEmpTab === 'vu') { renderKrEmpVU(); return; }
   renderKrEmpMain();
 }
 
@@ -5294,6 +5341,34 @@ function renderKrEmpDetail() {
 //   · 전월비(MoM)  → 계절조정(CUSR). 미국 헤드라인이 이 기준이다.
 //   · 전년동월비(YoY) → 원계열(CUUR). BLS 공표 관례가 원계열이다.
 //   지수 탭에서는 둘 다 보여준다.
+// ── 국내총생산 ─────────────────────────────────────────────
+// 실질/명목 × 분기/연간 4개 지표를 메뉴 하나로 묶고, 전환 바로 갈아끼운다.
+// 화면 자체는 기존 범용 뷰(종합·차트·표)를 그대로 쓴다 — 모드 버튼·우클릭 선택이 다 살아 있다.
+const GDP = { name: '국내총생산',
+              id: { 'real|q': 'kr_gdp_real', 'nominal|q': 'kr_gdp_nominal',
+                    'real|a': 'kr_gdp_real_annual', 'nominal|a': 'kr_gdp_nominal_annual' } };
+const GDP_IDS = Object.values(GDP.id);
+let gdpPrice = 'real', gdpFreq = 'q';
+// 순수출 = 수출 − 수입. 국민계정에 항목이 없어(수입이 공제 항목) 직접 만든다.
+//   GDP = 소비 + 투자 + 순수출 + 통계상불일치 이므로, 순수출을 넣어야 지출 분해가 닫힌다.
+const GDP_EXP = '재화와 서비스의 수출', GDP_IMP = '(공제)재화와 서비스의 수입';
+const GDP_NET = '순수출 (수출 − 수입)';
+function gdpAddNet(ind) {
+  if (!ind || !ind.series) return ind;
+  if (ind.series.some(x => baseName(x.name) === GDP_NET)) return ind;
+  const ex = ind.series.find(x => baseName(x.name) === GDP_EXP);
+  const im = ind.series.find(x => baseName(x.name) === GDP_IMP);
+  if (!ex || !im) return ind;
+  const M = new Map(im.data.map(p => [p.d, p.v]));
+  const data = ex.data.filter(p => M.has(p.d))
+    .map(p => ({ d: p.d, v: p.v - M.get(p.d) }));
+  if (!data.length) return ind;
+  // 수입 바로 뒤에 끼워 넣는다 (지출 항목 순서 유지)
+  const i = ind.series.indexOf(im);
+  ind.series.splice(i + 1, 0, { name: GDP_NET, data });
+  return ind;
+}
+
 const US_CPI = { id: 'us_cpi_all', name: '미국 소비자물가',
                  ids: ['us_cpi', 'us_cpi_nsa'] };
 // 표시 순서·들여쓰기 (시트 순서 그대로). [이름, 레벨, 주요항목여부]
@@ -5832,11 +5907,13 @@ function renderUsHoursEarn() {
   const mk = (i, title, datasets, extra) => {
     if (usEmpCharts[i]) { usEmpCharts[i].destroy(); usEmpCharts[i] = null; }
     usEmpCharts[i] = new Chart(box.querySelector('#usH' + i), {
+      plugins: [LINE_POP],
       data: { labels: cols, datasets },
       options: Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: title, font: { size: 12 } },
-          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+          tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+            callbacks: { title: it => dateLabel(it[0].label),
             label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
         scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 },
           callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } }, extra || {}),
@@ -5846,11 +5923,14 @@ function renderUsHoursEarn() {
     callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } };
   // 왼쪽 — 시간당임금 AHE : 전월비 3ma 막대(좌) + 전년비 선(우)
   if (ahe) mk(0, `미국 임금(AHE) — 전월비 ${usAheMA}ma (좌) · 전년비 (우)`, [
-    // 좌축(전월비)을 범례·툴팁 앞에 두고, 선은 뒤에 그려 막대 위로 올린다
+    // Chart.js 는 order 가 큰 것부터 그린다 → 위로 올릴 선에 더 작은 order 를 준다.
+    // (범례·툴팁 순서는 배열 순서와 itemSort 가 잡아 주므로 막대가 여전히 앞에 온다)
     { type: 'bar', label: `전월비 ${usAheMA}ma (%, 좌)`, data: cols.map(d => momMA(aheTot, d, usAheMA)),
-      backgroundColor: '#c8cfd8', yAxisID: 'y', order: 1 },
+      backgroundColor: 'rgba(150,166,186,0.38)', borderColor: 'rgba(150,166,186,0.75)', borderWidth: 1,
+      barPercentage: 0.78, categoryPercentage: 0.9, yAxisID: 'y', order: 2 },
     { type: 'line', label: '전년비 (%, 우)', data: cols.map(d => yoy(aheTot, d)),
-      borderColor: '#1a6fc4', borderWidth: 2.5, pointRadius: 0, tension: 0.15, spanGaps: true, yAxisID: 'y2', order: 2 },
+      borderColor: '#0d4f9c', borderWidth: 3, pointRadius: 0, tension: 0.15, spanGaps: true,
+      pop: true, yAxisID: 'y2', order: 1 },
   ], { scales: { x: dualX,
       y: { position: 'left', ticks: { font: { size: 10 } }, title: { display: true, text: `${usAheMA}ma %`, font: { size: 10 } } },
       y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false },
@@ -5859,9 +5939,11 @@ function renderUsHoursEarn() {
   // 오른쪽 — 주당급여 전년동월비 : 표에서 우클릭으로 고른 업종만
   const shown = CES_TREE.map(r => r[0]).filter(n => usErnSel.has(n));
   mk(1, `주당급여 전년동월비 (%) — ${shown.length}개 업종 (표 우클릭으로 변경)`,
-    shown.map((n, i) => ({ type: 'line', label: n, data: cols.map(d => yoy(Mof(earn, n), d)),
-      borderColor: PALETTE[i % PALETTE.length], borderWidth: n === '민간 전체' ? 2.6 : 1.7,
-      pointRadius: 0, tension: 0.15, spanGaps: true })));
+    shown.map((n, i) => { const base = n === '민간 전체';
+      return { type: 'line', label: n, data: cols.map(d => yoy(Mof(earn, n), d)),
+        borderColor: base ? '#111' : PALETTE[i % PALETTE.length],
+        borderWidth: base ? 3 : 1.7, pop: base,
+        pointRadius: 0, tension: 0.15, spanGaps: true, order: base ? 0 : 1 }; }));
 }
 
 // 노동력 상세 (가계조사): 전일제/시간제 · 경제적사유 시간제 등
@@ -6270,9 +6352,10 @@ function renderWage() {
 // 그 사슬을 한 화면에 모은다: 교역조건 → 수출입물가 → 국내공급물가 → PPI → 근원CPI
 const TOT = { id: 'tot', name: '교역조건·물가',
               ids: ['kr_terms_trade', 'kr_export_price', 'kr_supply_price', 'kr_import_price'],
-              extra: ['kr_ppi_special', 'kr_cpi_core'] };
+              extra: ['kr_ppi_special', 'kr_cpi_core', 'kr_cpi'] };
 let totData = null, totTab = 'main', totCharts = [null, null, null], totCur = '원화기준';
 let totCM = 'yoy';   // 차트 변환: lvl(지수) | mom(전월비) | yoy(전년동월비)
+let totLagX = 'imp', totLagY = 'head';   // 시차 분석: 설명변수 · 대상물가
 
 async function enterTot() {
   const all = TOT.ids.concat(TOT.extra);
@@ -6296,6 +6379,185 @@ async function enterTot() {
   endD = periodDates[periodDates.length - 1];
   sSel.value = startD; eSel.value = endD;
   refresh();
+}
+
+// ── 물가 전이 시차 ────────────────────────────────────────────
+// "공급측 충격이 몇 개월 뒤에 소비자물가로 넘어오는가"를 시차 상관으로 본다.
+//
+// 주의 — 교역조건은 해석이 까다롭다.
+//   순상품교역조건 = 수출물가 ÷ 수입물가 이므로 분모에 수입물가가 들어 있다.
+//   그래서 헤드라인 물가와 음(−)의 동행 상관이 나오는데, 이는 인과가 아니라
+//   '수입물가가 양쪽에 공통으로 들어간' 정의상 되먹임에 가깝다.
+//   공급측 전이를 보려면 수입물가를 직접 쓰는 편이 깨끗하다.
+const TOT_LAG_X = [
+  ['imp', '수입물가 (원화)', 'kr_import_price', '총지수 · 원화기준'],
+  ['impc', '수입물가 (계약통화)', 'kr_import_price', '총지수 · 계약통화기준'],
+  ['exp', '수출물가 (원화)', 'kr_export_price', '총지수 · 원화기준'],
+  ['net', '순상품교역조건', 'kr_terms_trade', '순상품교역조건지수'],
+  ['inc', '소득교역조건', 'kr_terms_trade', '소득교역조건지수'],
+  ['sup', '국내공급물가', 'kr_supply_price', '총지수'],
+];
+const TOT_LAG_Y = [
+  ['head', '헤드라인 CPI', 'kr_cpi', '총지수'],
+  ['core', '근원 CPI', 'kr_cpi_core', '식료품 및 에너지제외'],
+  ['ppi', '생산자물가', 'kr_ppi_special', '총지수'],
+];
+const TOT_LAG_KS = [0, 2, 3, 6, 9, 12, 15, 18, 24];
+
+function totLagHtml(M, prevN, cols) {
+  const xm = TOT_LAG_X.find(v => v[0] === totLagX) || TOT_LAG_X[0];
+  const ym = TOT_LAG_Y.find(v => v[0] === totLagY) || TOT_LAG_Y[0];
+  // 전 구간 전년동월비 (화면 기간과 무관 — 상관은 표본이 길수록 안정적)
+  const yoyAll = (id, nm) => { const m = M(id, nm);
+    if (!m.size) return null;
+    const ks = [...m.keys()].sort();
+    const ix = new Map(ks.map((d, i) => [d.slice(0, 7), i]));
+    const pm = d => { const [y, mo] = d.slice(0, 7).split('-'); return `${+y - 1}-${mo}`; };
+    const out = new Map();
+    ks.forEach(d => { const j = ix.get(pm(d)); if (j == null) return;
+      const a = m.get(d), b = m.get(ks[j]);
+      if (a != null && b) out.set(d.slice(0, 7), (a / b - 1) * 100); });
+    return out; };
+  const build = arr => arr.map(v => [v[0], v[1], yoyAll(v[2], v[3])]);
+  const XS = build(TOT_LAG_X), YS = build(TOT_LAG_Y);
+  const X = (XS.find(v => v[0] === totLagX) || [])[2];
+  const Y = (YS.find(v => v[0] === totLagY) || [])[2];
+  if (!X || !Y) return '<div style="padding:24px;color:#c0392b">필요한 계열이 없습니다. '
+    + '<b>python fetch.py kr_terms_trade kr_import_price kr_export_price kr_supply_price kr_cpi kr_cpi_core</b></div>';
+
+  const keys = [...X.keys()].filter(k => Y.has(k)).sort();
+  const kIdx = new Map(keys.map((k, i) => [k, i]));
+  // corr(X_t , Y_{t+k}) — k>0 이면 X 가 선행
+  const corr = (A, B, k) => {
+    const P = [], Q = [];
+    keys.forEach(m => { const j = kIdx.get(m) + k;
+      if (j < 0 || j >= keys.length) return;
+      const a = A.get(m), b = B.get(keys[j]);
+      if (a != null && b != null) { P.push(a); Q.push(b); } });
+    if (P.length < 24) return null;
+    const mp = P.reduce((x, y) => x + y, 0) / P.length, mq = Q.reduce((x, y) => x + y, 0) / Q.length;
+    let s1 = 0, s2 = 0, s3 = 0;
+    P.forEach((v, i) => { const a = v - mp, b = Q[i] - mq; s1 += a * b; s2 += a * a; s3 += b * b; });
+    return s2 && s3 ? { r: s1 / Math.sqrt(s2 * s3), n: P.length } : null;
+  };
+  const bar = r => `<div style="background:${r < 0 ? '#c0392b' : '#2b7a3d'};height:9px;`
+    + `width:${Math.round(Math.abs(r) * 100)}%;border-radius:2px;min-width:1px"></div>`;
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">설명변수: </span><div class="mode" id="tlX">'
+    + XS.map(([v, t, m]) => `<button data-tx="${v}" class="${totLagX === v ? 'active' : ''}"`
+        + `${m ? '' : ' disabled'}>${t}</button>`).join('')
+    + '</div></div>'
+    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+    + '<span style="font-size:12px;color:#555">대상 물가: </span><div class="mode" id="tlY">'
+    + YS.map(([v, t, m]) => `<button data-ty2="${v}" class="${totLagY === v ? 'active' : ''}"`
+        + `${m ? '' : ' disabled'}>${t}</button>`).join('')
+    + '</div></div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.95;margin-bottom:12px">'
+    + '둘 다 <b>전년동월비</b>로 바꿔 <b>corr(설명변수<sub>t</sub> , 물가<sub>t+k</sub>)</b> 를 시차 k별로 계산합니다. '
+    + '<b>k가 양수면 설명변수가 물가를 그만큼 앞선다</b>는 뜻입니다. '
+    + '표본은 화면 기간과 무관하게 <b>전 구간</b>을 씁니다 — 상관은 표본이 길수록 안정적입니다.</div>';
+
+  // 표: 선택한 대상 물가에 대해 설명변수 전체 × 시차
+  out += `<div class="block-title">시차별 상관 — 대상: ${ym[1]}</div>`
+    + '<div class="tscroll"><table class="data vlines" style="font-size:12.5px"><thead><tr>'
+    + '<th>설명변수</th>' + TOT_LAG_KS.map(k => `<th>${k > 0 ? '+' : ''}${k}개월</th>`).join('')
+    + '<th>최강 시차</th></tr></thead><tbody>'
+    + XS.map(([v, t, m]) => {
+        if (!m) return '';
+        const cells = TOT_LAG_KS.map(k => corr(m, Y, k));
+        const all = [];
+        for (let k = -6; k <= 24; k++) { const c = corr(m, Y, k); if (c) all.push([k, c]); }
+        const best = all.length ? all.reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a) : null;
+        return `<tr class="flat lv0${v === totLagX ? '' : ''}"`
+          + `${v === totLagX ? ' style="background:#eaf1fd"' : ''}>`
+          + `<td style="text-align:left${v === totLagX ? ';font-weight:700' : ''}">${t}</td>`
+          + cells.map(c => `<td${c && c.r < 0 ? ' class="neg"' : ''}>${c ? c.r.toFixed(3) : '-'}</td>`).join('')
+          + `<td style="font-weight:700">${best ? `${best[0] > 0 ? '+' : ''}${best[0]}개월 · ${best[1].r.toFixed(3)}` : '-'}</td></tr>`;
+      }).join('')
+    + '</tbody></table></div>';
+
+  // 선택 조합의 시차 프로파일 (막대)
+  const prof = [];
+  for (let k = -6; k <= 24; k++) { const c = corr(X, Y, k); if (c) prof.push([k, c]); }
+  const bestSel = prof.length ? prof.reduce((a, b) => Math.abs(b[1].r) > Math.abs(a[1].r) ? b : a) : null;
+  out += `<div class="block-title" style="margin-top:22px">${xm[1]} → ${ym[1]}</div>`
+    + '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + '<th>시차 k</th><th>상관</th><th style="width:220px">크기</th><th>관측치</th></tr></thead><tbody>'
+    + prof.filter(([k]) => TOT_LAG_KS.includes(k) || (bestSel && k === bestSel[0]))
+        .map(([k, c]) => `<tr class="flat lv0"${bestSel && k === bestSel[0] ? ' style="background:#eaf1fd"' : ''}>`
+          + `<td${bestSel && k === bestSel[0] ? ' style="font-weight:700;color:#1a4fa0"' : ''}>${k > 0 ? '+' : ''}${k}</td>`
+          + `<td${c.r < 0 ? ' class="neg"' : ''}>${c.r.toFixed(3)}</td><td>${bar(c.r)}</td>`
+          + `<td style="color:#8592a3">${c.n}</td></tr>`).join('')
+    + '</tbody></table>'
+    + '<div class="cchart" style="height:300px;margin-top:12px"><canvas id="ttLag"></canvas></div>'
+    + '<div id="ttLagRead" style="font-size:12.5px;line-height:1.95;margin-top:10px"></div>';
+  return out;
+}
+
+// 시차 탭의 차트·해설 (box.innerHTML 이후 호출)
+function totLagAfter(box, M) {
+  const el = box.querySelector('#ttLagRead');
+  const cv = box.querySelector('#ttLag');
+  if (!cv) return;
+  const xm = TOT_LAG_X.find(v => v[0] === totLagX) || TOT_LAG_X[0];
+  const ym = TOT_LAG_Y.find(v => v[0] === totLagY) || TOT_LAG_Y[0];
+  const yoyAll = (id, nm) => { const m = M(id, nm);
+    if (!m.size) return null;
+    const ks = [...m.keys()].sort();
+    const ix = new Map(ks.map((d, i) => [d.slice(0, 7), i]));
+    const pm = d => { const [y, mo] = d.slice(0, 7).split('-'); return `${+y - 1}-${mo}`; };
+    const o = new Map();
+    ks.forEach(d => { const j = ix.get(pm(d)); if (j == null) return;
+      const a = m.get(d), b = m.get(ks[j]);
+      if (a != null && b) o.set(d.slice(0, 7), (a / b - 1) * 100); });
+    return o; };
+  const X = yoyAll(xm[2], xm[3]), Y = yoyAll(ym[2], ym[3]);
+  if (!X || !Y) return;
+  const keys = [...X.keys()].filter(k => Y.has(k)).sort();
+  const kIdx = new Map(keys.map((k, i) => [k, i]));
+  const corr = k => { const P = [], Q = [];
+    keys.forEach(m => { const j = kIdx.get(m) + k; if (j < 0 || j >= keys.length) return;
+      const a = X.get(m), b = Y.get(keys[j]);
+      if (a != null && b != null) { P.push(a); Q.push(b); } });
+    if (P.length < 24) return null;
+    const mp = P.reduce((x, y) => x + y, 0) / P.length, mq = Q.reduce((x, y) => x + y, 0) / Q.length;
+    let s1 = 0, s2 = 0, s3 = 0;
+    P.forEach((v, i) => { const a = v - mp, b = Q[i] - mq; s1 += a * b; s2 += a * a; s3 += b * b; });
+    return s2 && s3 ? s1 / Math.sqrt(s2 * s3) : null; };
+  const prof = [];
+  for (let k = -6; k <= 24; k++) { const r = corr(k); if (r != null) prof.push([k, r]); }
+  if (!prof.length) return;
+  const best = prof.reduce((a, b) => Math.abs(b[1]) > Math.abs(a[1]) ? b : a);
+  if (totCharts[2]) { totCharts[2].destroy(); totCharts[2] = null; }
+  totCharts[2] = new Chart(cv, {
+    type: 'bar',
+    data: { labels: prof.map(([k]) => (k > 0 ? '+' : '') + k),
+      datasets: [{ label: `corr(${xm[1]} , ${ym[1]})`, data: prof.map(([, r]) => r),
+        backgroundColor: prof.map(([k, r]) => k === best[0] ? '#1a4fa0' : (r < 0 ? '#e6a0a0' : '#a9c6e8')),
+        borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        title: { display: true, font: { size: 13 },
+          text: `시차 프로파일 — 가로축 k(개월), 양수면 ${xm[1]}가 선행` },
+        tooltip: { callbacks: { label: it => ` ${it.parsed.y.toFixed(3)}` } } },
+      scales: { x: { ticks: { font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) },
+             suggestedMin: -0.8, suggestedMax: 0.8 } } },
+  });
+  const isTerms = totLagX === 'net' || totLagX === 'inc';
+  if (el) el.innerHTML =
+    `<b>${xm[1]}</b> 가 <b>${ym[1]}</b> 를 가장 잘 설명하는 시차는 `
+    + `<b>${best[0] > 0 ? `${best[0]}개월 선행` : best[0] === 0 ? '동행' : `${-best[0]}개월 후행`}</b>이고 `
+    + `그때 상관은 <b>${best[1].toFixed(3)}</b>입니다.`
+    + (Math.abs(best[1]) < 0.3 ? ' <b>상관이 약해</b> 전이 관계를 읽기 어렵습니다.' : '')
+    + (isTerms ? '<div style="color:#c0392b;margin-top:6px">※ 교역조건은 <b>수출물가 ÷ 수입물가</b>라 '
+        + '분모에 수입물가가 들어 있습니다. 헤드라인 물가와 음(−)의 동행 상관이 나오는 건 인과라기보다 '
+        + '<b>수입물가가 양쪽에 공통으로 들어간</b> 정의상 되먹임에 가깝습니다. '
+        + '공급측 전이를 보려면 <b>수입물가</b>를 직접 고르세요.</div>' : '')
+    + '<div style="color:#8592a3;margin-top:6px">※ 상관은 인과가 아닙니다. 환율·유가처럼 '
+    + '양쪽을 동시에 움직이는 공통 요인이 있고, 표본에 코로나·인플레 급등기가 함께 들어 있습니다. '
+    + '시차 <b>위치</b>를 보는 용도로 쓰세요.</div>';
 }
 
 function renderTot() {
@@ -6332,7 +6594,8 @@ function renderTot() {
   const CM = { lvl: ['지수 (2020=100)', lvl], mom: ['전월비 MoM (%)', mom], yoy: ['전년동월비 YoY (%)', yoy] };
   const cfn = CM[totCM][1], clab = CM[totCM][0];
 
-  const tabs = [['main', '종합'], ['exp', '수출물가 업종별'], ['sup', '국내공급물가']];
+  const tabs = [['main', '종합'], ['exp', '수출물가 업종별'], ['sup', '국내공급물가'],
+                ['lag', '물가 전이 시차']];
   let out = '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
     + '<div class="mode">'
     + tabs.map(([k, t]) => `<button data-tt="${k}" class="${totTab === k ? 'active' : ''}">${t}</button>`).join('')
@@ -6399,6 +6662,8 @@ function renderTot() {
             return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
         + '</tbody></table></div>';
     }
+  } else if (totTab === 'lag') {
+    out += totLagHtml(M, prevN, cols);
   } else if (totTab === 'exp') {
     const ind = totData['kr_export_price'];
     const names = ind ? [...new Set(ind.series.map(s => s.name.split(' · ')[0]))]
@@ -6450,6 +6715,11 @@ function renderTot() {
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('[data-tt]').forEach(b => b.onclick = () => { totTab = b.dataset.tt; renderTot(); });
   box.querySelectorAll('#totCur button').forEach(b => b.onclick = () => { totCur = b.dataset.tc; renderTot(); });
+  box.querySelectorAll('#tlX button').forEach(b => b.onclick = () => {
+    if (!b.disabled) { totLagX = b.dataset.tx; renderTot(); } });
+  box.querySelectorAll('#tlY button').forEach(b => b.onclick = () => {
+    if (!b.disabled) { totLagY = b.dataset.ty2; renderTot(); } });
+  if (totTab === 'lag') totLagAfter(box, M);
   box.querySelectorAll('#totCM button').forEach(b => b.onclick = () => { totCM = b.dataset.cm; renderTot(); });
 
   const mkC = (i, title, datasets, extra) => {
@@ -7064,10 +7334,12 @@ const RETAIL = { id: 'retail_all', name: '소매판매',
 const CARD = { id: 'card_all', name: '카드사용액',
                ids: ['kr_card_approve', 'kr_card_weekly', 'kr_card',
                      'kr_base_rate', 'kr_cpi_core', 'kr_gdp_real',
-                     'kr_cpi', 'kr_infl_expect', 'kr_card_weekly_ind'],
+                     'kr_cpi', 'kr_infl_expect', 'kr_card_weekly_ind',
+                     'kr_card_weekly_age'],
                // 카드 화면 '전용' 지표만. 나머지(기준금리·물가·GDP)는 다른 메뉴에서도 쓰므로
                // 메뉴에서 지우면 안 된다. nav 는 이 목록만 흡수한다.
-               own: ['kr_card_approve', 'kr_card_weekly', 'kr_card_weekly_ind', 'kr_card'] };
+               own: ['kr_card_approve', 'kr_card_weekly', 'kr_card_weekly_ind',
+                     'kr_card_weekly_age', 'kr_card'] };
 // 소매판매 계층 (통계청 소매판매액지수 분류) — 항목명 → 들여쓰기 레벨
 const RETAIL_LV = {
   goods: {   // 상품군별
@@ -7399,11 +7671,13 @@ let cardData = null, cardTab = 'month';
 let cardCharts = [null, null, null];
 let cardWkCharts = [null, null];
 let cardWkWin = 13;      // 주간 이동평균 창 (주) — 13주 = 3개월
+let cardWkMonBase = 'last';   // 월별 집계 기준: last(월말 주) | avg(월평균)
 
 async function enterCard() {
   const inds = await Promise.all(CARD.ids.map(id => loadIndicator(id).catch(() => null)));
   cardData = { approve: inds[0], weekly: inds[1], ecos: inds[2], rate: inds[3], core: inds[4],
-               gdp: inds[5], cpi: inds[6], exp: inds[7], weeklyInd: inds[8] };
+               gdp: inds[5], cpi: inds[6], exp: inds[7], weeklyInd: inds[8],
+               weeklyAge: inds[9] };
   if (!inds[0] && !inds[1]) {
     alert('카드 데이터가 없습니다. python fetch.py kr_card_approve kr_card_weekly 실행 필요.');
     return;
@@ -7614,14 +7888,21 @@ function renderCardWeek() {
     + '<span style="font-size:12px;color:#555">이동평균: </span><div class="mode" id="cwWin">'
     + [[4, '4주'], [13, '13주 (3개월)'], [26, '26주 (6개월)']].map(([v, t]) =>
         `<button data-cw="${v}" class="${W === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><span style="font-size:12px;color:#8592a3">기간 설정은 월 단위지만 표·차트는 주 단위입니다</span></div>'
+    + '</div><span style="font-size:12px;color:#8592a3">기간 설정은 월 단위지만 표·차트는 주 단위입니다</span>'
+    + '<span style="font-size:12px;color:#555;margin-left:12px">월별 집계: </span><div class="mode" id="cwMon">'
+    + [['last', '월말 주'], ['avg', '월평균']].map(([v, t]) =>
+        `<button data-cm="${v}" class="${cardWkMonBase === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div></div>'
     + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
     + '통계청 <b>나우캐스트</b>(원자료 <b>신한카드</b>) 주간 지표. 공표가 가장 빠릅니다(약 2주 시차). '
     + '포털은 변화율만 주지만, <b>2020년 1월 대비</b>는 기준이 고정이라 <b>지수로 되돌려</b> 원하는 기간으로 묶었습니다. '
     + '주간 원계열은 명절·요일 배열에 크게 흔들리므로(전년동주비 표준편차 10%p) '
     + `<b>${W}주 이동평균</b>을 기본으로 봅니다. `
     + '<span style="color:#c0392b">신한카드 <b>단일사 표본</b>이라 월간 탭(여신협회 전체)과 모집단이 다릅니다 — '
-    + '수준이 아니라 방향만 비교하세요. 최근 1~2주는 속보치라 다음 수집 때 바뀝니다.</span></div>'
+    + '수준이 아니라 방향만 비교하세요. 최근 1~2주는 속보치라 다음 수집 때 바뀝니다.</span><br>'
+    + '오른쪽 차트의 <b>월별 집계</b>는 달마다 한 점만 남깁니다. <b>월말 주</b>는 시점이 또렷한 대신 '
+    + '그 주의 특수요인(명절·속보치)에 그대로 노출되고, <b>월평균</b>은 그 달 전체를 써서 훨씬 안정적입니다. '
+    + '두 값이 크게 벌어지면 월말 주가 튄 것이니 월평균을 보세요.</div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="cwC${i}"></canvas></div></div>`).join('')
     + '</div>';
@@ -7652,7 +7933,7 @@ function renderCardWeek() {
     + '</tbody></table></div>';
 
   // 업종별 — 같은 이동평균 창으로 어느 업종이 늘고 줄었는지
-  out += `<div class="block-title" style="margin-top:24px">업종별 ${W}주 이동평균 전년동기비</div>`
+  out += `<div class="block-title" style="margin-top:24px">세분류별 ${W}주 이동평균 전년동기비</div>`
     + '<div id="cwSec"></div>'
     + '<div class="block-title" style="margin-top:24px">월간(KOSIS)과 대조</div>'
     + '<div id="cwCmp" style="font-size:12.5px;line-height:1.95"></div>';
@@ -7661,6 +7942,8 @@ function renderCardWeek() {
   box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
   box.querySelectorAll('#cwWin button').forEach(b =>
     b.onclick = () => { cardWkWin = +b.dataset.cw; renderCardWeek(); });
+  box.querySelectorAll('#cwMon button').forEach(b =>
+    b.onclick = () => { cardWkMonBase = b.dataset.cm; renderCardWeek(); });
 
   cardWkCharts.forEach(c => c && c.destroy());
   cardWkCharts = [null, null];
@@ -7682,20 +7965,41 @@ function renderCardWeek() {
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
       scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
+  // ── 차트 2: 월별 전년동기비 ──
+  //   주간 지수를 달마다 한 점으로 줄여(월말 주 또는 월평균) 전년동월과 비교한다.
+  //   주간 원계열은 명절·요일 배열에 흔들리는데, 월 단위로 묶으면 그 잡음이 상당히 걷힌다.
+  //   월평균은 그 달 전체를 쓰고, 월말 주는 시점이 또렷한 대신 그 주의 특수요인에 노출된다.
+  const mAcc = new Map();
+  allW.forEach((d, i) => { const k = d.slice(0, 7);
+    (mAcc.get(k) || mAcc.set(k, []).get(k)).push({ d, v: I[i] }); });
+  const mKeys = [...mAcc.keys()].sort();
+  const mVal = new Map(mKeys.map(k => { const a = mAcc.get(k);
+    return [k, cardWkMonBase === 'avg' ? a.reduce((x, y) => x + y.v, 0) / a.length
+                                       : a[a.length - 1].v]; }));
+  const pmK = k => { const [y, mo] = k.split('-'); return `${+y - 1}-${mo}`; };
+  const mYoy = mKeys.map(k => { const p = mVal.get(pmK(k));
+    return p ? (mVal.get(k) / p - 1) * 100 : null; });
+  // 화면 기간 안의 달만
+  const mKeep = mKeys.map((k, i) => (inRange(k + '-01') || inRange(k + '-28')) ? i : -1).filter(i => i >= 0);
+  const mLab = mKeep.map(i => mKeys[i]);
+  const mDat = mKeep.map(i => mYoy[i]);
+  const partial = mKeep.length && mAcc.get(mKeys[mKeep[mKeep.length - 1]]).length < 4;
+  const baseLab = cardWkMonBase === 'avg' ? '월평균' : '월말 주';
   cardWkCharts[1] = new Chart(box.querySelector('#cwC1'), {
     type: 'line',
-    data: { labels: cols, datasets: [
-      { label: `${W}주 이동평균`, data: cMa, borderColor: '#1a4fa0', backgroundColor: '#1a4fa0',
-        borderWidth: 3, pointRadius: 0, tension: .15 },
-      { label: '주간 지수 (기본 숨김)', data: cI, borderColor: '#c3d5f0', backgroundColor: '#c3d5f0',
-        borderWidth: 1.5, pointRadius: 0, tension: .1, hidden: true },
+    data: { labels: mLab, datasets: [
+      { label: `월별 전년동기비 (${baseLab} 기준)`, data: mDat,
+        borderColor: '#2b7a3d', backgroundColor: '#2b7a3d',
+        borderWidth: 3, pointRadius: 3, tension: .15 },
     ] },
     options: { responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-        title: { display: true, font: { size: 13 }, text: '지수 (2020년 1월 = 100)' },
-        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
-      scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 } } } } },
+        title: { display: true, font: { size: 13 },
+          text: `월별 전년동기비 (%) — ${baseLab} 기준` + (partial ? ' · 마지막 달은 미완성' : '') },
+        tooltip: { callbacks: { label: it => ` ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+      scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
 
   // ── 업종별 ──
@@ -7752,22 +8056,37 @@ function renderCardWeek() {
 // 업종별 주간 카드사용액 — 나우캐스트 COICOP 7개 업종.
 // 전체와 같은 방식(지수 → W주 이동평균 → 전년동기비)으로 맞춰 어느 쪽이 부진하고 늘었는지 본다.
 let cardSecChart = null;
+let cardSecCut = 'ind';   // 세분류 축: ind(업종) | age(연령대)
+const CARD_SEC_CUT = [
+  ['ind', '업종별', 'weeklyInd', 'kr_card_weekly_ind', 'cd2=A00029 · COICOP 대분류 7개'],
+  ['age', '연령대별', 'weeklyAge', 'kr_card_weekly_age', 'cd2=A00007 · 6구간'],
+];
 function renderCardWeekSectors(box, W) {
   const el = box.querySelector('#cwSec');
   if (cardSecChart) { cardSecChart.destroy(); cardSecChart = null; }
-  const ind = cardData && cardData.weeklyInd;
+  const meta = CARD_SEC_CUT.find(x => x[0] === cardSecCut) || CARD_SEC_CUT[0];
+  const ind = cardData && cardData[meta[2]];
+  const tabs = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<div class="mode" id="cwCut">'
+    + CARD_SEC_CUT.map(([v, t]) => `<button data-cs="${v}" class="${cardSecCut === v ? 'active' : ''}"`
+        + `${(cardData && cardData[CARD_SEC_CUT.find(x => x[0] === v)[2]]) ? '' : ' disabled'}>${t}</button>`).join('')
+    + `</div><span style="font-size:12px;color:#8592a3">${meta[4]}</span></div>`;
+  const bindCut = () => box.querySelectorAll('#cwCut button').forEach(b =>
+    b.onclick = () => { if (!b.disabled) { cardSecCut = b.dataset.cs; renderCardWeek(); } });
   if (!ind) {
-    if (el) el.innerHTML = '<div style="padding:14px;color:#555;line-height:1.9">'
-      + '업종별 데이터가 없습니다. PC에서 <b>python fetch.py kr_card_weekly_ind</b> 실행 후 새로고침해 주세요.'
-      + '<br><span style="color:#8592a3;font-size:12.5px">나우캐스트 cd2=A00029 · COICOP 대분류 7개</span></div>';
+    if (el) { el.innerHTML = tabs + '<div style="padding:14px;color:#555;line-height:1.9">'
+      + `${meta[1]} 데이터가 없습니다. PC에서 <b>python fetch.py ${meta[3]}</b> 실행 후 새로고침해 주세요.`
+      + `<br><span style="color:#8592a3;font-size:12.5px">나우캐스트 ${meta[4]}</span></div>`;
+      bindCut(); }
     return;
   }
   const secs = ind.series
     .filter(x => baseName(x.name).endsWith('지수 (2020년 1월=100)'))
     .map(x => ({ name: baseName(x.name).split(' · ')[0], data: x.data }));
   if (!secs.length) {
-    if (el) el.innerHTML = '<div style="padding:14px;color:#c0392b">업종별 지수 계열을 찾지 못했습니다. '
-      + '<b>python fetch.py kr_card_weekly_ind</b> 를 다시 실행해 주세요.</div>';
+    if (el) { el.innerHTML = tabs + `<div style="padding:14px;color:#c0392b">${meta[1]} 지수 계열을 찾지 못했습니다. `
+      + `<b>python fetch.py ${meta[3]}</b> 를 다시 실행해 주세요.</div>`;
+      bindCut(); }
     return;
   }
   // 각 업종: 지수 → W주 이동평균 → 52주 전 대비
@@ -7782,7 +8101,9 @@ function renderCardWeekSectors(box, W) {
     const prev = c.yo[li - 13] ?? null;          // 13주 전과 비교해 개선/악화
     return { name: s.name, dates: c.d, yo: c.yo, last: c.yo[li], d13: c.yo[li] != null && prev != null ? c.yo[li] - prev : null };
   }).filter(r => r.last != null).sort((a, b) => b.last - a.last);
-  if (!rows.length) { if (el) el.innerHTML = '<div style="padding:14px;color:#8592a3">계산 가능한 업종이 없습니다.</div>'; return; }
+  if (!rows.length) { if (el) { el.innerHTML = tabs
+    + `<div style="padding:14px;color:#8592a3">계산 가능한 ${meta[1].replace('별', '')} 항목이 없습니다.</div>`;
+    bindCut(); } return; }
 
   const lastDate = rows[0].dates[rows[0].dates.length - 1];
   const up = rows.filter(r => r.last > 0), dn = rows.filter(r => r.last <= 0);
@@ -7790,11 +8111,16 @@ function renderCardWeekSectors(box, W) {
   const fp = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%p';
   const barW = r => Math.min(100, Math.abs(r) / Math.max(...rows.map(x => Math.abs(x.last)), 1) * 100);
 
-  let h = `<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:8px">`
+  const unitNm = cardSecCut === 'age' ? '연령대' : '업종';
+  // 받침에 따라 조사를 고른다 ('업종이' / '연령대가')
+  const hasJong = w => { const c = w.charCodeAt(w.length - 1) - 0xAC00;
+    return c >= 0 && c <= 11171 && c % 28 !== 0; };
+  const josa = hasJong(unitNm) ? '이' : '가';
+  let h = tabs + `<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:8px">`
     + `<b>${lastDate}</b> 기준 · 전체와 같은 방식(지수 → ${W}주 이동평균 → 전년동기비)으로 맞췄습니다. `
     + `<b>13주 변화</b>는 같은 지표를 13주 전과 비교한 것으로, <b>추세가 개선 중인지 악화 중인지</b>를 봅니다.</div>`
     + '<div class="tscroll"><table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
-    + `<th>업종</th><th>${W}주 평균 YoY</th><th style="width:170px">크기</th><th>13주 변화</th></tr></thead><tbody>`
+    + `<th>${unitNm}</th><th>${W}주 평균 YoY</th><th style="width:170px">크기</th><th>13주 변화</th></tr></thead><tbody>`
     + rows.map(r => `<tr class="flat lv0"><td style="text-align:left">${r.name}</td>`
         + `<td${r.last < 0 ? ' class="neg"' : ''}>${f(r.last)}</td>`
         + `<td><div style="background:${r.last < 0 ? '#c0392b' : '#2b7a3d'};height:9px;`
@@ -7806,14 +8132,18 @@ function renderCardWeekSectors(box, W) {
   const best = rows[0], worst = rows[rows.length - 1];
   const imp = rows.filter(r => r.d13 != null).sort((a, b) => b.d13 - a.d13);
   h += '<div style="font-size:12.5px;line-height:1.95;margin-top:10px">'
-    + `<b>${up.length}개 업종이 증가, ${dn.length}개가 감소</b>했습니다. `
+    + `<b>${up.length}개 ${unitNm}${josa} 증가, ${dn.length}개가 감소</b>했습니다. `
     + `가장 강한 곳은 <b>${best.name}(${f(best.last)})</b>, 가장 부진한 곳은 <b>${worst.name}(${f(worst.last)})</b>입니다. `
     + (imp.length ? `추세로 보면 <b>${imp[0].name}</b>가 13주 전보다 <b>${fp(imp[0].d13)}</b> 개선돼 가장 좋아졌고, `
         + `<b>${imp[imp.length - 1].name}</b>가 <b>${fp(imp[imp.length - 1].d13)}</b>로 가장 나빠졌습니다.` : '')
-    + '<div style="color:#8592a3;margin-top:6px">※ 신한카드 표본이라 업종 구성이 전체 시장과 다를 수 있습니다. '
-    + '업종 간 <b>상대 비교</b>로 보시고 절대 수준은 조심하세요. 최근 1~2주는 속보치입니다.</div></div>'
+    + `<div style="color:#8592a3;margin-top:6px">※ 신한카드 표본이라 ${unitNm} 구성이 전체 시장과 다를 수 있습니다. `
+    + `${unitNm} 간 <b>상대 비교</b>로 보시고 절대 수준은 조심하세요. 최근 1~2주는 속보치입니다.`
+    + (cardSecCut === 'age' ? ' 카드 명의자 기준이라 <b>가구 내 실제 사용자와 다를 수 있습니다</b>'
+        + '(예: 부모 명의 카드를 자녀가 사용).' : '')
+    + '</div></div>'
     + '<div class="cchart" style="height:300px;margin-top:12px"><canvas id="cwSecC"></canvas></div>';
   el.innerHTML = h;
+  bindCut();
 
   // 추이 차트 — 화면 기간만
   const base0 = rows[0];
@@ -7828,12 +8158,223 @@ function renderCardWeekSectors(box, W) {
     options: { responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-        title: { display: true, font: { size: 13 }, text: `업종별 ${W}주 이동평균 전년동기비 (%)` },
+        title: { display: true, font: { size: 13 }, text: `${meta[1]} ${W}주 이동평균 전년동기비 (%)` },
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
       scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
                  callback: function (v) { const l = this.getLabelForValue(v); return l ? l.slice(2, 7) : ''; } } },
         y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
+}
+
+// ── 빈일자리·물가 (노동시장 긴축도 vs 근원물가) ─────────────────
+// V/U 비율 = 빈일자리수 ÷ 실업자수 × 100. 높을수록 구인난 = 노동시장 긴축.
+// 미국 JOLTS 의 vacancies-to-unemployment ratio 에 대응하는 한국판이다
+// (미국은 배수 0.6~2.0, 한국은 % 로 10~35 수준).
+//
+// 계절조정:
+//   실업자는 통계청 공식 계절조정본(kr_emp_total_sa)을 쓴다.
+//   빈일자리는 공식 계절조정본이 없지만(KOSIS DT_118N_SEASON10 에 임금·근로시간·종사자만),
+//   자체 추정해 보니 계절요인이 0.961~1.050 으로 매우 약해 조정 실익이 없었다.
+//   실제로 '실업자만 조정' 과 '둘 다 조정' 의 차이가 평균 0.34%p·최대 1.37%p 에 그친다.
+//   → 자체 추정을 끌어들이지 않고 공식 통계만 쓰는 쪽을 택했다.
+//   비율의 계절성은 대부분 분모(실업자)에서 왔다. 조정 전후 월내 변동폭 12.6%p → 6.0%p.
+//
+// 이동평균 주의 (중요):
+//   후행 이동평균은 계열을 창 길이의 절반만큼 뒤로 민다. 12개월 이동평균이면 약 5.5개월.
+//   그래서 평활 후 시차 상관을 보면 '물가가 V/U 를 6개월 선행'하는 것처럼 나오는데,
+//   이는 평활이 만든 착시다. 원계열로는 k=-1 (사실상 동행) 이다.
+let vuData = null, vuTarget = 'core';
+let vuCharts = [null, null, null, null, null];   // [0]=메인, [1~4]=구성지표
+const VU_TARGET = [['core', '근원 CPI', 'kr_cpi_core', '식료품 및 에너지제외'],
+                   ['head', '헤드라인 CPI', 'kr_cpi', '총지수']];
+
+function renderKrEmpVU() {
+  const box = document.getElementById('retailWrap');
+  const vac = vuData && vuData['kr_vacancy'];
+  if (!vac) {
+    box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.9">'
+      + '빈일자리 데이터가 없습니다.<br>PC에서 <b>python fetch.py kr_vacancy</b> 실행 후 새로고침해 주세요.'
+      + '<br><span style="color:#8592a3;font-size:12.5px">KOSIS 118 · 사업체노동력조사 고용부문</span></div>';
+    return;
+  }
+  const tm = VU_TARGET.find(x => x[0] === vuTarget) || VU_TARGET[0];
+  const pick = (ind, nm) => { if (!ind) return null;
+    const x = ind.series.find(y => baseName(y.name).endsWith(nm))
+           || ind.series.find(y => baseName(y.name).indexOf(nm) === 0);
+    return x ? new Map(x.data.map(p => [p.d.slice(0, 7), p.v])) : null; };
+  const V = pick(vac, '빈일자리_전체');
+  const RATE = pick(vac, '빈일자리율_전체');
+  // 실업자는 통계청 공식 계절조정본. 비율의 계절성은 대부분 여기서 온다.
+  const uSrc = (krEmpData && krEmpData.totSa) || (krEmpData && krEmpData.tot);
+  const uIsSa = !!(krEmpData && krEmpData.totSa);
+  const U = uSrc
+    ? new Map((uSrc.series.find(x => baseName(x.name) === '계 · 실업자') || { data: [] })
+        .data.map(p => [p.d.slice(0, 7), p.v])) : null;
+  const P = pick(vuData[tm[2]], tm[3]);
+  if (!V || !U || !P) {
+    box.innerHTML = '<div style="padding:28px;color:#c0392b">필요한 계열이 없습니다 — '
+      + `빈일자리 ${V ? 'OK' : '없음'} / 실업자 ${U ? 'OK' : '없음'} / ${tm[1]} ${P ? 'OK' : '없음'}</div>`;
+    return;
+  }
+  const pm = m => { const [y, mo] = m.split('-'); return `${+y - 1}-${mo}`; };
+  const ms = [...V.keys()].filter(m => U.has(m)).sort();
+  //  빈일자리(명) ÷ 실업자(천명 × 1000) × 100
+  const raw = ms.map(m => V.get(m) / (U.get(m) * 1000) * 100);
+  // 구직자 = 실업자 + 잠재구직자. 잠재구직자는 취업을 원하고 가능하나 구직활동을 하지 않아
+  //   실업자로 잡히지 않는 사람(고용보조지표 U-4 계열). 계절조정본이 없어 이 계열만 원계열이다.
+  const sup = vuData && vuData['kr_emp_supp'];
+  const pickS = nm => { if (!sup) return null;
+    const x = sup.series.find(y => baseName(y.name).replace(/^-\s*/, '') === nm);
+    return x ? new Map(x.data.map(pt => [pt.d.slice(0, 7), pt.v])) : null; };
+  const POT = pickS('잠재구직자'), URAW = pickS('실업자');
+  const seeker = m => (POT && URAW && POT.has(m) && URAW.has(m))
+    ? (URAW.get(m) + POT.get(m)) * 1000 : null;
+  const py = ms.map(m => { const c = P.get(m), b = P.get(pm(m));
+    return c != null && b ? (c / b - 1) * 100 : null; });
+
+  // 이 탭은 기간 설정과 무관하게 전 구간(2018~)을 그린다 — 국면 비교가 목적이라 짧게 자르면 의미가 없다.
+  const cols = ms.slice();
+  const cut = a => a.slice();
+  const li = ms.length - 1;
+  const f2 = v => v == null ? '' : v.toFixed(2);
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<span style="font-size:12px;color:#555">물가: </span><div class="mode" id="vuTg">'
+    + VU_TARGET.map(([v, t]) => `<button data-vt="${v}" class="${vuTarget === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><span style="font-size:12px;color:#8592a3">기간 설정과 무관하게 전 구간을 그립니다</span></div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.95;margin-bottom:12px">'
+    + '<b>V/U 비율 = 빈일자리수 ÷ 실업자수 × 100</b>. 높을수록 구인난이 심하다 = 노동시장이 빡빡하다는 뜻입니다. '
+    + '미국 JOLTS 의 vacancies-to-unemployment ratio 한국판입니다(미국은 배수, 한국은 %).<br>'
+    + `<b>실업자는 통계청 공식 계절조정본</b>${uIsSa ? '' : '<span style="color:#c0392b">(없어서 원계열 사용 중)</span>'}, `
+    + '빈일자리는 원계열입니다. 빈일자리는 계절요인이 0.96~1.05로 <b>매우 약해</b> 조정 실익이 없습니다 — '
+    + '비율의 계절성은 대부분 <b>분모인 실업자</b>에서 옵니다(조정 전후 월내 변동폭 12.6%p → 6.0%p).</div>'
+    + '<div class="cchart" style="height:340px;margin-bottom:6px"><canvas id="vuC0"></canvas></div>'
+    + '<div id="vuNote" style="font-size:12.5px;line-height:1.95;margin-bottom:16px"></div>';
+
+  // 요약
+  const kbox = (t, v, sub, c) => `<div style="flex:1;min-width:150px;border:1px solid #e0e5ec;`
+    + `border-radius:10px;padding:11px 14px;background:#fbfcfe">`
+    + `<div style="font-size:11.5px;color:#8592a3">${t}</div>`
+    + `<div style="font-size:19px;font-weight:700;color:${c};margin:2px 0">${v}</div>`
+    + `<div style="font-size:11.5px;color:#8592a3">${sub}</div></div>`;
+  out += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'
+    + kbox(`${ms[li]} V/U`, f2(raw[li]) + '%', '빈일자리 ÷ 실업자(계조)', '#1a4fa0')
+    + kbox('빈일자리수', V.get(ms[li]).toLocaleString('ko-KR') + '명', '사업체노동력조사', '#1a2b4a')
+    + kbox('실업자', U.get(ms[li]).toLocaleString('ko-KR') + '천명',
+           uIsSa ? '경제활동인구조사 계절조정' : '경제활동인구조사 원계열', '#1a2b4a')
+    + kbox(`${tm[1]} YoY`, py[li] == null ? '-' : f2(py[li]) + '%', '전년동월비',
+           py[li] != null && py[li] >= 2 ? '#c0392b' : '#2b7a3d')
+    + (RATE ? kbox('빈일자리율', f2(RATE.get(ms[li])) + '%', '빈일자리 ÷ (종사자+빈일자리)', '#1a2b4a') : '')
+    + '</div>';
+
+  const th = '<th>지표</th>' + cols.map(m => `<th>${m.slice(2)}</th>`).join('');
+  const row = (nm, fn, cls) => `<tr class="flat lv0"><td style="text-align:left${cls || ''}">${nm}</td>`
+    + cols.map(m => `<td>${fn(m)}</td>`).join('') + '</tr>';
+  const n0 = v => v == null ? '' : Math.round(v).toLocaleString('ko-KR');
+  out += '<div class="block-title" style="margin-top:22px">구성 지표</div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:8px">'
+    + 'V/U 는 비율이라 <b>분자·분모가 각각 어떻게 움직였는지</b>가 보이지 않습니다. '
+    + '같은 비율이라도 빈일자리가 늘어서인지 실업자가 줄어서인지에 따라 뜻이 다릅니다.</div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">'
+    + [0, 1, 2, 3].map(i => `<div style="flex:1;min-width:300px"><div class="cchart" style="height:220px">`
+        + `<canvas id="vuS${i}"></canvas></div></div>`).join('')
+    + '</div>'
+    + '<div class="block-title" style="margin-top:22px">월별 수치</div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:6px">'
+    + '<b>구직자 = 실업자 + 잠재구직자</b>. 잠재구직자는 취업을 원하고 가능하지만 구직활동을 하지 않아 '
+    + '실업자로 잡히지 않는 사람입니다(고용보조지표). '
+    + '<span style="color:#c0392b">잠재구직자는 계절조정본이 없어 <b>구직자 열만 원계열</b>입니다 — '
+    + '나머지 실업자·V/U·1개당은 계절조정 기준입니다.</span></div>'
+    + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
+    + row('빈일자리 (개)', m => n0(V.get(m)))
+    + row('실업자 (명, 계조)', m => n0(U.get(m) * 1000))
+    + row('구직자 (명, 원계열)', m => n0(seeker(m)))
+    + row('V/U 비율 (%)', m => { const a = V.get(m), b = U.get(m);
+        return a != null && b ? (a / (b * 1000) * 100).toFixed(2) : ''; }, ';font-weight:700')
+    + row('빈일자리 1개당 구직자 (명)', m => { const a = V.get(m), b = U.get(m);
+        return a && b ? (b * 1000 / a).toFixed(1) : ''; }, ';font-weight:700')
+    + '</tbody></table></div>';
+
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
+  box.querySelectorAll('#vuTg button').forEach(b =>
+    b.onclick = () => { vuTarget = b.dataset.vt; renderKrEmpVU(); });
+
+  vuCharts.forEach(c => c && c.destroy()); vuCharts = [null, null];
+  vuCharts[0] = new Chart(box.querySelector('#vuC0'), {
+    type: 'line',
+    data: { labels: cols, datasets: [
+      { label: 'V/U 비율 (%)', data: cut(raw),
+        borderColor: '#1a6b8f', backgroundColor: '#1a6b8f', borderWidth: 2.5,
+        pointRadius: 0, tension: .15, yAxisID: 'y', spanGaps: false },
+      { label: `${tm[1]} 전년동월비 (%)`, data: cut(py),
+        borderColor: '#e8722c', backgroundColor: '#e8722c', borderWidth: 2.5,
+        pointRadius: 0, tension: .15, yAxisID: 'y1' },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 },
+          text: `노동시장 긴축도와 ${tm[1]} — 좌축 V/U(높을수록 빡빡), 우축 물가` },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label.split(' (')[0]}: `
+          + (it.parsed.y == null ? '-' : it.parsed.y.toFixed(2) + '%') } } },
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 0, font: { size: 10 },
+             callback: function (v) { const l = this.getLabelForValue(v);
+               return l && l.slice(5) === '01' ? "'" + l.slice(2, 4) : ''; } },
+             grid: gridEveryN(cols, 6) },
+        y: { position: 'left', ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') },
+             title: { display: true, text: 'V/U (%)', font: { size: 10 } } },
+        y1: { position: 'right', grid: { drawOnChartArea: false },
+              ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') },
+              title: { display: true, text: `${tm[1]} YoY (%)`, font: { size: 10 } } } } },
+  });
+
+  // 구성 지표 4종 — 메인 차트가 비율이라 원래 수준이 안 보인다. 각각 따로 그린다.
+  const SUBS = [
+    ['빈일자리', '개', '#eb6834', m => V.get(m) ?? null],
+    ['실업자 (계절조정)', '명', '#2a78d6', m => U.has(m) ? U.get(m) * 1000 : null],
+    ['구직자 (실업자+잠재구직자, 원계열)', '명', '#4a3aa7', m => seeker(m)],
+    ['빈일자리 1개당 구직자', '명', '#1baf7a', m => { const a = V.get(m), b = U.get(m);
+      return a && b ? b * 1000 / a : null; }],
+  ];
+  SUBS.forEach((_, i) => { if (vuCharts[i + 1]) { vuCharts[i + 1].destroy(); vuCharts[i + 1] = null; } });
+  // autoSkip 은 콜백보다 먼저 눈금을 솎아낸다. 켜 두면 남은 눈금 중 1월이 거의 없어
+  // 축이 텅 빈다. 꺼서 모든 지점을 콜백에 태우고, 1월만 연도를 찍는다.
+  const subXT = { autoSkip: false, maxRotation: 0, font: { size: 10 },
+    callback: function (v) { const l = this.getLabelForValue(v);
+      return l && l.slice(5) === '01' ? "'" + l.slice(2, 4) : ''; } };
+  SUBS.forEach(([nm, unit, color, fn], i) => {
+    const cv = box.querySelector('#vuS' + i);
+    if (!cv) return;
+    const data = cols.map(fn);
+    const isCnt = unit === '개' || unit === '명';
+    vuCharts[i + 1] = new Chart(cv, {
+      type: 'line',
+      data: { labels: cols, datasets: [{ label: nm, data, borderColor: color,
+        backgroundColor: color, borderWidth: 2, pointRadius: 0, tension: .15 }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false },
+          title: { display: true, font: { size: 12.5 }, text: nm },
+          tooltip: { callbacks: { label: it => ' ' + (it.parsed.y == null ? '-'
+            : (isCnt && nm.indexOf('1개당') < 0
+                ? Math.round(it.parsed.y).toLocaleString('ko-KR')
+                : it.parsed.y.toFixed(1)) + unit) } } },
+        scales: { x: { ticks: subXT, grid: gridEveryN(cols, 6) },
+          y: { ticks: { font: { size: 10 },
+               callback: v => (isCnt && nm.indexOf('1개당') < 0)
+                 ? axFmt(v / 1000, '천') : axFmt(v) } } } },
+    });
+  });
+
+  const noteEl = box.querySelector('#vuNote');
+  if (noteEl) noteEl.innerHTML =
+    `<b>${ms[li]}</b> V/U <b>${f2(raw[li])}%</b>`
+
+    + `, ${tm[1]} 전년동월비 <b>${py[li] == null ? '-' : f2(py[li])}%</b>. `
+    + `표본은 <b>${ms[0]} ~ ${ms[li]}</b>(${ms.length}개월)입니다 — 빈일자리 통계가 2018년부터라 그 이전은 없습니다.`;
+
 }
 
 // ── 실질금리 분석 ─────────────────────────────────────────────
@@ -9949,11 +10490,24 @@ function exportExcel() {
 
 async function select(id) {
   if (['compare', 'combo', 'map', 'cpicombo', 'retail', 'ppi', 'usemp'].includes(view)) view = 'chart';
-  current = await loadIndicator(id);
+  current = gdpAddNet(await loadIndicator(id));
+  const isGdp = GDP_IDS.includes(id);
+  document.getElementById('gdpSwitch').style.display = isGdp ? 'flex' : 'none';
+  if (isGdp) {
+    gdpPrice = /nominal/.test(id) ? 'nominal' : 'real';
+    gdpFreq = /_annual$/.test(id) ? 'a' : 'q';
+    document.querySelectorAll('#gdpPrice button').forEach(b =>
+      b.classList.toggle('active', b.dataset.gp === gdpPrice));
+    document.querySelectorAll('#gdpFreq button').forEach(b =>
+      b.classList.toggle('active', b.dataset.gf === gdpFreq));
+  }
   document.getElementById('title').textContent = current.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
   document.querySelectorAll('nav button').forEach(b =>
-    b.classList.toggle('active', b.dataset.id === id));
+    b.classList.toggle('active', b.dataset.id === id
+      || (b.id === 'gdpBtn' && GDP_IDS.includes(id))));
+  const gb = document.getElementById('gdpBtn');
+  if (gb && GDP_IDS.includes(id)) gb.dataset.id = id;
   // 종합: GDP(총계 기준) + CPI(지수·MoM·YoY). 기여도·비중은 GDP 전용.
   const hasTotal = current.series.length > 0 && current.series[0].name.includes('국내총생산');
   const cpiInd = /물가지수/.test(current.name || '');
@@ -9985,6 +10539,15 @@ async function select(id) {
   loadRowPrefs();   // 이 지표의 숨김/강조 설정 복원
   render();
 }
+
+document.getElementById('gdpSwitch').addEventListener('click', e => {
+  const gp = e.target.dataset.gp, gf = e.target.dataset.gf;
+  if (!gp && !gf) return;
+  if (gp) gdpPrice = gp;
+  if (gf) gdpFreq = gf;
+  const id = GDP.id[`${gdpPrice}|${gdpFreq}`];
+  if (id) select(id);
+});
 
 document.getElementById('modeButtons').addEventListener('click', e => {
   if (!e.target.dataset.mode) return;
@@ -10142,7 +10705,7 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false, usCpiInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false, usCpiInserted = false, gdpInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
@@ -10172,11 +10735,21 @@ document.getElementById('endSel').onchange = e => {
         b.id = 'fundBtn'; b.textContent = FUND.name; b.onclick = enterFundFlow;
         nav.appendChild(b); return;
       }
-      if (KR_EMP.ids.includes(item.id)) {   // 고용 2종 → "고용상황" 하나로
+      if (KR_EMP.ids.includes(item.id) || KR_EMP.own.includes(item.id)) {   // 고용 지표 → "고용상황" 하나로
         if (!krEmpInserted) {
           const b = document.createElement('button');
           b.id = 'krEmpBtn'; b.textContent = KR_EMP.name; b.onclick = enterKrEmp;
           nav.appendChild(b); krEmpInserted = true;
+        }
+        return;
+      }
+      if (GDP_IDS.includes(item.id)) {   // GDP 4종(실질·명목 × 분기·연간) → "국내총생산" 하나로
+        if (!gdpInserted) {
+          const b = document.createElement('button');
+          b.id = 'gdpBtn'; b.textContent = GDP.name;
+          b.dataset.id = GDP.id[`${gdpPrice}|${gdpFreq}`];
+          b.onclick = () => select(GDP.id[`${gdpPrice}|${gdpFreq}`]);
+          nav.appendChild(b); gdpInserted = true;
         }
         return;
       }

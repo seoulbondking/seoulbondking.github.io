@@ -489,6 +489,76 @@ indicators:
       wkl_ids: [0]
       sectors: true
 
+  # 연령대별 주간 카드사용액 (나우캐스트 · 신한카드) — cd2=A00007, 6구간
+  - id: kr_card_weekly_age
+    name: 연령대별 카드사용액 (주간, 나우캐스트)
+    source: nowcast
+    unit: '%'
+    freq: W
+    merge_always: true
+    params:
+      indcr_id: 1
+      wkl_ids: [0]
+      ages: true
+
+  # 예금은행 원화예금 (종별, 말잔) — ECOS 104Y015, 1960년부터
+  #   자금흐름 탭의 일일 '실세총예금/실세요구불/저축성'에 대응하는 월별 장기 시계열.
+  #   ※ 일일지표는 '실세'(미결제 타점권·정부예금 등 조정) 기준이고 이 표는 조정 전이라
+  #     요구불 쪽 수준이 다를 수 있다. 국고·별단·공금·여신관리예금을 같이 받아 차이를 확인한다.
+  #   ※ 말잔(月末殘)이다. 평잔은 104Y008 로 따로 있다.
+  - id: kr_bank_deposit
+    name: 예금은행 원화예금 (종별, 말잔)
+    source: ecos
+    unit: 십억원
+    freq: M
+    start_year: 2020
+    refetch_years: 2
+    series_first: ["총예금"]
+    params:
+      stat_code: "104Y015"
+      item_codes:
+        - BDAA1    # 총예금
+        - BDAA2    # 요구불예금
+        - BDAA3    # 저축성예금
+        - BDAA22   # 보통예금
+        - BDAA26   # 당좌예금
+        - BDAA21   # 가계당좌예금
+        - BDAA23   # 별단예금
+        - BDAA24   # 공금예금
+        - BDAA2A   # 국고예금
+        - BDAA25   # 여신관리예금
+        - BDAA31   # 정기예금
+        - BDAA33   # 정기적금
+        - BDAA36   # 저축예금
+        - BDAA39   # 자유저축예금
+        - BDAA3A   # 기업자유예금
+
+  # 빈일자리수 (고용노동부 사업체노동력조사 고용부문) — 노동시장 긴축도(V/U 비율)용.
+  #   빈일자리 ÷ 실업자 = 구인난 정도. 미국 JOLTS 의 V/U 에 대응하는 한국 지표다.
+  #   ※ 산업분류 개편으로 표가 갈렸다 — 임금 지표와 같은 방식으로 이어 붙인다.
+  #      DT_118N_MON056 (10차, 2018~2023) + DT_118N_MON066 (11차, 2024~)
+  #   ※ 계절조정본이 없다(DT_118N_SEASON10 에는 임금·근로시간·종사자만 있음).
+  #      실업자는 계절조정이 있으므로, 비율을 낼 때는 반드시 양쪽을 원계열로 맞춰야 한다.
+  - id: kr_vacancy
+    name: 빈일자리수 (사업체노동력조사)
+    source: kosis
+    unit: 명·%
+    freq: M
+    start_year: 2017
+    refetch_years: 2
+    series_first: ["빈일자리_전체"]
+    params:
+      orgId: "118"
+      itmId: "16118MF_5 16118MP_1 16118MF_1 "     # 빈일자리_전체 · 빈일자리율_전체 · 종사자_전체
+      objL2: "13102732820SIZES.0 "                # 규모: 전체
+      tables:
+        - tblId: "DT_118N_MON056"                 # 10차 (2018~2023)
+          objL1: "190326INDUSTRY_10S0 "
+          to: 2023
+        - tblId: "DT_118N_MON066"                 # 11차 (2024~)
+          objL1: "260225INDUSTRY_11S0 "
+          from: 2024
+
   - id: kr_bop
     name: 국제수지 (BPM6, 월)
     source: ecos

@@ -312,11 +312,12 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   // 메뉴에서 내린 한국 지표 (고용 총괄 ~ 테일러 준칙 구간)
                   'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm',
                   'kr_kospi', 'kr_esi', 'kr_swap', 'kr_usdkrw', 'kr_credit_spread',
-                  'kr_wage', 'kr_wage_it', 'kr_wage_hourly'];
+                  'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
+                  'kr_bank_deposit'];
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
-const NAV_OFF = ['ppi'];
+const NAV_OFF = ['ppi', 'yield', 'taylor', 'fair', 'fcst'];
 const navOn = k => !NAV_OFF.includes(k);
 let mode = 'level', view = 'chart';
 let periodDates = [], startD = null, endD = null;   // 기간 설정
@@ -1450,12 +1451,22 @@ function renderFundFlow() {
   const bal = (n, d) => S[n] ? (S[n].get(d) ?? null) : null;
   const chg = (n, d) => { const p = prevOf(d); if (!p) return null; const a = bal(n, d), b = bal(n, p); return a != null && b != null ? a - b : null; };
   const rowFn = fundMode === 'balance' ? bal : chg;
+  // 잔액은 2,000조 단위라 억원으로 보면 자릿수가 너무 길다. 잔액 탭만 조원으로 환산한다.
+  // 증감은 하루 수천억 규모라 억원이 읽기 좋아 그대로 둔다.
+  const SCALE = fundMode === 'balance' ? 1e4 : 1;
+  const unit = fundMode === 'balance' ? '조원' : (fundData.unit || '억원');
+  const numOpt = fundMode === 'balance'
+    ? { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+    : { maximumFractionDigits: 1 };
   // 실제 시리즈가 있는 행만 (집계행은 유지)
   const rows = FUND_ROWS.filter(r => r.leaves || S[r.name]);
   rows.forEach((r, i) => { r._kids = i + 1 < rows.length && rows[i + 1].lv > r.lv; });
-  const val = (r, d) => r.leaves
-    ? (() => { let s = 0, ok = false; r.leaves.forEach(k => { const v = rowFn(k, d); if (v != null) { s += v; ok = true; } }); return ok ? s : null; })()
-    : rowFn(r.name, d);
+  const val = (r, d) => {
+    const v = r.leaves
+      ? (() => { let s = 0, ok = false; r.leaves.forEach(k => { const x = rowFn(k, d); if (x != null) { s += x; ok = true; } }); return ok ? s : null; })()
+      : rowFn(r.name, d);
+    return v == null ? null : v / SCALE;
+  };
   const selPair = fundSel[fundMode];
   if (selPair[0] === null) selPair[0] = new Set(['MMF']);        // 왼쪽 차트 기본
   if (selPair[1] === null) selPair[1] = new Set(['채권형']);      // 오른쪽 차트 기본
@@ -1473,7 +1484,6 @@ function renderFundFlow() {
     return `color:rgb(${mix.join(',')});font-weight:${w}`;
   };
 
-  const unit = fundData.unit || '억원';
   let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
     + '<div class="mode" id="fundModeBtns">'
     + [['change', '전일 증감'], ['balance', '잔액']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
@@ -1495,7 +1505,7 @@ function renderFundFlow() {
     const mark = (inL ? `<b style="color:${PALETTE[0]}">◀</b>` : '') + (inR ? `<b style="color:${PALETTE[1]}">▶</b>` : '');
     const cls = r.lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(r.lv, 3)}`;
     out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${mark ? ' ' : ''}${r.name}</td>`
-      + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+      + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', numOpt);
         return `<td style="${cellStyle(v)}">${t}</td>`; }).join('') + '</tr>';
     if (collapsed && r._kids) hideLv = r.lv;
   });
@@ -1552,7 +1562,7 @@ function renderFundFlow() {
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: `${ci === 0 ? '◀' : '▶'} ${metric} (${unit})`, font: { size: 12 } },
-          tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
+          tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', numOpt)} ${unit}` } } },
         scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
     });
   });

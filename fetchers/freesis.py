@@ -73,8 +73,13 @@ def _payload_disc(start, end, region):
     }}
 
 
+# 예탁금 표만 tmpV40(단위 제수)이 100만이라 값이 '백만원'으로 온다.
+# 펀드·일임은 1억이라 '억원'이다. 섞이면 고객예탁금이 100배로 뜬다(2026-08 발견).
+DEPOSIT_TO_EOK = 100   # 백만원 → 억원
+
+
 def _payload_deposit(start, end):
-    """증시자금추이 — 투자자예탁금."""
+    """증시자금추이 — 투자자예탁금. 값 단위는 백만원."""
     return {"dmSearch": {
         "tmpV40": "1000000", "tmpV41": "1",
         "tmpV1": "D", "tmpV45": start, "tmpV46": end,
@@ -159,7 +164,7 @@ def fetch(indicator: dict) -> list[dict]:
         d = _to_date(r.get("TMPV1"))
         v = _num(r.get("TMPV2"))
         if v is not None:
-            dep.append({"d": d, "v": v})
+            dep.append({"d": d, "v": v / DEPOSIT_TO_EOK})   # 백만원 → 억원
     if dep:
         series.append({"name": "고객예탁금", "data": sorted(dep, key=lambda p: p["d"])})
 

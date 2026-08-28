@@ -405,6 +405,23 @@ indicators:
       itm_id: "10001"
 
   # ── ECOS (한국은행) ──────────────────────────────────────────
+  # 예금취급기관 가계대출 (월) — ECOS 151Y002(업권별) + 151Y005(용도별)를 한 지표로 묶는다.
+  #   ※ 커버리지가 분기 가계신용(151Y004)과 다르다. 여기엔 기타금융기관(보험·증권·대부 등)과
+  #     판매신용이 빠져 있어 같은 시점이라도 레벨이 수백조 낮다. 이어 붙이면 안 된다.
+  #   item_codes 를 비워 두면 그 통계표의 전체 항목을 받는다.
+  - id: kr_household_loan
+    name: 예금취급기관 가계대출 (월)
+    source: ecos
+    unit: 십억원
+    freq: M
+    lookback_years: 15
+    params:
+      tables:
+        - stat_code: "151Y002"    # 업권별 (예금은행 / 비은행예금취급기관 …)
+          prefix: "업권"
+        - stat_code: "151Y005"    # 용도별 (주택담보 / 기타 …)
+          prefix: "용도"
+
   - id: kr_household_credit
     name: 가계신용 (용도별, 분기)
     source: ecos
@@ -971,21 +988,45 @@ indicators:
   #             둘은 한 계열의 개명에 가까워 화면에서 이어 붙여 쓴다.
   #   EFFR    : 실효연방기금금리. 은행 간 무담보 익일물 실거래의 '거래량 가중 중앙값'.
   #             연준이 목표범위를 정하면 시장이 실제로 얼마에 거래했는지를 보여주는 결과값.
+  #   WTREGEN : 재무부 일반계정(TGA) 잔고. 연준에 있는 정부 예금이며 '단위가 백만달러'다.
+  #             세금이 걷히거나 국채를 발행하면 늘고, 그만큼 시중 준비금이 빠진다.
   #   RRPONTSYD      : 익일물 역레포(ON RRP) 잔액, 십억달러. MMF 등이 연준에 하루 예치한 돈.
+  #   TREAS*  : 연준이 보유한 국채를 '잔존만기'로 나눈 것(H.4.1 표2). 단위는 백만달러.
+  #             QT 는 만기도래분을 재투자하지 않는 방식이라 짧은 구간부터 흘러내린다.
+  #             ※ 이 표는 '잔존만기' 기준이다. 발행 당시 만기가 아니라, 10년물도 9년 지나면 1년 구간에 잡힌다.
   #   RRPONTSYAWARD  : 그 역레포 금리. 금리 하단(floor)을 만든다.
   #             통상 역레포금리 ≤ EFFR ≤ IORB 로 눌린다. EFFR 이 IORB 위로 붙으면 준비금 부족 신호.
   - id: us_fed
-    name: 연준 지급준비금·정책금리
+    name: 연준 재무제표
     source: fred
     unit: 십억달러·%
     freq: D
     start_year: 2008
     merge_always: true
-    series_first: ["지급준비금 잔액"]
+    series_first: ["TGA 잔고"]
     params:
+      # 단위 통일 — H.4.1 계열(WTREGEN·TREAS*)은 백만달러라 0.001 을 곱해 십억달러로 맞춘다.
+      #   WRESBAL·RRPONTSYD 는 원래 십억달러라 손대지 않는다.
+      scale:
+        WTREGEN: 0.001
+        TREAS15: 0.001
+        TREAS1590: 0.001
+        TREAS911Y: 0.001
+        TREAS1T5: 0.001
+        TREAS5T10: 0.001
+        TREAS10Y: 0.001
       series:
-        WRESBAL: 지급준비금 잔액
+        # ── 부채 사이드
+        WTREGEN: TGA 잔고
         RRPONTSYD: 역레포 잔액
+        WRESBAL: 지급준비금 잔액
+        # ── 자산 사이드: 보유 국채 잔존만기별 (H.4.1 표2, 수요일 잔액)
+        TREAS15: 국채 15일 이내
+        TREAS1590: 국채 16~90일
+        TREAS911Y: 국채 91일~1년
+        TREAS1T5: 국채 1~5년
+        TREAS5T10: 국채 5~10년
+        TREAS10Y: 국채 10년 초과
         IORB: IORB (지준부리금리)
         IOER: IOER (초과지준 부리금리, 종료)
         EFFR: EFFR (실효연방기금금리)

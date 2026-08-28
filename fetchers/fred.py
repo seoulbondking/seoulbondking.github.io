@@ -40,6 +40,10 @@ def fetch(indicator: dict) -> list[dict]:
     p = indicator["params"]
     series = p["series"]
     names = series if isinstance(series, dict) else {c: c for c in series}
+    # 시리즈별 단위 환산 배수. FRED 는 같은 표라도 단위가 섞인다.
+    #   예) WRESBAL·RRPONTSYD 는 십억달러인데 WTREGEN 은 '백만달러'라 1000배 크다.
+    #       params.scale: {WTREGEN: 0.001} 로 수집 단계에서 맞춰 둔다.
+    scale = p.get("scale") or {}
 
     start_year = indicator.get("_start_year") or indicator.get("start_year") \
         or date.today().year - indicator.get("lookback_years", 15)
@@ -66,7 +70,7 @@ def fetch(indicator: dict) -> list[dict]:
             if v in (None, "", "."):        # FRED 결측치는 '.'
                 continue
             try:
-                pts.append({"d": o["date"], "v": float(v)})
+                pts.append({"d": o["date"], "v": float(v) * float(scale.get(sid, 1))})
             except (KeyError, ValueError):
                 continue
         if pts:

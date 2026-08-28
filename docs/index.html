@@ -6851,6 +6851,8 @@ let bevAll = 1;   // 베버리지 곡선 표본: 1 = 전 구간(시기 비교용
 const HDEBT = { id: 'hdebt', name: '가계부채',
                 ids: ['kr_household_loan', 'kr_household_credit'] };
 let hdData = null, hdTab = 'month', hdMode = 'lvl', hdCharts = [null, null];
+// 참고항목 비중 행 — 모드(잔액/증감)와 무관하게 항상 % 로 표시하는 특수 키
+const HD_SHARE = '__polshare';
 
 //  [표시명, 들여쓰기, 시리즈명]
 const HD_M_USE = [
@@ -6874,6 +6876,7 @@ const HD_M_INST = [
 ];
 const HD_M_REF = [
   ['[참고] 주택금융공사·주택도시기금 정책대출', 0, '용도 [참고] 주택금융공사 및 주택도시기금의 정책대출'],
+  ['· 주택관련대출(예금취급기관) 대비 비중 (%)', 1, '__polshare'],
   ['[참고] 예금은행 전세자금대출', 0, '용도 [참고] 예금은행 전세자금대출'],
 ];
 const HD_Q = [
@@ -6893,6 +6896,7 @@ const HD_Q = [
 ];
 const HD_Q_REF = [
   ['[참고] 주택금융공사·주택도시기금 정책대출', 0, '[참고] 주택금융공사 및 주택도시기금의 정책대출'],
+  ['· 주택관련대출 대비 비중 (%)', 1, '__polshare'],
   ['[참고] 예금은행 전세자금대출', 0, '[참고] 예금은행 전세자금대출'],
 ];
 
@@ -6951,14 +6955,18 @@ function renderHdebt() {
   const val = (m, d) => {
     if (!m) return null;
     if (hdMode === 'lvl') { const v = m.get(d); return v == null ? null : v / 1000; }
-    const p = back(d, hdMode === 'chg' ? 1 : yLag); if (!p) return null;
+    const p = back(d, 1); if (!p) return null;
     const a = m.get(d), b = m.get(p);
-    if (a == null || b == null) return null;
-    return hdMode === 'yoy' ? (b ? (a / b - 1) * 100 : null) : (a - b) / 1000;
+    return a == null || b == null ? null : (a - b) / 1000;
   };
-  const dig = hdMode === 'yoy' ? 1 : 1;
-  const unit = hdMode === 'yoy' ? '%' : '조원';
-  const modeLbl = { lvl: '잔액', chg: isM ? '전월 증감' : '전분기 증감', yoy: isM ? '전년동월비' : '전년동기비' };
+  const dig = 1, unit = '조원';
+  const modeLbl = { lvl: '잔액', chg: isM ? '전월 증감' : '전분기 증감' };
+  // 정책대출 ÷ 주택관련대출 — 분모는 탭마다 다르다(월간은 예금취급기관까지만 나온다).
+  const polM = M(isM ? '용도 [참고] 주택금융공사 및 주택도시기금의 정책대출'
+                     : '[참고] 주택금융공사 및 주택도시기금의 정책대출');
+  const houM = M(isM ? '용도 주택관련대출-예금취급기관' : '주택관련대출');
+  const shareAt = d => { if (!polM || !houM) return null;
+    const a = polM.get(d), b = houM.get(d); return a == null || !b ? null : a / b * 100; };
 
   let out = '<div style="font-size:12.5px;color:#243043;line-height:1.8;margin-bottom:10px">'
     + (isM
@@ -6971,7 +6979,7 @@ function renderHdebt() {
     + '</div>'
     + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:12px">'
     + '<div class="mode" id="hdModeBtns">'
-    + [['lvl', '잔액 (조원)'], ['chg', modeLbl.chg + ' (조원)'], ['yoy', modeLbl.yoy + ' (%)']]
+    + [['lvl', '잔액 (조원)'], ['chg', modeLbl.chg + ' (조원)']]
         .map(([v, t]) => `<button data-hm="${v}" class="${hdMode === v ? 'active' : ''}">${t}</button>`).join('')
     + '</div><span style="color:#8592a3">단위: <b>' + unit + '</b></span></div>';
 
@@ -6992,10 +7000,11 @@ function renderHdebt() {
     let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
     rows.forEach(([nm, lv, key]) => {
-      const m = M(key);
+      const isShare = key === HD_SHARE;
+      const m = isShare ? null : M(key);
       h += `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}"><td style="padding-left:${8 + lv * 14}px">${nm}</td>`
-        + cols.map(d => { const v = val(m, d);
-            return `<td>${v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: dig, maximumFractionDigits: dig })}</td>`;
+        + cols.map(d => { const v = isShare ? shareAt(d) : val(m, d);
+            return `<td>${v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>`;
           }).join('') + '</tr>';
     });
     return h + '</tbody></table></div>';
@@ -7012,52 +7021,43 @@ function renderHdebt() {
   box.querySelectorAll('#hdModeBtns button').forEach(b =>
     b.onclick = () => { hdMode = b.dataset.hm; renderHdebt(); });
 
-  // 차트 — 왼쪽은 구성, 오른쪽은 전년비 (모드와 무관하게 고정)
+  // 차트 2개 — 각각 '잔액(좌, 선) + 전기 증감(우, 막대)'. 모드 토글과 무관하게 고정.
+  //   Chart.js 는 order 가 큰 것부터 그린다 → 선을 위에 올리려면 선에 더 작은 order.
   const CH = isM
-    ? [['구성 (조원)', [['예금취급기관 계', '용도 예금취급기관'], ['주택관련대출', '용도 주택관련대출-예금취급기관'],
-                      ['기타대출', '용도 기타대출-예금취급기관']]],
-       ['전년동월비 (%)', [['예금취급기관 계', '용도 예금취급기관'], ['주택관련대출', '용도 주택관련대출-예금취급기관'],
-                        ['기타대출', '용도 기타대출-예금취급기관'], ['비은행예금취급기관', '업권 비은행예금취급기관']]]]
-    : [['구성 (조원)', [['가계신용', '가계신용'], ['가계대출', '가계대출'], ['판매신용', '판매신용'],
-                      ['기타금융기관 등 (주택+기타)', '__etc']]],
-       ['전년동기비 (%)', [['가계신용', '가계신용'], ['주택관련대출', '주택관련대출'],
-                        ['기타대출', '기타대출'], ['판매신용', '판매신용']]]];
-  // 분기 탭의 '기타금융기관 등'은 주택+기타 두 계열의 합이라 따로 만든다
-  const etc = (() => {
-    const a = M('주택관련대출-기타금융기관 등'), b = M('기타대출-기타금융기관 등');
-    if (!a || !b) return null;
-    const o = new Map(); a.forEach((v, d) => { const w = b.get(d); if (w != null) o.set(d, v + w); });
-    return o;
-  })();
-  const pick = k => k === '__etc' ? etc : M(k);
+    ? [['예금취급기관 가계대출', '용도 예금취급기관', '#1a4fa0'],
+       ['주택관련대출 (예금취급기관)', '용도 주택관련대출-예금취급기관', '#2e8b57']]
+    : [['가계대출', '가계대출', '#1a4fa0'],
+       ['주택관련대출', '주택관련대출', '#2e8b57']];
+  const chgLbl = isM ? '전월 증감' : '전분기 증감';
   const xT = { maxTicksLimit: 9, font: { size: 9 },
     callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
-  CH.forEach(([title, list], i) => {
-    const yoyMode = i === 1;
-    const f = (m, d) => {
-      if (!m) return null;
-      if (!yoyMode) { const v = m.get(d); return v == null ? null : v / 1000; }
-      const p = back(d, yLag); if (!p) return null;
-      const a = m.get(d), b = m.get(p);
-      return a == null || !b ? null : (a / b - 1) * 100;
-    };
+  CH.forEach(([title, key, color], i) => {
+    const m = M(key);
+    const lvlOf = d => { const v = m && m.get(d); return v == null ? null : v / 1000; };
+    const chgOf = d => { const p = back(d, 1); if (!p || !m) return null;
+      const a = m.get(d), b = m.get(p); return a == null || b == null ? null : (a - b) / 1000; };
     if (hdCharts[i]) { hdCharts[i].destroy(); hdCharts[i] = null; }
     hdCharts[i] = new Chart(box.querySelector('#hdC' + i), {
-      type: 'line',
-      data: { labels: cols, datasets: list.map(([nm, key], j) => ({
-        label: nm, data: cols.map(d => f(pick(key), d)),
-        borderColor: PALETTE[j % PALETTE.length], borderWidth: j === 0 ? 2.6 : 1.8,
-        pointRadius: 0, tension: 0.15, spanGaps: true, pop: j === 0, order: j })) },
       plugins: [LINE_POP],
+      data: { labels: cols, datasets: [
+        { type: 'line', label: '잔액 (조원, 좌)', data: cols.map(lvlOf),
+          borderColor: color, borderWidth: 2.6, pointRadius: 0, tension: 0.12,
+          spanGaps: true, yAxisID: 'y', order: 1, pop: true },
+        { type: 'bar', label: chgLbl + ' (조원, 우)', data: cols.map(chgOf),
+          backgroundColor: 'rgba(150,166,186,0.45)', borderColor: 'rgba(150,166,186,0.8)',
+          borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, yAxisID: 'y2', order: 2 },
+      ] },
       options: { responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: title, font: { size: 12 } },
           tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
             callbacks: { title: it => dateLabel(it[0].label),
-              label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}${yoyMode ? '%' : '조'}` } } },
+              label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}조` } } },
         scales: { x: { ticks: xT },
-          y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, yoyMode ? '%' : '') } } } },
+          y: { position: 'left', ticks: { font: { size: 10 }, callback: v => axFmt(v) } },
+          y2: { position: 'right', grid: { drawOnChartArea: false },
+                ticks: { font: { size: 10 }, callback: v => axFmt(v) } } } },
     });
   });
 }

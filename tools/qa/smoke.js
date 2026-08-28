@@ -56,7 +56,7 @@ const chk = (name, elId) => {
   await ev('enterHdebt()');
   for (const t of ['month', 'quarter']) {
     ev(`hdTab='${t}'; hdSetPeriods(); refresh();`);
-    for (const m of ['lvl', 'chg', 'yoy']) { ev(`hdMode='${m}'; renderHdebt();`); chk(`가계부채 > ${t}/${m}`, 'retailWrap'); }
+    for (const m of ['lvl', 'chg']) { ev(`hdMode='${m}'; renderHdebt();`); chk(`가계부채 > ${t}/${m}`, 'retailWrap'); }
   }
   if (w.__MACRO__ && w.__MACRO__.us_fed) {
     await ev('enterFed()'); chk('연준 지급준비금', 'retailWrap');

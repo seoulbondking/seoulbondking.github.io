@@ -53,6 +53,11 @@ const chk = (name, elId) => {
   } else {
     console.log('  미국 소비자물가              (데이터 없음 — python fetch.py us_cpi us_cpi_nsa)');
   }
+  if (w.__MACRO__ && w.__MACRO__.us_fed) {
+    await ev('enterFed()'); chk('연준 지급준비금', 'retailWrap');
+  } else {
+    console.log('  연준 지급준비금              (데이터 없음 — python fetch.py us_fed)');
+  }
   await ev('enterTaylor()'); chk('테일러 준칙', 'retailWrap');
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
 

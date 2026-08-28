@@ -313,7 +313,7 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm',
                   'kr_kospi', 'kr_esi', 'kr_swap', 'kr_usdkrw', 'kr_credit_spread',
                   'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
-                  'kr_bank_deposit'];
+                  'kr_bank_deposit', 'kr_yield_daily'];
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
@@ -530,7 +530,7 @@ function refresh() {
   const isKrE = view === 'kremp', isTay = view === 'taylor', isYld = view === 'yield';
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
-  const isUCpi = view === 'uscpi';
+  const isUCpi = view === 'uscpi', isFed = view === 'fed';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -548,7 +548,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -561,11 +561,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -584,6 +584,7 @@ function refresh() {
   else if (isWg) renderWage();
   else if (isCard) renderCard();
   else if (isUCpi) renderUsCpi();
+  else if (isFed) renderFed();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -3065,8 +3066,10 @@ function renderFcst() {
 //   → 시장금리가 가장 빨리 반응하고 기준금리가 가장 늦게 따라온다 (BIS 2024).
 // 원문 방법론: 금리는 분기말 값, 명목GDP·물가상승률은 4분기 이동평균.
 const NGDP = { id: 'ngdp', name: '명목GDP·금리',
-               ids: ['kr_gdp_nominal', 'kr_cpi', 'kr_yield', 'kr_policy_bei'] };
+               ids: ['kr_gdp_nominal', 'kr_cpi', 'kr_yield', 'kr_policy_bei',
+                     'kr_yield_daily', 'kr_base_rate'] };
 let ngData = null, ngMA = 4, ngMaxLead = 6, ngBasis = 'yoy';
+let ngRateAsOf = null;   // 금리 계열의 마지막 실제 관측일 (진행 중 분기 표시에 사용)
 // 차트별 선행분기 수동 선택. null 이면 상관 최대 시차를 자동 사용.
 let ngLeadSel = { cpi: null, base: null, y3: null, y10: null };
 const NG_TARGETS = [['cpi', '물가상승률'], ['base', '기준금리'], ['y3', '국고 3년'], ['y10', '국고 10년']];
@@ -3134,12 +3137,26 @@ function ngPanel() {
   cy.forEach((v, ym) => { const k = qKey(ym + '-01'); if (!acc.has(k)) acc.set(k, []); acc.get(k).push(v); });
   acc.forEach((v, k) => { if (v.length === 3) cq.set(k, v.reduce((a, b) => a + b, 0) / v.length); });
 
+  // 금리 원천 선택 — 같은 만기를 여러 계열이 제공하면 '마지막 관측이 가장 최근인' 쪽을 쓴다.
+  //   인포맥스 엑셀(kr_yield·kr_policy_bei)은 수동 업로드라 자주 밀리고,
+  //   ECOS(kr_yield_daily·kr_base_rate)는 자동 수집이라 보통 전영업일까지 들어온다.
+  //   분기가 안 끝났어도 그 분기의 마지막 관측을 분기말 값으로 쓴다(잠정치).
+  ngRateAsOf = null;
+  const lastD = sr => sr && sr.data.length
+    ? sr.data.reduce((a, p) => p.d > a ? p.d : a, '') : '';
+  const pickQEnd = cands => {
+    let bestS = null, bestD = '';
+    cands.forEach(([id, nm]) => { const sr = ser(id, nm), d = lastD(sr);
+      if (d > bestD) { bestD = d; bestS = sr; } });
+    if (bestD > (ngRateAsOf || '')) ngRateAsOf = bestD;
+    return qEnd(bestS);
+  };
   const S = {
     ngdp: ma(gr, ngMA),
     cpi: ma(cq, ngMA),
-    base: qEnd(ser('kr_policy_bei', '한국:기준금리')),
-    y3: qEnd(ser('kr_yield', '국고채권 3년')),
-    y10: qEnd(ser('kr_yield', '국고채권 10년')),
+    base: pickQEnd([['kr_policy_bei', '한국:기준금리'], ['kr_base_rate', '한국은행 기준금리']]),
+    y3: pickQEnd([['kr_yield_daily', '국고채(3년)'], ['kr_yield', '국고채권 3년']]),
+    y10: pickQEnd([['kr_yield_daily', '국고채(10년)'], ['kr_yield', '국고채권 10년']]),
   };
   const ds = new Set();
   Object.values(S).forEach(m => m.forEach((_v, k) => ds.add(k)));
@@ -3168,6 +3185,18 @@ function ngCorr(src, tgt, dates, L) {
   return den ? { r: (sxy - sx * sy / n) / den, n } : null;
 }
 
+// 진행 중인 분기 안내 — 금리는 마지막 관측까지의 잠정 분기말 값이다.
+function ngAsOfNote() {
+  if (!ngRateAsOf) return '';
+  const y = +ngRateAsOf.slice(0, 4), m = +ngRateAsOf.slice(5, 7);
+  const qEndM = Math.ceil(m / 3) * 3;
+  const partial = m < qEndM || ngRateAsOf.slice(8) !== String(new Date(y, qEndM, 0).getDate());
+  const q = `${String(y).slice(2)}.${Math.ceil(m / 3)}Q`;
+  return '<br><span style="color:#b35309">금리 최신 관측 <b>' + ngRateAsOf + '</b>'
+    + (partial ? ` — <b>${q}</b> 는 아직 진행 중이라 이 시점까지의 <b>잠정</b> 분기말 값입니다.` : '')
+    + '</span>';
+}
+
 function renderNgdp() {
   const box = document.getElementById('retailWrap');
   const { S, dates, future } = ngPanel();
@@ -3179,7 +3208,8 @@ function renderNgdp() {
     + '<b>명목GDP가 물가·금리에 선행하는가</b>를 시차별 상관계수로 봅니다. '
     + '우리금융경영연구소 「경제 브리프」(2026-06) Box 2 방법론입니다.<br>'
     + '<span style="color:#8592a3">금리는 <b>분기말 값</b>, 명목GDP·물가상승률은 <b>' + ngMA + '분기 이동평균</b>. '
-    + '선행 L분기 = 명목GDP(t) 와 대상(t+L) 의 상관.</span></div>'
+    + '선행 L분기 = 명목GDP(t) 와 대상(t+L) 의 상관.</span>'
+    + ngAsOfNote() + '</div>'
     + '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px">'
     + '<span style="color:#555">명목GDP 기준</span><div class="mode" id="ngBasis">'
     + [['yoy', '전년동기비'], ['qoq', '전기비 연율']].map(([v, t]) =>
@@ -6804,6 +6834,156 @@ const JLT_LVL = [   // [표시명, 레벨]
 const JLT_RATE = ['구인율', '이직률', '채용률', '총 이직률', '해고율'];
 let joltsData = null, joltsCharts = [null, null, null], joltsCol = null;
 let bevAll = 1;   // 베버리지 곡선 표본: 1 = 전 구간(시기 비교용) · 0 = 위 기간설정 구간만
+
+// ── 연준 (FRED) — 지급준비금·IORB ──────────────────────────────
+//  WRESBAL 은 주간(수요일 마감) 평균, IORB/IOER 은 일별이라 날짜 축이 다르다.
+//  둘을 한 축에 놓되 선은 spanGaps 로 이어 그린다.
+const FED = { id: 'fed', name: '연준 지급준비금', ids: ['us_fed'] };
+let fedData = null, fedCharts = [null, null, null];
+
+async function enterFed() {
+  const got = await loadIndicator('us_fed').catch(() => null);
+  fedData = got;
+  if (!fedData) { alert('연준 데이터가 없습니다. python fetch.py us_fed 실행 필요.'); return; }
+  current = { id: FED.id, name: FED.name, freq: 'D', unit: '십억달러·%',
+              updated_at: fedData.updated_at, series: [] };
+  view = 'fed';
+  document.getElementById('title').textContent = FED.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + fedData.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'fedBtn'));
+  const ds = new Set();
+  fedData.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 800)];   // 기본 최근 3년가량
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderFed() {
+  const box = document.getElementById('retailWrap');
+  const M = n => { const x = fedData.series.find(y => baseName(y.name) === n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const RES = M('지급준비금 잔액'), RRP = M('역레포 잔액');
+  const IORB = M('IORB (지준부리금리)'), IOER = M('IOER (초과지준 부리금리, 종료)');
+  const EFFR = M('EFFR (실효연방기금금리)'), RRPR = M('역레포 금리');
+  // IOER → IORB 는 사실상 한 계열의 개명(2021-07-29)이라 이어 붙여 하나로 본다.
+  const POL = new Map([...IOER, ...IORB]);
+  const cols = periodDates.filter(inRange);
+  const tn = m => d => { const v = m.get(d); return v == null ? null : v / 1000; };   // 십억 → 조달러
+  const res = tn(RES), rrp = tn(RRP);
+  const pol = d => POL.get(d) ?? null, eff = d => EFFR.get(d) ?? null;
+  // 준비금 희소성 게이지 — EFFR 이 IORB 위로 붙으면 은행이 준비금을 아쉬워한다는 뜻.
+  const sprd = d => { const a = EFFR.get(d), b = POL.get(d);
+    return a == null || b == null ? null : (a - b) * 100; };                          // bp
+  const lastOf = m => { const k = [...m.keys()].sort().pop(); return k ? [k, m.get(k)] : [null, null]; };
+  const [rD, rV] = lastOf(RES), [qD, qV] = lastOf(RRP), [pD, pV] = lastOf(POL), [eD, eV] = lastOf(EFFR);
+  const sLast = (eV != null && pV != null) ? (eV - pV) * 100 : null;
+  const peak = [...RES.entries()].reduce((a, b) => b[1] > a[1] ? b : a, ['', -1]);
+
+  let out = '<div style="font-size:12.5px;color:#243043;line-height:1.85;margin-bottom:10px">'
+    + '<b>지급준비금</b>은 은행이 연준 계좌에 예치한 잔액입니다. 연준이 자산을 사면(QE) 늘고 줄이면(QT) 감소합니다.<br>'
+    + '<b>역레포(ON RRP)</b>는 MMF 등이 하루짜리로 연준에 맡겨 둔 돈입니다. QT 국면에서 먼저 마르는 완충재이고, '
+    + '이게 바닥나면 그 다음부터 준비금이 줄기 시작합니다.<br>'
+    + '<b>EFFR</b>은 은행 간 무담보 익일물 실거래의 <b>거래량 가중 중앙값</b>입니다. FOMC 가 정하는 건 목표"범위"일 뿐이고, '
+    + 'EFFR 은 시장이 실제로 얼마에 거래했는지를 보여주는 결과값입니다.<br>'
+    + '<span style="color:#8592a3">평시에는 <b>역레포금리 ≤ EFFR ≤ IORB</b> 로 눌립니다. '
+    + 'EFFR 이 IORB 위로 붙기 시작하면 준비금이 희소해졌다는 신호입니다. '
+    + '준비금·역레포는 <b>주간/일별</b>, 금리는 <b>일별</b>입니다.</span></div>';
+
+  const card = (t, v, sub, col) => `<div style="flex:1;min-width:170px;padding:11px 13px;background:#f5f7fa;border-radius:8px">`
+    + `<div style="font-size:11.5px;color:#8592a3">${t}</div>`
+    + `<div style="font-size:19px;font-weight:700;color:${col || '#1a2b4a'};margin:2px 0">${v}</div>`
+    + `<div style="font-size:11.5px;color:#8592a3">${sub}</div></div>`;
+  // 카드 숫자는 자리수를 고정한다. axFmt 는 축용이라 5.4326 같은 꼬리가 그대로 남는다.
+  const fx = (v, n) => v == null ? '-'
+    : v.toLocaleString('ko-KR', { minimumFractionDigits: n, maximumFractionDigits: n });
+  out += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+    + card('지급준비금', rV == null ? '-' : fx(rV / 1000, 2) + ' 조달러',
+           (rD || '') + (peak[1] > 0 && rV != null ? ' · 고점比 ' + fx((rV / peak[1] - 1) * 100, 1) + '%' : ''))
+    + card('역레포 잔액', qV == null ? '-' : fx(qV / 1000, 2) + ' 조달러', qD || '')
+    + card('IORB', pV == null ? '-' : fx(pV, 2) + ' %', pD || '')
+    + card('EFFR', eV == null ? '-' : fx(eV, 2) + ' %', eD || '')
+    + card('EFFR − IORB', sLast == null ? '-' : fx(sLast, 0) + ' bp',
+           sLast == null ? '' : (sLast >= 0 ? '준비금 희소 방향' : '준비금 여유'),
+           sLast == null ? '' : (sLast >= 0 ? '#b02020' : '#11693e'))
+    + '</div>';
+
+  out += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="fedC${i}"></canvas></div></div>`).join('')
+    + '</div><div class="cchart" style="height:300px;margin-bottom:12px"><canvas id="fedC2"></canvas></div>';
+
+  // ── 월말 기준 표 (주간·일별을 월 단위로 모아 본다)
+  const months = [...new Set(cols.map(d => d.slice(0, 7)))].sort();
+  const lastIn = (m, mo) => { let v = null; cols.forEach(d => { if (d.slice(0, 7) === mo && m.get(d) != null) v = m.get(d); }); return v; };
+  const rMo = months.map(mo => lastIn(RES, mo)), qMo = months.map(mo => lastIn(RRP, mo));
+  const pMo = months.map(mo => lastIn(POL, mo)), eMo = months.map(mo => lastIn(EFFR, mo));
+  const zMo = months.map(mo => lastIn(RRPR, mo));
+  const rows = [
+    ['지급준비금 (조달러)', rMo.map(v => v == null ? null : v / 1000), 2, 'lv0 sep-solid'],
+    ['· 전월 대비 (십억달러)', rMo.map((v, i) => (i && v != null && rMo[i - 1] != null) ? v - rMo[i - 1] : null), 0, 'lv1'],
+    ['역레포 잔액 (조달러)', qMo.map(v => v == null ? null : v / 1000), 2, 'lv0 sep-solid'],
+    ['준비금 + 역레포 (조달러)', rMo.map((v, i) => (v == null && qMo[i] == null) ? null : ((v || 0) + (qMo[i] || 0)) / 1000), 2, 'lv1'],
+    ['IORB (%)', pMo, 2, 'lv0 sep-solid'],
+    ['EFFR (%)', eMo, 2, 'lv1'],
+    ['역레포 금리 (%)', zMo, 2, 'lv1'],
+    ['EFFR − IORB (bp)', eMo.map((v, i) => (v == null || pMo[i] == null) ? null : (v - pMo[i]) * 100), 0, 'lv1'],
+  ];
+  out += '<div class="block-title">월말 기준</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + months.map(mo => `<th>${mo.slice(2).replace('-', '.')}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(([nm, arr, dg, cls]) => {
+    out += `<tr class="${cls}"><td>${nm}</td>`
+      + arr.map(v => `<td>${v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: dg, maximumFractionDigits: dg })}</td>`).join('')
+      + '</tr>';
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  const xT = { maxTicksLimit: 9, font: { size: 9 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const mk = (i, title, datasets, scales) => {
+    if (fedCharts[i]) { fedCharts[i].destroy(); fedCharts[i] = null; }
+    fedCharts[i] = new Chart(box.querySelector('#fedC' + i), {
+      plugins: [LINE_POP],
+      data: { labels: cols, datasets },
+      options: { responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, text: title, font: { size: 12 } },
+          tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+            callbacks: { title: it => dateLabel(it[0].label),
+              label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : axFmt(it.parsed.y)}` } } },
+        scales: scales || { x: { ticks: xT }, y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } } } },
+    });
+  };
+  const ln = (label, fn, color, extra) => Object.assign(
+    { type: 'line', label, data: cols.map(fn), borderColor: color,
+      borderWidth: 2.2, pointRadius: 0, tension: 0.12, spanGaps: true }, extra || {});
+
+  mk(0, '연준 유동성 (조달러)', [
+    ln('지급준비금', res, '#1a4fa0', { order: 1, pop: true }),
+    ln('역레포 (ON RRP)', rrp, '#e8930c', { order: 2, fill: 'origin',
+        backgroundColor: 'rgba(232,147,12,0.14)' }),
+  ]);
+  // 금리는 계단이라 보간하면 없던 중간값이 생긴다 → stepped
+  mk(1, '정책금리 회랑 (%)', [
+    ln('IORB', pol, '#d9534f', { stepped: true, tension: 0, order: 2 }),
+    ln('EFFR', eff, '#1a2b4a', { stepped: true, tension: 0, order: 1, pop: true, borderWidth: 2.4 }),
+    ln('역레포 금리', d => RRPR.get(d) ?? null, '#2e8b57', { stepped: true, tension: 0, order: 3 }),
+  ]);
+  mk(2, '유동성 (좌, 조달러) · EFFR − IORB 스프레드 (우, bp)', [
+    ln('지급준비금 (좌)', res, '#1a4fa0', { yAxisID: 'y', order: 2, pop: true, borderWidth: 2.4 }),
+    ln('역레포 (좌)', rrp, '#e8930c', { yAxisID: 'y', order: 3 }),
+    ln('EFFR − IORB (우, bp)', sprd, '#b02020', { yAxisID: 'y2', order: 1, borderWidth: 1.8 }),
+  ], { x: { ticks: xT },
+       y: { position: 'left', ticks: { font: { size: 10 }, callback: v => axFmt(v) } },
+       y2: { position: 'right', grid: { drawOnChartArea: false },
+             ticks: { font: { size: 10 }, callback: v => axFmt(v, 'bp') } } });
+}
 
 async function enterJolts() {
   const got = await Promise.all(JOLTS.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -10522,6 +10702,10 @@ async function select(id) {
   const hasTotal = current.series.length > 0 && current.series[0].name.includes('국내총생산');
   const cpiInd = /물가지수/.test(current.name || '');
   document.getElementById('multiBtn').style.display = (hasTotal || cpiInd) ? '' : 'none';
+  // GDP 는 종합·원자료로만 본다. 항목이 20개라 단일 차트로는 읽히지 않아 '차트'를 감춘다.
+  const chartBtn = document.querySelector('#viewButtons button[data-view="chart"]');
+  if (chartBtn) chartBtn.style.display = isGdp ? 'none' : '';
+  if (isGdp && view === 'chart') view = 'multi';
   document.querySelectorAll('#modeButtons .gdp-only').forEach(b =>
     b.style.display = hasTotal ? '' : 'none');
   // GDP·CPI 는 종합 보기를 기본으로, 그 외 지표는 종합이면 차트로 전환
@@ -10785,6 +10969,12 @@ document.getElementById('endSel').onchange = e => {
           b.id = 'totBtn'; b.textContent = TOT.name; b.onclick = enterTot;
           nav.appendChild(b); totInserted = true;
         }
+        return;
+      }
+      if (item.id === 'us_fed') {     // 연준 → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'fedBtn'; b.textContent = FED.name; b.onclick = enterFed;
+        nav.appendChild(b);
         return;
       }
       if (item.id === 'us_jolts') {   // JOLTS → 전용 화면

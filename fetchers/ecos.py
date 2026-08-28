@@ -200,9 +200,32 @@ def fetch(indicator: dict) -> list[dict]:
         meta.pop("name_of", None); meta.pop("children", None)
         meta.pop("total_code", None); meta.pop("top_codes", None)
 
+    # 여러 통계표를 한 지표로 묶기 (kosis.py 의 tables: 와 같은 개념).
+    #   params.tables:
+    #     - stat_code: "817Y002"
+    #       item_codes: [...]
+    #     - stat_code: "722Y001"
+    #       item_codes: ["0101000"]
+    #       prefix: "정책"          # 이름 충돌 방지용 (선택)
+    #   tables 가 없으면 기존처럼 params.stat_code / params.item_codes 하나만 쓴다.
+    tables = p.get("tables")
+    if tables:
+        specs = [(t["stat_code"], t.get("item_codes") or [None], t.get("prefix") or "")
+                 for t in tables]
+    else:
+        specs = [(p["stat_code"], item_codes, p.get("prefix") or "")]
+
     all_rows = []
-    for code in item_codes:
-        all_rows.extend(_fetch_rows(key, p["stat_code"], cycle, start, end, code))
+    for stat_code, codes, prefix in specs:
+        got = []
+        for code in codes:
+            got.extend(_fetch_rows(key, stat_code, cycle, start, end, code))
+        if prefix:
+            for r in got:
+                r["ITEM_NAME1"] = f"{prefix} {(r.get('ITEM_NAME1') or '').strip()}".strip()
+        if len(specs) > 1:
+            print(f"  [ecos {indicator['id']}] {stat_code} → {len(got)}행")
+        all_rows.extend(got)
 
     # 시리즈명 = ITEM_NAME1 [+ NAME2 + NAME3 중 값이 여럿인 축만 병기]
     #   901Y052(산업×항목×규모)처럼 축이 3개인 표는 NAME3 까지 붙여야 이름이 겹치지 않는다.

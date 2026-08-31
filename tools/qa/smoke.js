@@ -53,6 +53,14 @@ const chk = (name, elId) => {
   } else {
     console.log('  미국 소비자물가              (데이터 없음 — python fetch.py us_cpi us_cpi_nsa)');
   }
+  if (w.__MACRO__ && w.__MACRO__.us_ppi) {
+    await ev('enterUsPpi()');
+    for (const t of ['chg', 'idx', 'ctb']) { ev(`usPpiTab='${t}'; refresh();`); chk('미국 생산자물가 > ' + t, 'retailWrap'); }
+  } else { console.log('  미국 생산자물가              (데이터 없음 — python fetch.py us_ppi us_ppi_nsa)'); }
+  if (w.__MACRO__ && w.__MACRO__.us_pce) {
+    await ev('enterUsPce()');
+    for (const t of ['price', 'real', 'income']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
+  } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
   await ev('enterHdebt()');
   for (const t of ['month', 'quarter']) {
     ev(`hdTab='${t}'; hdSetPeriods(); refresh();`);

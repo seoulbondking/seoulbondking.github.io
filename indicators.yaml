@@ -980,6 +980,96 @@ indicators:
   # 🇺🇸 미국 (BLS·BEA·Census·FRED) — 미국 정부 API라 Actions에서도 수집 가능
   # ══════════════════════════════════════════════════════════════
 
+  # ── 미국 생산자물가 PPI (BLS OpenAPI) ───────────────────────────
+  #   시리즈 목록은 US_macro.xlsm 의 PPI 시트 및 Macro_indicator.py 의
+  #   execute_ppi() 와 완전히 동일하다 (2026-08 대조 확인).
+  #   WPS… = 계절조정 / WPU… = 원계열. CPI 와 같은 관례로 MoM 은 SA, YoY 는 NSA.
+  #   ※ 시트의 'Sa'/'Nsa' 머리글은 서로 뒤바뀌어 있다(25행이 WPU, 34행이 WPS). 코드가 정답.
+  #   ※ 시트 MoM/YoY 블록 B열의 CUSR… 코드는 CPI 시트에서 복사된 잔재다. 무시한다.
+  #   ※ FRED 는 쓰지 않는다 — WPUFD4 등이 아예 없고(400), 별칭이 SA/NSA 를 구분해 주지 않는다.
+  - id: us_ppi
+    name: 미국 생산자물가 (계절조정)
+    source: bls
+    unit: 지수
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    series_first: ["PPI 최종수요"]
+    params:
+      series:
+        WPSFD4: PPI 최종수요
+        WPSFD41: 재화
+        WPSFD411: 식료품
+        WPSFD412: 에너지
+        WPSFD42: 서비스
+        WPSFD422: 운송·창고
+        WPSFD49104: 근원 PPI (식료품·에너지 제외)
+        # 근원 PCE 의 의료·항공·자산관리는 CPI 가 아니라 이 PPI 계열로 디플레이트된다.
+        # PPI 발표 직후 근원 PCE 를 추정할 때 쓰는 입력값이라 시트가 따로 떼어 두었다.
+        WPS3022: 항공요금
+        WPS511101: 의사 진료
+        WPS511103: 재택·호스피스 간호
+        WPS511104: 병원 외래
+        WPS512101: 병원 입원
+        WPS512102: 요양시설
+        WPU402: 자산관리 수수료 (계절조정본 없음 · 원계열)
+
+  - id: us_ppi_nsa
+    name: 미국 생산자물가 (원계열)
+    source: bls
+    unit: 지수
+    freq: M
+    start_year: 2010
+    refetch_years: 2
+    series_first: ["PPI 최종수요"]
+    params:
+      series:
+        WPUFD4: PPI 최종수요
+        WPUFD41: 재화
+        WPUFD411: 식료품
+        WPUFD412: 에너지
+        WPUFD42: 서비스
+        WPUFD422: 운송·창고
+        WPUFD49104: 근원 PPI (식료품·에너지 제외)
+        WPU3022: 항공요금
+        WPU402: 자산관리 수수료
+        WPU511101: 의사 진료
+        WPU511103: 재택·호스피스 간호
+        WPU511104: 병원 외래
+        WPU512101: 병원 입원
+        WPU512102: 요양시설
+
+  # ── 미국 PCE (BEA API) ──────────────────────────────────────────
+  #   연준의 공식 물가목표는 CPI 가 아니라 PCE 다. CPI 보다 통상 0.2~0.4%p 낮은데,
+  #   가중치가 매달 갱신되고(연쇄가중) 의료비처럼 보험이 대신 내는 지출까지 잡히기 때문이다.
+  #   표는 Macro_indicator.py 의 execute_pce1/2 와 같다 (T20600, T20804).
+  #     T20804 : 월별 PCE 물가지수 31줄. 시트 92~121행과 정확히 일치하고
+  #              addenda 에 슈퍼코어(28: 에너지·주거 제외 서비스)까지 들어 있다.
+  #     T20806 : 실질 소비지출 (연쇄 2017달러)
+  #     T20600 : 개인소득·지출 — 시트 15~25행이 쓰는 줄만
+  #   ※ T20404 는 월별 제공이 없다 (2026-08 확인: APIErrorCode 201).
+  #   ※ 더 깊게 파려면 U20404 (NIUnderlyingDetail, 400줄) 로 바꾼다.
+  #   ※ BEA API 의 LineDescription 에는 들여쓰기가 없다 — 계층은 화면 쪽에서 정의한다.
+  - id: us_pce
+    name: 미국 PCE
+    source: bea
+    unit: 지수·십억달러·%
+    freq: M
+    start_year: 2010
+    series_first: ["물가 · Personal consumption expenditures (PCE)"]
+    params:
+      tables:
+        - dataset: NIPA
+          table: T20804
+          prefix: "물가"
+        - dataset: NIPA
+          table: T20806
+          prefix: "실질소비"
+        - dataset: NIPA
+          table: T20600
+          prefix: "소득·지출"
+          lines: [1, 27, 29, 34, 35]
+
   # ── 연준 (FRED) — 지급준비금·정책금리 ────────────────────────────
   #   WRESBAL : 연준에 예치된 지급준비금 잔액. 주간(수요일 마감) 평균, 십억달러.
   #             '상업은행이 연준에 맡겨둔 돈'이며 QT 로 줄고 QE 로 는다.

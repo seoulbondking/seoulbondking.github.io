@@ -172,6 +172,16 @@
         <button data-hd="month" class="active">월간 · 예금취급기관</button>
         <button data-hd="quarter">분기 · 가계신용 (비예금기관 포함)</button>
       </div>
+      <div id="usPpiTabs" class="mode" style="display:none">
+        <button data-up="chg" class="active">증감률</button>
+        <button data-up="idx">지수</button>
+        <button data-up="ctb">기여도</button>
+      </div>
+      <div id="usPceTabs" class="mode" style="display:none">
+        <button data-uc2="price" class="active">물가</button>
+        <button data-uc2="real">실질소비</button>
+        <button data-uc2="income">소득·저축</button>
+      </div>
       <div id="usCpiTabs" class="mode" style="display:none">
         <button data-uc="chg" class="active">증감률</button>
         <button data-uc="idx">지수</button>
@@ -535,6 +545,7 @@ function refresh() {
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
   const isUCpi = view === 'uscpi', isFed = view === 'fed', isHd = view === 'hdebt';
+  const isUPpi = view === 'usppi', isUPce = view === 'uspce';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -542,6 +553,8 @@ function refresh() {
   document.getElementById('cardTabs').style.display = isCard ? '' : 'none';
   document.getElementById('usCpiTabs').style.display = isUCpi ? '' : 'none';
   document.getElementById('hdTabs').style.display = isHd ? '' : 'none';
+  document.getElementById('usPpiTabs').style.display = isUPpi ? '' : 'none';
+  document.getElementById('usPceTabs').style.display = isUPce ? '' : 'none';
   if (view !== 'chart' && view !== 'table' && view !== 'multi')
     document.getElementById('gdpSwitch').style.display = 'none';
   document.querySelectorAll('#usCpiTabs button').forEach(b =>
@@ -553,7 +566,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -566,11 +579,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -591,6 +604,8 @@ function refresh() {
   else if (isUCpi) renderUsCpi();
   else if (isFed) renderFed();
   else if (isHd) renderHdebt();
+  else if (isUPpi) renderUsPpi();
+  else if (isUPce) renderUsPce();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -5450,28 +5465,6 @@ const US_CPI_ROWS = [
 // 공표 공백 탐지 — 2025-10 처럼 BLS 가 아예 내지 못한 달이 있으면 알린다.
 //   그 달은 전월비·전년동월비가 빈칸이 되고, 파생 지수는 앞뒤를 한 스텝으로 이어 붙인다
 //   (수준은 맞지만 그 구간의 '월별' 변화율은 2개월치라는 뜻).
-function usCpiGapNote(SA, NSA) {
-  const M = SA['CPI'] ? SA : NSA;
-  if (!M || !M['CPI']) return '';
-  const ds = [...M['CPI'].keys()].sort();
-  const gaps = [];
-  for (let i = 1; i < ds.length; i++) {
-    const [y0, m0] = ds[i - 1].slice(0, 7).split('-').map(Number);
-    const [y1, m1] = ds[i].slice(0, 7).split('-').map(Number);
-    const step = (y1 - y0) * 12 + (m1 - m0);
-    if (step > 1) for (let k = 1; k < step; k++) {
-      const mm = m0 + k, yy = y0 + Math.floor((mm - 1) / 12);
-      gaps.push(`${yy}-${String(((mm - 1) % 12) + 1).padStart(2, '0')}`);
-    }
-  }
-  if (!gaps.length) return '';
-  return '<div style="font-size:12px;line-height:1.9;margin-bottom:12px;padding:9px 12px;'
-    + 'border:1px solid #f0c0a4;border-radius:8px;background:#fdf7f2">'
-    + `<b>공표 공백: ${gaps.join(', ')}</b> — 해당 월은 BLS 자료 자체가 없습니다. `
-    + '그 달의 전월비·전년동월비는 빈칸이고, 직후 달의 전월비도 비교 대상이 없어 비어 있습니다. '
-    + `<b>${US_CPI_SUPER}</b> 지수는 공백 앞뒤를 한 스텝으로 이어 붙여 <b>수준은 맞지만</b>, `
-    + '그 구간 월별 변화율은 2개월치가 한 번에 반영된 값입니다.</div>';
-}
 const US_CPI_SUPER = '슈퍼코어 (근원서비스 − 주거)';
 const US_CPI_SVC = '서비스 (에너지서비스 제외)', US_CPI_SHELTER = '주거';
 function usCpiAddSupercore(M) {
@@ -5579,13 +5572,12 @@ function renderUsCpi() {
     + `<input type="checkbox" id="ucMain"${usCpiMain ? ' checked' : ''}> 주요항목만 보기</label>`
     + '<span style="font-size:12px;color:#8592a3">항목을 <b>클릭</b>하면 차트에 추가/제거됩니다</span></div>'
     + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
-    + 'BLS · US_macro.xlsm CPI 시트 구성. <b>전월비는 계절조정(CUSR)</b>, '
+    + '<b>전월비는 계절조정(CUSR)</b>, '
     + '<b>전년동월비는 원계열(CUUR)</b>을 씁니다 — BLS 공표 관례입니다. '
     + '<span style="color:#c0392b">외식은 원계열만 공표되고, 자가주거비(OER)는 1982-12=100 기준이라 '
     + '다른 항목과 지수 <b>수준</b>을 직접 비교하면 안 됩니다. '
     + `<b>${US_CPI_SUPER}</b>는 BLS 공표 지수가 없어 <b>파생</b>한 값입니다 — 지수는 첫 달=100 기준이라 `
     + '수준에 의미가 없고 증감률만 보세요.</span></div>'
-    + usCpiGapNote(SA, NSA)
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ucC${i}"></canvas></div></div>`).join('')
     + '</div>';
@@ -5715,8 +5707,12 @@ function usCpiContribCharts(box, SA, NSA, cols, prevD) {
   const W = window.__US_CPI_RI__;
   if (!W || !W.ri) return;
   const RI = usCpiRI();
-  const CAT = [['식료품', '#c98a1a'], ['에너지', '#c0392b'],
-               ['상품 (식료품·에너지 제외)', '#8e44ad'], ['서비스 (에너지서비스 제외)', '#1a4fa0']];
+  // 스택 순서 = 이 배열 순서. Chart.js 는 첫 데이터셋을 바닥에 깐다.
+  //   미국 물가의 중심은 '서비스'다(코어의 대부분, 임금에 연동돼 끈적하다).
+  //   0 축에 붙여 두면 막대 높이를 눈으로 재지 않고 바로 값을 읽을 수 있다.
+  const CAT = [['서비스 (에너지서비스 제외)', '#1a4fa0'],
+               ['상품 (식료품·에너지 제외)', '#8e44ad'],
+               ['식료품', '#c98a1a'], ['에너지', '#c0392b']];
   const stack = (M, lag, title) => new Chart(box.querySelector(lag === 1 ? '#ucC0' : '#ucC1'), {
     type: 'bar',
     data: { labels: cols, datasets: CAT.map(([k, c]) => ({
@@ -6842,6 +6838,407 @@ const JLT_RATE = ['구인율', '이직률', '채용률', '총 이직률', '해�
 let joltsData = null, joltsCharts = [null, null, null], joltsCol = null;
 let bevAll = 1;   // 베버리지 곡선 표본: 1 = 전 구간(시기 비교용) · 0 = 위 기간설정 구간만
 
+// ── 미국 생산자물가 PPI (BLS) ─────────────────────────────────
+//  US_macro.xlsm 의 PPI 시트 구성. CPI 와 같은 관례로 MoM 은 계절조정(WPS),
+//  YoY 는 원계열(WPU)을 쓴다 — BLS 공표 관례다.
+//  가중치는 시트 A열의 최종수요 상대중요도. 재화 30.16 + 서비스 67.18 = 97.34 이고
+//  나머지 2.66 은 '최종수요 건설'인데 시트가 받지 않아 기여도에 잔차로 남는다.
+const US_PPI = { id: 'usppi', name: '미국 생산자물가', ids: ['us_ppi', 'us_ppi_nsa'] };
+let usPpiData = null, usPpiTab = 'chg', usPpiCharts = [null, null];
+//  [표시명, 들여쓰기, 가중치]
+const US_PPI_ROWS = [
+  ['PPI 최종수요', 0, 100],
+  ['재화', 1, 30.16],
+  ['식료품', 2, 5.63],
+  ['에너지', 2, 5.51],
+  ['서비스', 1, 67.184],
+  ['운송·창고', 2, 4.931],
+  ['근원 PPI (식료품·에너지 제외)', 1, 88.85],
+];
+//  근원 PCE 의 의료·항공·자산관리는 CPI 가 아니라 이 PPI 계열로 디플레이트된다.
+//  PPI 발표 직후 근원 PCE 를 미리 읽는 용도라 본표와 성격이 달라 따로 뺀다.
+const US_PPI_PCE = ['항공요금', '자산관리 수수료', '의사 진료',
+                    '재택·호스피스 간호', '병원 외래', '병원 입원', '요양시설'];
+
+async function enterUsPpi() {
+  const got = await Promise.all(US_PPI.ids.map(id => loadIndicator(id).catch(() => null)));
+  usPpiData = {}; US_PPI.ids.forEach((id, i) => usPpiData[id] = got[i]);
+  const base = usPpiData['us_ppi'] || usPpiData['us_ppi_nsa'];
+  if (!base) { alert('생산자물가 데이터가 없습니다. python fetch.py us_ppi us_ppi_nsa 실행 필요.'); return; }
+  current = { id: US_PPI.id, name: US_PPI.name, freq: 'M', unit: '지수',
+              updated_at: base.updated_at, series: [] };
+  view = 'usppi';
+  document.getElementById('title').textContent = US_PPI.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + base.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'usPpiBtn'));
+  if (!document.getElementById('usPpiTabs').dataset.bound) {
+    document.getElementById('usPpiTabs').addEventListener('click', e => {
+      if (!e.target.dataset.up) return; usPpiTab = e.target.dataset.up; refresh();
+    });
+    document.getElementById('usPpiTabs').dataset.bound = '1';
+  }
+  const ds = new Set();
+  base.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 30)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderUsPpi() {
+  const box = document.getElementById('retailWrap');
+  document.querySelectorAll('#usPpiTabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.up === usPpiTab));
+  const SA = usPpiData['us_ppi'], NSA = usPpiData['us_ppi_nsa'];
+  //  자산관리는 계절조정본이 없어 SA 지표에도 원계열 이름으로 들어 있다.
+  const M = (ind, nm) => {
+    if (!ind) return null;
+    const x = ind.series.find(y => baseName(y.name) === nm)
+           || ind.series.find(y => baseName(y.name).split(' (')[0] === nm.split(' (')[0]);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : null;
+  };
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, k) => { const i = idx.get(d); return i >= k ? periodDates[i - k] : null; };
+  const chg = (m, d, lag) => { if (!m) return null; const p = prevN(d, lag); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a == null || !b ? null : (a / b - 1) * 100; };
+  const f2 = v => v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const f1 = v => v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const cell = (v, f) => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`;
+
+  let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + 'BLS 최종수요(Final Demand) 체계. <b>전월비는 계절조정(WPS)</b>, '
+    + '<b>전년동월비는 원계열(WPU)</b>을 씁니다 — BLS 공표 관례입니다.<br>'
+    + 'PPI 는 <b>생산자 출하가격</b>이라 소비자물가보다 앞섭니다. 다만 유통마진·수입품이 빠져 있어 '
+    + 'CPI 와 1:1 로 대응하지 않습니다. '
+    + '<span style="color:#c0392b">자산관리 수수료는 계절조정본이 없어 두 탭 모두 원계열입니다.</span></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="upC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const tbl = (title, rows, render) =>
+    `<div class="block-title">${title}</div><div class="tscroll">`
+    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+    + rows.map(render).join('') + '</tbody></table></div>';
+  const nameCell = (nm, lv) => `<td style="padding-left:${8 + lv * 15}px">${nm}</td>`;
+
+  if (usPpiTab === 'chg') {
+    out += tbl('전월비 (%, 계절조정)', US_PPI_ROWS, ([nm, lv]) =>
+        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
+        + cols.map(d => cell(chg(M(SA, nm), d, 1), f2)).join('') + '</tr>')
+      + tbl('전년동월비 (%, 원계열)', US_PPI_ROWS, ([nm, lv]) =>
+        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
+        + cols.map(d => cell(chg(M(NSA, nm), d, 12), f2)).join('') + '</tr>')
+      + tbl('PCE 연결 항목 — 전년동월비 (%, 원계열)', US_PPI_PCE.map(n => [n, 0]), ([nm]) =>
+        `<tr class="lv1">${nameCell(nm, 1)}`
+        + cols.map(d => cell(chg(M(NSA, nm), d, 12), f2)).join('') + '</tr>');
+  } else if (usPpiTab === 'idx') {
+    out += tbl('지수 (계절조정)', US_PPI_ROWS, ([nm, lv]) =>
+        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
+        + cols.map(d => { const m = M(SA, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>')
+      + tbl('지수 (원계열)', US_PPI_ROWS, ([nm, lv]) =>
+        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
+        + cols.map(d => { const m = M(NSA, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>')
+      + tbl('PCE 연결 항목 — 지수 (원계열)', US_PPI_PCE.map(n => [n, 0]), ([nm]) =>
+        `<tr class="lv1">${nameCell(nm, 1)}`
+        + cols.map(d => { const m = M(NSA, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>');
+  } else {
+    out += tbl('기여도 — 전월비 (%p, 계절조정)', usPpiCtbRows(), ([nm, lv, w]) =>
+        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm + (w ? ` <span style="color:#8592a3;font-weight:400">(${w})</span>` : ''), lv)}`
+        + cols.map(d => cell(usPpiCtb(SA, nm, d, 1, chg), f2)).join('') + '</tr>')
+      + tbl('기여도 — 전년동월비 (%p, 원계열)', usPpiCtbRows(), ([nm, lv, w]) =>
+        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm + (w ? ` <span style="color:#8592a3;font-weight:400">(${w})</span>` : ''), lv)}`
+        + cols.map(d => cell(usPpiCtb(NSA, nm, d, 12, chg), f2)).join('') + '</tr>');
+  }
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  const xT = { maxTicksLimit: 12, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  usPpiCharts.forEach(c => c && c.destroy());
+  usPpiCharts = [null, null];
+  if (usPpiTab === 'ctb') {
+    // 기여도 누적막대 — 서비스를 바닥에 깔아 0 축에서 바로 읽는다.
+    const stack = (ind, lag, title) => {
+      const ds = US_PPI_CTB.map(([nm, , c]) => ({
+        label: nm, data: cols.map(d => usPpiCtb(ind, nm, d, lag, chg)),
+        backgroundColor: c, borderWidth: 0, stack: 's' }));
+      ds.push({ label: '실제 ' + (lag === 1 ? '전월비' : '전년동월비') + ' (%)', type: 'line',
+        data: cols.map(d => chg(M(ind, 'PPI 최종수요'), d, lag)),
+        borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 2,
+        pointRadius: 2, tension: .1, order: -1 });
+      return { labels: cols, datasets: ds, title };
+    };
+    [[SA, 1, '전월비 기여도 분해 (%p) — 계절조정'],
+     [NSA, 12, '전년동월비 기여도 분해 (%p) — 원계열']].forEach(([ind, lag, t], i) => {
+      const cfg = stack(ind, lag, t);
+      usPpiCharts[i] = new Chart(box.querySelector('#upC' + i), {
+        type: 'bar', data: { labels: cfg.labels, datasets: cfg.datasets },
+        options: { responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+            title: { display: true, font: { size: 13 }, text: t },
+            tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+              label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+          scales: { x: { stacked: true, ticks: xT },
+            y: { stacked: true, ticks: { font: { size: 10 }, callback: v => axFmt(v, '%p') } } } },
+      });
+    });
+  } else {
+    // 엑셀 시트가 그리는 그림 = 근원 전년동월비 한 줄. 그걸 왼쪽에 그대로 두고,
+    // 오른쪽에는 헤드라인·재화·서비스를 겹쳐 어디서 오는지 본다.
+    const line = (id, title, list, lag, ind) => new Chart(box.querySelector(id), {
+      type: 'line', plugins: [LINE_POP],
+      data: { labels: cols, datasets: list.map(([nm, col, pop], j) => ({
+        label: nm, data: cols.map(d => chg(M(ind, nm), d, lag)),
+        borderColor: col, backgroundColor: col, borderWidth: pop ? 2.8 : 1.8,
+        pointRadius: 0, tension: .12, spanGaps: true, pop: !!pop, order: j })) },
+      options: { responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: list.length > 1, position: 'bottom',
+            labels: { font: { size: 11 }, boxWidth: 12 } },
+          title: { display: true, font: { size: 13 }, text: title },
+          tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+            callbacks: { title: it => dateLabel(it[0].label),
+              label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+        scales: { x: { ticks: xT },
+          y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
+    });
+    usPpiCharts[0] = line('#upC0', '근원 PPI 전년동월비 (%) — 원계열',
+      [['근원 PPI (식료품·에너지 제외)', '#002060', true]], 12, NSA);
+    usPpiCharts[1] = line('#upC1', '전년동월비 (%) — 원계열',
+      [['PPI 최종수요', '#1a2b4a', true], ['재화', '#8e44ad'], ['서비스', '#1a4fa0'],
+       ['에너지', '#c0392b']], 12, NSA);
+  }
+}
+
+// 기여도 구성 — 서비스를 바닥에 두고 그 위로 쌓는다.
+//   근원재화 = 재화 − 식료품 − 에너지 (가중치도 같은 방식으로 뺀다)
+const US_PPI_CTB = [
+  ['서비스', 67.184, '#1a4fa0'],
+  ['근원재화', 19.02, '#8e44ad'],
+  ['식료품', 5.63, '#c98a1a'],
+  ['에너지', 5.51, '#c0392b'],
+];
+function usPpiCtbRows() {
+  return [['PPI 최종수요 (실제 변화율)', 0, ''],
+    ...US_PPI_CTB.map(([n, w]) => [n, 1, w]),
+    ['합계', 0, 97.34], ['잔차 (최종수요 건설 등)', 1, 2.66]];
+}
+function usPpiCtb(ind, nm, d, lag, chg) {
+  const M = n => { if (!ind) return null;
+    const x = ind.series.find(y => baseName(y.name) === n)
+           || ind.series.find(y => baseName(y.name).split(' (')[0] === n.split(' (')[0]);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : null; };
+  const w = (US_PPI_CTB.find(x => x[0] === nm) || [])[1];
+  if (nm === 'PPI 최종수요 (실제 변화율)') return chg(M('PPI 최종수요'), d, lag);
+  if (nm === '근원재화') {
+    const g = chg(M('재화'), d, lag), f = chg(M('식료품'), d, lag), e = chg(M('에너지'), d, lag);
+    if (g == null || f == null || e == null) return null;
+    return (g * 30.16 - f * 5.63 - e * 5.51) / 100;
+  }
+  if (nm === '합계' || nm === '잔차 (최종수요 건설 등)') {
+    let sum = 0, ok = true;
+    US_PPI_CTB.forEach(([n]) => { const v = usPpiCtb(ind, n, d, lag, chg); if (v == null) ok = false; else sum += v; });
+    if (!ok) return null;
+    if (nm === '합계') return sum;
+    const tot = chg(M('PPI 최종수요'), d, lag);
+    return tot == null ? null : tot - sum;
+  }
+  const c = chg(M(nm), d, lag);
+  return c == null || w == null ? null : c * w / 100;
+}
+
+// ── 미국 PCE (BEA) ────────────────────────────────────────────
+//  연준의 공식 물가목표는 CPI 가 아니라 PCE 다. CPI 보다 통상 0.2~0.4%p 낮은데,
+//  가중치가 매달 갱신되고(연쇄가중) 의료비처럼 보험이 대신 내는 지출까지 잡히기 때문이다.
+//  BEA 월별 계열은 계절조정본만 공표된다 — 원계열이 없어 MoM·YoY 모두 SA 에서 뽑는다.
+//  단위: 물가 = 지수(2017=100) · 실질소비/소득 = 백만달러 → 화면에서 조달러로 환산.
+const US_PCE = { id: 'uspce', name: '미국 PCE', ids: ['us_pce'] };
+let usPceData = null, usPceTab = 'price', usPceCharts = [null, null];
+//  [BEA 원문 줄이름, 들여쓰기, 한글표시]  — 줄 순서는 T20804 그대로
+const US_PCE_ROWS = [
+  ['Personal consumption expenditures (PCE)', 0, 'PCE 개인소비지출'],
+  ['Goods', 1, '재화'],
+  ['Durable goods', 2, '내구재'],
+  ['Motor vehicles and parts', 3, '자동차·부품'],
+  ['Furnishings and durable household equipment', 3, '가구·가전'],
+  ['Recreational goods and vehicles', 3, '오락용품·차량'],
+  ['Other durable goods', 3, '기타 내구재'],
+  ['Nondurable goods', 2, '비내구재'],
+  ['Food and beverages purchased for off-premises consumption', 3, '식료품·음료 (가정용)'],
+  ['Clothing and footwear', 3, '의류·신발'],
+  ['Gasoline and other energy goods', 3, '휘발유·에너지재'],
+  ['Other nondurable goods', 3, '기타 비내구재'],
+  ['Services', 1, '서비스'],
+  ['Household consumption expenditures (for services)', 2, '가계 서비스 소비'],
+  ['Housing and utilities', 3, '주거·공공요금'],
+  ['Health care', 3, '의료'],
+  ['Transportation services', 3, '교통 서비스'],
+  ['Recreation services', 3, '오락 서비스'],
+  ['Food services and accommodations', 3, '외식·숙박'],
+  ['Financial services and insurance', 3, '금융·보험'],
+  ['Other services', 3, '기타 서비스'],
+  ['Final consumption expenditures of nonprofit institutions serving households (NPISHs)', 2, '비영리단체 최종소비'],
+  ['Gross output of nonprofit institutions', 3, '비영리단체 총산출'],
+  ['Less: Receipts from sales of goods and services by nonprofit institutions', 3, '(공제) 비영리단체 판매수입'],
+];
+//  addenda — 본표 합계에 다시 들어가는 재구성 항목이라 따로 둔다 (더하면 이중계상)
+const US_PCE_ADD = [
+  ['PCE excluding food and energy', 0, '근원 PCE (식료품·에너지 제외)'],
+  ['PCE excluding food, energy, and housing', 1, '근원 PCE (주거까지 제외)'],
+  ['PCE services excluding energy and housing', 1, '슈퍼코어 (에너지·주거 제외 서비스)'],
+  ['Energy goods and services', 1, '에너지 재화·서비스'],
+  ['Housing', 1, '주거'],
+  ['Market-based PCE', 0, '시장기반 PCE'],
+  ['Market-based PCE excluding food and energy', 1, '시장기반 근원 PCE'],
+];
+const US_PCE_INC = [
+  ['Personal income', 0, '개인소득'],
+  ['Equals: Disposable personal income', 1, '처분가능소득'],
+  ['Personal consumption expenditures', 1, '개인소비지출'],
+  ['Equals: Personal saving', 1, '개인저축'],
+];
+const US_PCE_RATE = ['Personal saving as a percentage of disposable personal income', '개인저축률 (%)'];
+
+async function enterUsPce() {
+  usPceData = await loadIndicator('us_pce').catch(() => null);
+  if (!usPceData) { alert('PCE 데이터가 없습니다. python fetch.py us_pce 실행 필요.'); return; }
+  current = { id: US_PCE.id, name: US_PCE.name, freq: 'M', unit: '지수·조달러',
+              updated_at: usPceData.updated_at, series: [] };
+  view = 'uspce';
+  document.getElementById('title').textContent = US_PCE.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + usPceData.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'usPceBtn'));
+  if (!document.getElementById('usPceTabs').dataset.bound) {
+    document.getElementById('usPceTabs').addEventListener('click', e => {
+      if (!e.target.dataset.uc2) return; usPceTab = e.target.dataset.uc2; refresh();
+    });
+    document.getElementById('usPceTabs').dataset.bound = '1';
+  }
+  const ds = new Set();
+  usPceData.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 30)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderUsPce() {
+  const box = document.getElementById('retailWrap');
+  document.querySelectorAll('#usPceTabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.uc2 === usPceTab));
+  const M = full => { const x = usPceData.series.find(y => baseName(y.name) === full);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : null; };
+  const P = n => M('물가 · ' + n), R = n => M('실질소비 · ' + n), I = n => M('소득·지출 · ' + n);
+  const cols = periodDates.filter(inRange);
+  const idx = new Map(periodDates.map((d, i) => [d, i]));
+  const prevN = (d, k) => { const i = idx.get(d); return i >= k ? periodDates[i - k] : null; };
+  const chg = (m, d, lag) => { if (!m) return null; const p = prevN(d, lag); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a == null || !b ? null : (a / b - 1) * 100; };
+  const lvl = (m, d, div) => { if (!m) return null; const v = m.get(d);
+    return v == null ? null : v / (div || 1); };
+  const fN = n => v => v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: n, maximumFractionDigits: n });
+  const f2 = fN(2), f1 = fN(1);
+  const cell = (v, f) => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`;
+  const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const tbl = (title, rows, val, f) =>
+    `<div class="block-title">${title}</div><div class="tscroll">`
+    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+    + rows.map(([en, lv, ko]) => `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">`
+        + `<td style="padding-left:${8 + lv * 14}px">${ko}</td>`
+        + cols.map(d => cell(val(en, d), f)).join('') + '</tr>').join('')
+    + '</tbody></table></div>';
+
+  let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + '연준의 공식 물가목표는 CPI 가 아니라 <b>PCE</b>입니다. CPI 보다 통상 <b>0.2~0.4%p 낮게</b> 나오는데, '
+    + '가중치가 매달 갱신되고(연쇄가중) 의료비처럼 <b>보험이 대신 내는 지출</b>까지 잡히기 때문입니다.<br>'
+    + 'BEA 월별 계열은 <b>계절조정본만</b> 공표됩니다 — 원계열이 없어 전월비·전년동월비 모두 같은 계열에서 뽑습니다. '
+    + '<span style="color:#c0392b">addenda 는 본표를 다시 묶은 항목이라 본표와 더하면 이중계상입니다.</span></div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ucp${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const xT = { maxTicksLimit: 12, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  usPceCharts.forEach(c => c && c.destroy());
+  usPceCharts = [null, null];
+  const line = (id, title, list, unit) => new Chart(box.querySelector(id), {
+    type: 'line', plugins: [LINE_POP],
+    data: { labels: cols, datasets: list.map(([nm, col, fn, pop], j) => ({
+      label: nm, data: cols.map(fn), borderColor: col, backgroundColor: col,
+      borderWidth: pop ? 2.8 : 1.8, pointRadius: 0, tension: .12, spanGaps: true,
+      pop: !!pop, order: j })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: list.length > 1, position: 'bottom',
+          labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}${unit}` } } },
+      scales: { x: { ticks: xT },
+        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, unit) } } } },
+  });
+
+  if (usPceTab === 'price') {
+    out += tbl('전년동월비 (%)', US_PCE_ROWS, (en, d) => chg(P(en), d, 12), f2)
+         + tbl('addenda — 전년동월비 (%)', US_PCE_ADD, (en, d) => chg(P(en), d, 12), f2)
+         + tbl('전월비 (%)', US_PCE_ROWS, (en, d) => chg(P(en), d, 1), f2)
+         + tbl('지수 (2017=100)', US_PCE_ROWS, (en, d) => lvl(P(en), d), f1);
+    box.innerHTML = out;
+    // 왼쪽은 엑셀 시트가 그리는 그림 그대로 — 근원 PCE 전년동월비 한 줄, 남색.
+    usPceCharts[0] = line('#ucp0', '근원 PCE 전년동월비 (%)',
+      [['근원 PCE', '#002060', d => chg(P('PCE excluding food and energy'), d, 12), true]], '%');
+    usPceCharts[1] = line('#ucp1', '전년동월비 (%) — 헤드라인·근원·슈퍼코어', [
+      ['PCE', '#1a2b4a', d => chg(P('Personal consumption expenditures (PCE)'), d, 12), true],
+      ['근원 PCE', '#002060', d => chg(P('PCE excluding food and energy'), d, 12)],
+      ['슈퍼코어', '#2e8b57', d => chg(P('PCE services excluding energy and housing'), d, 12)],
+      ['주거', '#c98a1a', d => chg(P('Housing'), d, 12)],
+      ['에너지', '#c0392b', d => chg(P('Energy goods and services'), d, 12)],
+    ], '%');
+  } else if (usPceTab === 'real') {
+    const T = 1e6;   // 백만달러 → 조달러
+    out += tbl('실질 소비지출 (조달러, 연쇄 2017달러)', US_PCE_ROWS, (en, d) => lvl(R(en), d, T), f2)
+         + tbl('전년동월비 (%)', US_PCE_ROWS, (en, d) => chg(R(en), d, 12), f2)
+         + tbl('전월비 (%)', US_PCE_ROWS, (en, d) => chg(R(en), d, 1), f2);
+    box.innerHTML = out;
+    usPceCharts[0] = line('#ucp0', '실질 소비지출 전년동월비 (%)',
+      [['실질 PCE', '#002060', d => chg(R('Personal consumption expenditures (PCE)'), d, 12), true]], '%');
+    usPceCharts[1] = line('#ucp1', '실질 소비 전년동월비 (%) — 재화 vs 서비스', [
+      ['실질 PCE', '#1a2b4a', d => chg(R('Personal consumption expenditures (PCE)'), d, 12), true],
+      ['재화', '#8e44ad', d => chg(R('Goods'), d, 12)],
+      ['· 내구재', '#7b52ab', d => chg(R('Durable goods'), d, 12)],
+      ['서비스', '#1a4fa0', d => chg(R('Services'), d, 12)],
+    ], '%');
+  } else {
+    const T = 1e6;
+    out += tbl('수준 (조달러, 연율)', US_PCE_INC, (en, d) => lvl(I(en), d, T), f2)
+         + `<div class="block-title">개인저축률 (%)</div><div class="tscroll">`
+         + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+         + `<tr class="lv0 sep-solid"><td>${US_PCE_RATE[1]}</td>`
+         + cols.map(d => cell(lvl(I(US_PCE_RATE[0]), d), f1)).join('') + '</tr></tbody></table></div>'
+         + tbl('전년동월비 (%)', US_PCE_INC, (en, d) => chg(I(en), d, 12), f2);
+    box.innerHTML = out;
+    usPceCharts[0] = line('#ucp0', '개인저축률 (%)',
+      [['저축률', '#002060', d => lvl(I(US_PCE_RATE[0]), d), true]], '%');
+    usPceCharts[1] = line('#ucp1', '전년동월비 (%) — 소득 vs 소비', [
+      ['처분가능소득', '#1a4fa0', d => chg(I('Equals: Disposable personal income'), d, 12), true],
+      ['개인소비지출', '#c0392b', d => chg(I('Personal consumption expenditures'), d, 12)],
+    ], '%');
+  }
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+}
+
 // ── 가계부채 ──────────────────────────────────────────────────
 //  월간(kr_household_loan)과 분기(kr_household_credit)는 ECOS 로 출처가 같지만
 //  커버리지가 다르다. 월간은 '예금취급기관'까지고, 분기는 여기에 기타금융기관
@@ -7043,9 +7440,11 @@ function renderHdebt() {
         { type: 'line', label: '잔액 (조원, 좌)', data: cols.map(lvlOf),
           borderColor: color, borderWidth: 2.6, pointRadius: 0, tension: 0.12,
           spanGaps: true, yAxisID: 'y', order: 1, pop: true },
+        // 막대는 선 뒤에 깔리지만, 연하면 증감 방향이 안 읽힌다.
+        // 선에 흰 후광(LINE_POP)이 있어 막대를 진하게 해도 잔액 추이는 그대로 보인다.
         { type: 'bar', label: chgLbl + ' (조원, 우)', data: cols.map(chgOf),
-          backgroundColor: 'rgba(150,166,186,0.45)', borderColor: 'rgba(150,166,186,0.8)',
-          borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, yAxisID: 'y2', order: 2 },
+          backgroundColor: 'rgba(108,126,150,0.85)', borderColor: 'rgba(72,88,110,1)',
+          borderWidth: 1, barPercentage: 0.85, categoryPercentage: 0.92, yAxisID: 'y2', order: 2 },
       ] },
       options: { responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
@@ -7766,12 +8165,53 @@ const RETAIL_LV = {
     '무점포 소매': 1, '인터넷 쇼핑': 2, '홈쇼핑': 2, '방문 및 배달 소매점': 2,
   },
 };
+// 선이 많으면 한 차트로는 추세가 안 읽힌다. 성격이 비슷한 것끼리 3개로 나누고
+// 각 차트에 총지수를 회색 점선으로 깔아 '전체 대비 위/아래'가 바로 보이게 한다.
+//   goods: 통계청 공식 대분류(내구재/준내구재/비내구재) 그대로.
+//   type : 공식 상위분류가 8개나 돼 화면이 쪼개지므로, 유통 채널 성격으로 3개로 묶었다.
+const RETAIL_GROUPS = {
+  goods: [
+    ['내구재', ['내구재', '승용차', '국내 승용차', '수입 승용차', '가전제품',
+                '통신기기 및 컴퓨터', '통신기기', '컴퓨터', '가구', '기타내구재']],
+    ['준내구재', ['준내구재', '의복', '신발 및 가방', '신발', '가방',
+                  '오락 취미 경기용품', '기타준내구재']],
+    ['비내구재', ['비내구재', '음식료품', '의약품', '화장품', '서적 문구',
+                  '차량연료', '기타비내구재']],
+  ],
+  type: [
+    ['대형유통', ['백화점', '대형마트', '면세점']],
+    ['근린·생활', ['슈퍼마켓 및 잡화점', '체인 슈퍼마켓', '일반 슈퍼마켓 및 잡화점', '편의점']],
+    ['무점포·전문·승용차', ['무점포 소매', '인터넷 쇼핑', '홈쇼핑', '방문 및 배달 소매점',
+      '전문소매점', '가전·컴퓨터·통신기기 소매점', '의복·신발·가방 소매점',
+      '음식·가정· 문화상품 소매점', '음식·가정·문화상품 소매점',
+      '의약품·화장품·기타상품 소매점', '승용차 및 연료 소매점', '승용차 소매점', '연료 소매점']],
+  ],
+};
+// 총계 성격 항목은 어느 분류에도 넣지 않고, 모든 차트에 점선 기준선으로 깐다.
+// (그룹에 넣으면 '합계(승용차 제외)' 혼자 기타 차트를 만들어 버린다)
+const RETAIL_REFS = ['총지수', '합계(승용차 제외)'];
+// 선택된 항목 이름 → 실제로 그릴 그룹. 정의에 없는 것은 '기타'로 모으고,
+// 선택이 없는 그룹은 통째로 뺀다(빈 차트를 만들지 않는다).
+function retailGroupsFor(tab, names) {
+  const def = RETAIL_GROUPS[tab] || [];
+  const pool = names.filter(n => !RETAIL_REFS.includes(n));
+  const used = new Set();
+  const out = def.map(([g, ms]) => {
+    const hit = pool.filter(n => ms.includes(n));
+    hit.forEach(n => used.add(n));
+    return [g, hit];
+  }).filter(([, ms]) => ms.length);
+  const rest = pool.filter(n => !used.has(n));
+  if (rest.length) out.push(['기타', rest]);
+  return out;
+}
+
 function retailLevel(tab, name) {
   const lv = RETAIL_LV[tab][name.trim()];
   return lv === undefined ? 1 : lv;
 }
 let retailData = null, retailTab = 'goods';
-let retMainSel = null, retMainMetric = 'yoy', retMainType = 'line', retMainChart = null;
+let retMainSel = null, retMainMetric = 'yoy', retMainType = 'line', retMainCharts = [];
 let retCollapsed = { goods: null, type: null };   // 분류별 접힘 상태
 
 async function enterRetail() {
@@ -7938,6 +8378,8 @@ function renderRetail() {
   nodes.forEach((nd, i) => nd.hasChildren = i + 1 < nodes.length && nodes[i + 1].lv > nd.lv);
   const colSet = (retCollapsed[retailTab] ||= new Set());
   if (retMainSel == null) retMainSel = new Set(items.slice(0, 4).map(s => s.name));
+  const selNames = items.filter(s => retMainSel.has(s.name)).map(s => s.name);
+  const retGroups = retailGroupsFor(retailTab, selNames);
   const metrics = [
     ['yoy', '전년동월비 YoY (%)', 12], ['mom', '전월비 MoM (%)', 1], ['level', '원지수', 0],
   ];
@@ -7970,9 +8412,17 @@ function renderRetail() {
     + '<div class="mode" id="rmMetric">' + [['yoy', 'YoY'], ['mom', 'MoM'], ['level', '원지수']]
       .map(([v, t]) => `<button data-rm="${v}" class="${retMainMetric === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
     + '<div class="mode" id="rmType">' + [['line', '선'], ['bar', '막대']]
-      .map(([v, t]) => `<button data-ry="${v}" class="${retMainType === v ? 'active' : ''}">${t}</button>`).join('') + '</div></div>'
+      .map(([v, t]) => `<button data-ry="${v}" class="${retMainType === v ? 'active' : ''}">${t}</button>`).join('') + '</div>'
+    + '<span style="font-size:12px;color:#8592a3">표에서 <b>우클릭</b>=넣고 빼기 · '
+    + '<b>칩 ×</b> 또는 <b>범례 클릭</b>=빼기 · 회색 점선=총계 기준선</span>'
+    + '</div>'
     + '<div id="rmChips" style="display:flex;gap:5px 10px;flex-wrap:wrap;font-size:12px;margin-bottom:6px"></div>'
-    + '<div class="cchart" style="height:320px;margin-bottom:18px"><canvas id="retMainChart"></canvas></div>'
+    + (retGroups.length
+        ? '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px">'
+          + retGroups.map((g, i) => `<div style="flex:1;min-width:320px">`
+              + `<div class="cchart" style="height:270px"><canvas id="retMainChart${i}"></canvas></div></div>`).join('')
+          + '</div>'
+        : '<div class="cchart" style="height:320px;margin-bottom:18px"><canvas id="retMainChart0"></canvas></div>')
     + '<div class="grpbar" style="position:static;padding:0;margin-bottom:6px">'
     + '<button id="retExpand">전체 펼치기</button><button id="retCollapse">전체 접기</button></div>';
   // 3개 블록 표 (트리 접기 지원)
@@ -7986,7 +8436,10 @@ function renderRetail() {
       const isCol = colSet.has(nd.name);
       const m = new Map(nd.s.data.map(p => [p.d, p.v]));
       const cls = nd.lv === 0 ? 'lv0 sep-solid' : `lv${nd.lv}`;
-      const caret = nd.hasChildren ? `<span class="tcaret">${isCol ? '＋' : '－'}</span>` : '';
+      // 캐럿이 있는 행만 이름이 오른쪽으로 밀려, 같은 레벨인데 계층이 달라 보였다.
+      // 자식이 없는 행에도 같은 폭의 빈칸을 넣어 이름 시작점을 맞춘다.
+      const caret = nd.hasChildren ? `<span class="tcaret">${isCol ? '＋' : '－'}</span>`
+                                   : '<span class="tcaret-sp"></span>';
       const cellsHtml = cols.map(d => {
         const v = mval(m, d, mode, lag);
         const txt = v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: mode === 'level' ? 1 : 2, maximumFractionDigits: mode === 'level' ? 1 : 2 });
@@ -8018,19 +8471,35 @@ function renderRetail() {
     e.preventDefault(); const n = tr.dataset.sel;
     retMainSel.has(n) ? retMainSel.delete(n) : retMainSel.add(n); renderRetail();
   });
-  // 차트
+  // 선택 칩 — 26개를 전부 늘어놓는 대신 '지금 차트에 들어간 것'만 보여준다.
+  //   넣기: 표에서 우클릭 · 빼기: 칩의 × 또는 범례 클릭.
   const chips = box.querySelector('#rmChips');
-  const allBtn = document.createElement('button');
-  allBtn.textContent = retMainSel.size === items.length ? '전체 해제' : '전체 선택';
-  allBtn.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid #d7dde8;background:#fff;cursor:pointer;border-radius:8px';
-  allBtn.onclick = () => { retMainSel = retMainSel.size === items.length ? new Set() : new Set(items.map(s => s.name)); renderRetail(); };
-  chips.appendChild(allBtn);
-  items.forEach((s, i) => {
-    const lb = document.createElement('label'); lb.style.cssText = 'cursor:pointer';
-    lb.innerHTML = `<input type="checkbox" ${retMainSel.has(s.name) ? 'checked' : ''}><span style="color:${PALETTE[i % PALETTE.length]}">■</span> ${s.name}`;
-    lb.querySelector('input').onchange = e => { e.target.checked ? retMainSel.add(s.name) : retMainSel.delete(s.name); renderRetail(); };
-    chips.appendChild(lb);
+  const sel = items.filter(s => retMainSel.has(s.name));
+  if (!sel.length) {
+    const hint = document.createElement('span');
+    hint.style.cssText = 'color:#98a3b6';
+    hint.textContent = '표에서 항목을 우클릭하면 차트에 들어갑니다.';
+    chips.appendChild(hint);
+  }
+  sel.forEach(s => {
+    const i = items.indexOf(s);
+    const isRef = RETAIL_REFS.includes(s.name);
+    const col = isRef ? '#8592a3' : PALETTE[i % PALETTE.length];
+    const el = document.createElement('span');
+    el.style.cssText = 'display:inline-flex;align-items:center;gap:5px;padding:2px 8px;'
+      + 'border:1px solid #d7dde8;border-radius:11px;background:#fff;color:' + col;
+    el.innerHTML = `<span>${isRef ? '┈' : '■'}</span>${s.name}<b style="cursor:pointer;color:#98a3b6">×</b>`;
+    el.querySelector('b').onclick = () => { retMainSel.delete(s.name); renderRetail(); };
+    chips.appendChild(el);
   });
+  if (sel.length) {
+    const clr = document.createElement('button');
+    clr.textContent = '전체 해제';
+    clr.style.cssText = 'font-size:11.5px;padding:2px 9px;border:1px solid #e0e5ec;'
+      + 'background:#fff;cursor:pointer;border-radius:11px;color:#8592a3';
+    clr.onclick = () => { retMainSel = new Set(); renderRetail(); };
+    chips.appendChild(clr);
+  }
   box.querySelectorAll('#rmIdx button').forEach(b => b.onclick = () => {
     retIdxType = b.dataset.ri; renderRetail(); });
   const raSel = box.querySelector('#raSel'), raBtn = box.querySelector('#raBtn');
@@ -8042,20 +8511,64 @@ function renderRetail() {
   box.querySelectorAll('#rmMetric button').forEach(b => b.onclick = () => { retMainMetric = b.dataset.rm; renderRetail(); });
   box.querySelectorAll('#rmType button').forEach(b => b.onclick = () => { retMainType = b.dataset.ry; renderRetail(); });
   const lag = retMainMetric === 'mom' ? 1 : 12;
-  if (retMainChart) { retMainChart.destroy(); retMainChart = null; }
-  const datasets = items.filter(s => retMainSel.has(s.name)).map(s => {
-    const i = items.indexOf(s); const m = new Map(s.data.map(p => [p.d, p.v]));
-    return { label: s.name, data: cols.map(d => mval(m, d, retMainMetric, lag)),
-      borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
-      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15 };
-  });
-  retMainChart = new Chart(box.querySelector('#retMainChart'), {
-    type: retMainType, data: { labels: cols, datasets },
+  retMainCharts.forEach(c => c && c.destroy());
+  retMainCharts = [];
+  const byNameS = new Map(items.map(s => [s.name, s]));
+  const dsOf = (s, color, extra) => {
+    const m = new Map(s.data.map(p => [p.d, p.v]));
+    return Object.assign({ label: s.name, data: cols.map(d => mval(m, d, retMainMetric, lag)),
+      borderColor: color, backgroundColor: color,
+      borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.15 }, extra || {});
+  };
+  // 총계는 회색 점선 기준선으로 (선 모드에서만 — 막대 위에 겹치면 오히려 지저분하다)
+  //   선택된 총계만 그린다. 표에서 우클릭으로 빼면 기준선도 사라진다.
+  const REF_STYLE = { '총지수': ['#8592a3', [5, 4]], '합계(승용차 제외)': ['#b8c0cc', [2, 3]] };
+  const refDs = retMainType !== 'line' ? []
+    : RETAIL_REFS.filter(n => retMainSel.has(n) && byNameS.get(n)).map((n, k) => {
+        const [col, dash] = REF_STYLE[n] || ['#9aa7b8', [5, 4]];
+        return dsOf(byNameS.get(n), col,
+          { label: n + ' (기준)', borderWidth: 1.6, borderDash: dash, order: 9 + k });
+      });
+  const mkRet = (id, title, list) => new Chart(box.querySelector(id), {
+    type: retMainType,
+    plugins: [LINE_POP],
+    data: { labels: cols, datasets: list.map((s, k) => {
+        const i = items.indexOf(s);
+        return dsOf(s, PALETTE[i % PALETTE.length], { pop: retMainType === 'line', order: k });
+      }).concat(refDs) },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-        tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
-      scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 11 } } } } },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 },
+          // 범례를 누르면 '숨김'이 아니라 선택 자체에서 뺀다. 표에서 우클릭하면 다시 들어온다.
+          // 기준선(총지수)은 선택 항목이 아니므로 Chart.js 기본 동작(숨김)을 그대로 둔다.
+          onClick(e, item, legend) {
+            const lb = item.text;
+            if (lb.endsWith(' (기준)')) {
+              const mi = legend.chart.getDatasetMeta(item.datasetIndex);
+              mi.hidden = mi.hidden === null ? true : null;
+              legend.chart.update();
+              return;
+            }
+            retMainSel.delete(lb);
+            renderRetail();
+          } },
+        title: title ? { display: true, font: { size: 12.5 }, text: title } : { display: false },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: { maxTicksLimit: retGroups.length ? 8 : 12, font: { size: 10 },
+                 callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { ticks: { font: { size: 11 } } } } },
   });
+  if (retGroups.length) {
+    const mLbl = { yoy: '전년동월비', mom: '전월비', level: '원지수' }[retMainMetric] || '';
+    retGroups.forEach(([gname, members], gi) => {
+      const list = members.map(n => byNameS.get(n)).filter(Boolean);
+      if (!list.length) return;
+      retMainCharts[gi] = mkRet(`#retMainChart${gi}`, `${gname} — ${mLbl}`, list);
+    });
+  } else {
+    retMainCharts[0] = mkRet('#retMainChart0', '', items.filter(s => retMainSel.has(s.name)));
+  }
   box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
 }
 
@@ -8271,11 +8784,19 @@ function renderCardWeek() {
   const rawYoy = yoyOf(I), maYoy = yoyOf(ma);
   const maMom = ma.map((_, i) => i >= 4 && ma[i] != null && ma[i - 4]
     ? (ma[i] / ma[i - 4] - 1) * 100 : null);   // 4주 전 대비
+  // Z-스코어 — W주 평균 YoY 를 '전 구간' 평균·표준편차로 표준화한다.
+  //   화면 기간이 아니라 전체를 기준으로 삼아야 기간을 바꿔도 값이 흔들리지 않는다.
+  //   표본이 2021-01~ 로 짧다(한 사이클). 절대 수준보다 방향으로 읽는 게 안전하다.
+  const zBase = maYoy.filter(v => v != null);
+  const zMu = zBase.length ? zBase.reduce((a, b) => a + b, 0) / zBase.length : 0;
+  const zSd = zBase.length > 1
+    ? Math.sqrt(zBase.reduce((a, b) => a + (b - zMu) ** 2, 0) / zBase.length) : 0;
+  const maZ = maYoy.map(v => (v == null || !zSd) ? null : (v - zMu) / zSd);
 
   const keep = allW.map((d, i) => inRange(d) ? i : -1).filter(i => i >= 0);
   if (!keep.length) { box.innerHTML = '<div style="padding:28px;color:#555">선택한 기간에 주간 데이터가 없습니다.</div>'; return; }
   const cut = a => keep.map(i => a[i]);
-  const cols = cut(allW), cI = cut(I), cMa = cut(ma), cRaw = cut(rawYoy), cMY = cut(maYoy), cMM = cut(maMom);
+  const cols = cut(allW), cI = cut(I), cMa = cut(ma), cRaw = cut(rawYoy), cMY = cut(maYoy), cMM = cut(maMom), cZ = cut(maZ);
   const li = keep[keep.length - 1];   // 요약 카드는 '화면에 보이는 마지막 주' 기준 (표와 어긋나지 않게)
 
   const f2 = v => v == null ? '' : v.toLocaleString('ko-KR',
@@ -8288,10 +8809,7 @@ function renderCardWeek() {
     + [[4, '4주'], [13, '13주 (3개월)'], [26, '26주 (6개월)']].map(([v, t]) =>
         `<button data-cw="${v}" class="${W === v ? 'active' : ''}">${t}</button>`).join('')
     + '</div><span style="font-size:12px;color:#8592a3">기간 설정은 월 단위지만 표·차트는 주 단위입니다</span>'
-    + '<span style="font-size:12px;color:#555;margin-left:12px">월별 집계: </span><div class="mode" id="cwMon">'
-    + [['last', '월말 주'], ['avg', '월평균']].map(([v, t]) =>
-        `<button data-cm="${v}" class="${cardWkMonBase === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div></div>'
+    + '</div>'
     + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
     + '통계청 <b>나우캐스트</b>(원자료 <b>신한카드</b>) 주간 지표. 공표가 가장 빠릅니다(약 2주 시차). '
     + '포털은 변화율만 주지만, <b>2020년 1월 대비</b>는 기준이 고정이라 <b>지수로 되돌려</b> 원하는 기간으로 묶었습니다. '
@@ -8299,9 +8817,10 @@ function renderCardWeek() {
     + `<b>${W}주 이동평균</b>을 기본으로 봅니다. `
     + '<span style="color:#c0392b">신한카드 <b>단일사 표본</b>이라 월간 탭(여신협회 전체)과 모집단이 다릅니다 — '
     + '수준이 아니라 방향만 비교하세요. 최근 1~2주는 속보치라 다음 수집 때 바뀝니다.</span><br>'
-    + '오른쪽 차트의 <b>월별 집계</b>는 달마다 한 점만 남깁니다. <b>월말 주</b>는 시점이 또렷한 대신 '
-    + '그 주의 특수요인(명절·속보치)에 그대로 노출되고, <b>월평균</b>은 그 달 전체를 써서 훨씬 안정적입니다. '
-    + '두 값이 크게 벌어지면 월말 주가 튄 것이니 월평균을 보세요.</div>'
+    + `오른쪽 <b>Z-스코어</b>는 왼쪽의 ${W}주 평균 YoY 를 전 구간 평균·표준편차로 표준화한 것입니다 `
+    + `(평균 ${zMu.toFixed(2)}% · 표준편차 ${zSd.toFixed(2)}%p). `
+    + '+1σ 면 평소보다 한 표준편차 강하다는 뜻입니다. '
+    + '<span style="color:#8592a3">표본이 2021년부터라 사이클이 한 번뿐입니다 — 절대 수준보다 방향으로 읽으세요.</span></div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="cwC${i}"></canvas></div></div>`).join('')
     + '</div>';
@@ -8316,6 +8835,9 @@ function renderCardWeek() {
     + kbox(`${W}주 이동평균`, f2(ma[li]), '단주 변동 제거', '#1a2b4a')
     + kbox(`${W}주 평균 YoY`, pp(maYoy[li]), '주간 소비 모멘텀', sgn(maYoy[li]))
     + kbox('4주 전 대비', pp(maMom[li]), `${W}주 평균 기준`, sgn(maMom[li]))
+    + kbox('Z-Score', maZ[li] == null ? '-' : (maZ[li] > 0 ? '+' : '') + maZ[li].toFixed(2) + 'σ',
+           `${W}주 평균 YoY 표준화`,
+           maZ[li] == null ? '#1a2b4a' : maZ[li] > 0.5 ? '#2b7a3d' : maZ[li] < -0.5 ? '#c0392b' : '#1a2b4a')
     + kbox('주간 원계열 YoY', pp(rawYoy[li]), '노이즈 큼 — 참고용', sgn(rawYoy[li]))
     + '</div>';
 
@@ -8328,6 +8850,7 @@ function renderCardWeek() {
     + row(`${W}주 이동평균`, cMa, f2)
     + row(`${W}주 평균 YoY (%)`, cMY, f2)
     + row(`${W}주 평균 4주전비 (%)`, cMM, f2)
+    + row('Z-Score (σ)', cZ, f2)
     + row('주간 원계열 YoY (%)', cRaw, f2)
     + '</tbody></table></div>';
 
@@ -8341,8 +8864,6 @@ function renderCardWeek() {
   box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
   box.querySelectorAll('#cwWin button').forEach(b =>
     b.onclick = () => { cardWkWin = +b.dataset.cw; renderCardWeek(); });
-  box.querySelectorAll('#cwMon button').forEach(b =>
-    b.onclick = () => { cardWkMonBase = b.dataset.cm; renderCardWeek(); });
 
   cardWkCharts.forEach(c => c && c.destroy());
   cardWkCharts = [null, null];
@@ -8364,41 +8885,46 @@ function renderCardWeek() {
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
       scales: { x: { ticks: xTick }, y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
-  // ── 차트 2: 월별 전년동기비 ──
-  //   주간 지수를 달마다 한 점으로 줄여(월말 주 또는 월평균) 전년동월과 비교한다.
-  //   주간 원계열은 명절·요일 배열에 흔들리는데, 월 단위로 묶으면 그 잡음이 상당히 걷힌다.
-  //   월평균은 그 달 전체를 쓰고, 월말 주는 시점이 또렷한 대신 그 주의 특수요인에 노출된다.
-  const mAcc = new Map();
-  allW.forEach((d, i) => { const k = d.slice(0, 7);
-    (mAcc.get(k) || mAcc.set(k, []).get(k)).push({ d, v: I[i] }); });
-  const mKeys = [...mAcc.keys()].sort();
-  const mVal = new Map(mKeys.map(k => { const a = mAcc.get(k);
-    return [k, cardWkMonBase === 'avg' ? a.reduce((x, y) => x + y.v, 0) / a.length
-                                       : a[a.length - 1].v]; }));
-  const pmK = k => { const [y, mo] = k.split('-'); return `${+y - 1}-${mo}`; };
-  const mYoy = mKeys.map(k => { const p = mVal.get(pmK(k));
-    return p ? (mVal.get(k) / p - 1) * 100 : null; });
-  // 화면 기간 안의 달만
-  const mKeep = mKeys.map((k, i) => (inRange(k + '-01') || inRange(k + '-28')) ? i : -1).filter(i => i >= 0);
-  const mLab = mKeep.map(i => mKeys[i]);
-  const mDat = mKeep.map(i => mYoy[i]);
-  const partial = mKeep.length && mAcc.get(mKeys[mKeep[mKeep.length - 1]]).length < 4;
-  const baseLab = cardWkMonBase === 'avg' ? '월평균' : '월말 주';
+  // ── 차트 2: Z-스코어 ──
+  //   W주 평균 YoY 를 전 구간 평균·표준편차로 표준화한 것. 0 이 평소, ±1 이 한 표준편차.
+  //   기준선(0, ±1)을 깔아 두면 '지금이 평소보다 어느 정도인지'가 바로 읽힌다.
+  const zBands = {
+    id: 'cwZBands',
+    beforeDatasetsDraw(c) {
+      const { ctx, chartArea: a, scales: { y } } = c;
+      if (!a) return;
+      ctx.save();
+      [[1, 'rgba(43,122,61,0.06)'], [-1, 'rgba(192,57,43,0.06)']].forEach(([v, col]) => {
+        const y0 = y.getPixelForValue(v), yc = y.getPixelForValue(0);
+        ctx.fillStyle = col; ctx.fillRect(a.left, Math.min(y0, yc), a.right - a.left, Math.abs(yc - y0));
+      });
+      [[0, 'rgba(90,107,128,0.55)', 1.2], [1, 'rgba(90,107,128,0.3)', 1], [-1, 'rgba(90,107,128,0.3)', 1]]
+        .forEach(([v, col, w]) => {
+          const yy = y.getPixelForValue(v);
+          ctx.beginPath(); ctx.strokeStyle = col; ctx.lineWidth = w;
+          ctx.setLineDash(v === 0 ? [] : [4, 4]);
+          ctx.moveTo(a.left, yy); ctx.lineTo(a.right, yy); ctx.stroke();
+        });
+      ctx.restore();
+    },
+  };
   cardWkCharts[1] = new Chart(box.querySelector('#cwC1'), {
     type: 'line',
-    data: { labels: mLab, datasets: [
-      { label: `월별 전년동기비 (${baseLab} 기준)`, data: mDat,
-        borderColor: '#2b7a3d', backgroundColor: '#2b7a3d',
-        borderWidth: 3, pointRadius: 3, tension: .15 },
+    plugins: [zBands],
+    data: { labels: cols, datasets: [
+      { label: `Z-Score (${W}주 평균 YoY 표준화)`, data: cZ,
+        borderColor: '#e8722c', backgroundColor: '#e8722c',
+        borderWidth: 3, pointRadius: 0, tension: .15 },
     ] },
     options: { responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+      plugins: { legend: { display: false },
         title: { display: true, font: { size: 13 },
-          text: `월별 전년동기비 (%) — ${baseLab} 기준` + (partial ? ' · 마지막 달은 미완성' : '') },
-        tooltip: { callbacks: { label: it => ` ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
-      scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
-        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
+          text: `Z-Score — ${W}주 평균 YoY 표준화 (평균 ${zMu.toFixed(2)}% · σ ${zSd.toFixed(2)}%p)` },
+        tooltip: { callbacks: { label: it => ` ${it.parsed.y == null ? '-' : (it.parsed.y > 0 ? '+' : '') + it.parsed.y.toFixed(2)}σ` } } },
+      scales: { x: { ticks: xTick },
+        y: { suggestedMin: -2.5, suggestedMax: 2.5,
+             ticks: { font: { size: 10 }, callback: v => axFmt(v, 'σ') } } } },
   });
 
   // ── 업종별 ──
@@ -8454,7 +8980,37 @@ function renderCardWeek() {
 
 // 업종별 주간 카드사용액 — 나우캐스트 COICOP 7개 업종.
 // 전체와 같은 방식(지수 → W주 이동평균 → 전년동기비)으로 맞춰 어느 쪽이 부진하고 늘었는지 본다.
-let cardSecChart = null;
+let cardSecCharts = [];
+// 세분류를 한 차트에 다 넣으면 선이 엉켜 추세가 안 보인다.
+// 성격이 비슷한 것끼리 3개로 묶고, 각 차트에 '전체'를 회색 점선으로 깔아
+// 그 항목이 전체 대비 위인지 아래인지 바로 읽히게 한다.
+const CARD_AGE_GROUPS = [
+  ['20대 이하', ['20대 이하']],
+  ['30~40대',  ['30대', '40대']],
+  ['50대 이상', ['50대', '60대', '70대 이상']],
+];
+// 업종은 COICOP 대분류 7개. 경기 민감도가 비슷한 것끼리 묶는다.
+//   필수재는 경기와 무관하게 완만하고, 대면 서비스는 경기·날씨·연휴에 크게 흔들린다.
+const CARD_IND_GROUPS = [
+  ['필수 소비',      ['식료품·음료', '보건']],
+  ['준내구·교육',    ['의류·신발', '교육서비스']],
+  ['대면 서비스',    ['음식·음료서비스', '숙박서비스', '오락·스포츠·문화']],
+];
+// 화면에 있는 항목 이름 목록 → 실제로 그릴 그룹. 정의에 없는 항목은 '기타'로 모은다.
+function cardSecGroupsFor(names) {
+  const def = cardSecCut === 'age' ? CARD_AGE_GROUPS
+            : cardSecCut === 'ind' ? CARD_IND_GROUPS : null;
+  if (!def) return null;
+  const used = new Set();
+  const out = def.map(([g, ms]) => {
+    const hit = ms.filter(n => names.includes(n));
+    hit.forEach(n => used.add(n));
+    return [g, hit];
+  }).filter(([, ms]) => ms.length);
+  const rest = names.filter(n => !used.has(n));
+  if (rest.length) out.push(['기타', rest]);
+  return out.length ? out : null;
+}
 let cardSecCut = 'ind';   // 세분류 축: ind(업종) | age(연령대)
 const CARD_SEC_CUT = [
   ['ind', '업종별', 'weeklyInd', 'kr_card_weekly_ind', 'cd2=A00029 · COICOP 대분류 7개'],
@@ -8462,7 +9018,7 @@ const CARD_SEC_CUT = [
 ];
 function renderCardWeekSectors(box, W) {
   const el = box.querySelector('#cwSec');
-  if (cardSecChart) { cardSecChart.destroy(); cardSecChart = null; }
+  cardSecCharts.forEach(c => c && c.destroy()); cardSecCharts = [];
   const meta = CARD_SEC_CUT.find(x => x[0] === cardSecCut) || CARD_SEC_CUT[0];
   const ind = cardData && cardData[meta[2]];
   const tabs = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
@@ -8510,6 +9066,7 @@ function renderCardWeekSectors(box, W) {
   const fp = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%p';
   const barW = r => Math.min(100, Math.abs(r) / Math.max(...rows.map(x => Math.abs(x.last)), 1) * 100);
 
+  const secGroups = cardSecGroupsFor(rows.map(r => r.name));
   const unitNm = cardSecCut === 'age' ? '연령대' : '업종';
   // 받침에 따라 조사를 고른다 ('업종이' / '연령대가')
   const hasJong = w => { const c = w.charCodeAt(w.length - 1) - 0xAC00;
@@ -8540,7 +9097,12 @@ function renderCardWeekSectors(box, W) {
     + (cardSecCut === 'age' ? ' 카드 명의자 기준이라 <b>가구 내 실제 사용자와 다를 수 있습니다</b>'
         + '(예: 부모 명의 카드를 자녀가 사용).' : '')
     + '</div></div>'
-    + '<div class="cchart" style="height:300px;margin-top:12px"><canvas id="cwSecC"></canvas></div>';
+    + (secGroups
+        ? '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">'
+          + secGroups.map((_, i) => `<div style="flex:1;min-width:300px">`
+              + `<div class="cchart" style="height:260px"><canvas id="cwSecC${i}"></canvas></div></div>`).join('')
+          + '</div>'
+        : '<div class="cchart" style="height:300px;margin-top:12px"><canvas id="cwSecC0"></canvas></div>');
   el.innerHTML = h;
   bindCut();
 
@@ -8548,21 +9110,56 @@ function renderCardWeekSectors(box, W) {
   const base0 = rows[0];
   const keep = base0.dates.map((d, i) => inRange(d) ? i : -1).filter(i => i >= 0);
   const labels = keep.map(i => base0.dates[i]);
-  cardSecChart = new Chart(box.querySelector('#cwSecC'), {
+  const byName = new Map(rows.map(r => [r.name, r]));
+
+  // 전체(신한카드 합계)를 같은 방식으로 계산해 각 차트의 회색 점선 기준선으로 깐다.
+  let refYo = null;
+  const wk = cardData && cardData.weekly;
+  if (wk) {
+    const ws = wk.series.find(x => baseName(x.name).endsWith('지수 (2020년 1월=100)'));
+    if (ws) {
+      const dmap = new Map(ws.data.map(p => [p.d, p.v]));
+      const v = base0.dates.map(d => dmap.get(d) ?? null);
+      const m = v.map((_, k) => { if (k < W - 1) return null;
+        const sl = v.slice(k - W + 1, k + 1);
+        return sl.some(x => x == null) ? null : sl.reduce((a, b) => a + b, 0) / W; });
+      refYo = m.map((_, k) => k >= 52 && m[k] != null && m[k - 52] ? (m[k] / m[k - 52] - 1) * 100 : null);
+    }
+  }
+  const refDs = refYo ? [{ label: '전체 (신한카드)', data: keep.map(j => refYo[j] ?? null),
+    borderColor: '#9aa7b8', backgroundColor: '#9aa7b8', borderWidth: 1.6, borderDash: [5, 4],
+    pointRadius: 0, tension: .15, order: 9 }] : [];
+
+  const mkSec = (canvasId, title, list, colorAt) => new Chart(box.querySelector(canvasId), {
     type: 'line',
-    data: { labels, datasets: rows.map((r, i) => ({
+    plugins: [LINE_POP],
+    data: { labels, datasets: list.map((r, i) => ({
       label: r.name, data: keep.map(j => r.yo[j] ?? null),
-      borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
-      borderWidth: 2, pointRadius: 0, tension: .15 })) },
+      borderColor: colorAt(r, i), backgroundColor: colorAt(r, i),
+      borderWidth: 2.4, pointRadius: 0, tension: .15, pop: true, order: i })).concat(refDs) },
     options: { responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-        title: { display: true, font: { size: 13 }, text: `${meta[1]} ${W}주 이동평균 전년동기비 (%)` },
+        title: { display: true, font: { size: 12.5 }, text: title },
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
-      scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
+      scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 10 },
                  callback: function (v) { const l = this.getLabelForValue(v); return l ? l.slice(2, 7) : ''; } } },
         y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
   });
+
+  if (secGroups) {
+    // 성격별로 쪼갠 차트. y축은 각자 자동 — 변동폭이 다른 항목을 한 축에 묶으면
+    // 작은 쪽 움직임이 큰 쪽에 눌려 안 보인다.
+    secGroups.forEach(([gname, members], gi) => {
+      const list = members.map(n => byName.get(n)).filter(Boolean);
+      if (!list.length) return;
+      cardSecCharts[gi] = mkSec(`#cwSecC${gi}`, `${gname} — ${W}주 평균 YoY (%)`,
+        list, (r, i) => PALETTE[(gi * 3 + i) % PALETTE.length]);
+    });
+  } else {
+    cardSecCharts[0] = mkSec('#cwSecC0', `${meta[1]} ${W}주 이동평균 전년동기비 (%)`,
+      rows, (r, i) => PALETTE[i % PALETTE.length]);
+  }
 }
 
 // ── 빈일자리·물가 (노동시장 긴축도 vs 근원물가) ─────────────────
@@ -9597,6 +10194,74 @@ function renderCpiItems() {
 
 // 기여도 탭: 품목 단위 기여도 트리 — 품목 합 = 각 지수의 MoM/YoY (CPI상세 계층)
 let cpiCtbLag = 1, cpiCtbCollapsed = {};
+// 예년 같은 달과의 비교 — '농축수산물은 원래 7월엔 이랬는데 이번엔 이랬다'.
+//   물가는 계절성이 크다(여름 채소, 연초 가격조정, 명절). 같은 달끼리 비교해야
+//   '평소보다 심한가'를 알 수 있다. 전 구간(catsFull)을 쓰므로 기간 설정과 무관하다.
+//   ※ 표본이 몇 년 안 되면 평균이 흔들린다. 연수를 함께 표시한다.
+function cpiSeasonBlock(d, cap, lag) {
+  if (!cap.catsFull || !cap.allDates) return '';
+  const ai = cap.allDates.indexOf(d);
+  if (ai < 0) return '';
+  const mm = d.slice(5, 7);
+  const yr = d.slice(0, 4);
+  const stat = (arrF) => {
+    const cur = arrF[ai];
+    const hist = [];
+    cap.allDates.forEach((x, i) => {
+      if (x.slice(5, 7) === mm && x.slice(0, 4) !== yr && arrF[i] != null) hist.push(arrF[i]);
+    });
+    if (cur == null || !hist.length) return null;
+    const mu = hist.reduce((a, b) => a + b, 0) / hist.length;
+    const sd = hist.length > 1
+      ? Math.sqrt(hist.reduce((a, b) => a + (b - mu) ** 2, 0) / hist.length) : 0;
+    return { cur, mu, n: hist.length, sd, gap: cur - mu, z: sd ? (cur - mu) / sd : null };
+  };
+  const rows = [];
+  const t = stat(cap.totRowF);
+  if (t) rows.push(['총지수', t]);
+  cap.catsFull.forEach(([n, arrF]) => { const r = stat(arrF); if (r) rows.push([n, r]); });
+  if (!rows.length) return '';
+  const cats = rows.filter(([n]) => n !== '총지수');
+  const big = cats.slice().sort((a, b) => Math.abs(b[1].gap) - Math.abs(a[1].gap));
+  const f2 = v => (v > 0 ? '+' : '') + v.toFixed(2);
+  const nY = rows[0][1].n;
+  const mLbl = +mm + '월';
+  const unit = lag === 1 ? '%p (전월비 기여도)' : '%p (전년동월비 기여도)';
+
+  let h = `<div class="block-title" style="margin-top:16px">예년 ${mLbl}과 비교 — ${unit}</div>`
+    + `<div style="font-size:12px;color:#8592a3;margin-bottom:6px">`
+    + `과거 <b>${mLbl}</b>만 모아 평균낸 값과 이번 달을 견줍니다 (표본 ${nY}개년). `
+    + `물가는 계절성이 커서 <b>같은 달끼리 봐야</b> 평소보다 심한지 알 수 있습니다.</div>`
+    + '<div class="tscroll"><table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr>'
+    + `<th>항목</th><th>이번 ${mLbl}</th><th>예년 ${mLbl} 평균</th><th>차이</th><th>편차 (σ)</th></tr></thead><tbody>`;
+  rows.forEach(([n, r]) => {
+    const hot = r.z != null && Math.abs(r.z) >= 1;
+    h += `<tr class="${n === '총지수' ? 'lv0 sep-solid' : 'lv1'}"><td style="text-align:left">${n}</td>`
+      + `<td${r.cur < 0 ? ' class="neg"' : ''}>${f2(r.cur)}</td>`
+      + `<td${r.mu < 0 ? ' class="neg"' : ''}>${f2(r.mu)}</td>`
+      + `<td${r.gap < 0 ? ' class="neg"' : ''}><b>${f2(r.gap)}</b></td>`
+      + `<td style="${hot ? 'font-weight:700;color:' + (r.gap > 0 ? '#c0392b' : '#2b7a3d') : ''}">`
+      + `${r.z == null ? '-' : f2(r.z)}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+
+  const up = big.filter(([, r]) => r.gap > 0), dn = big.filter(([, r]) => r.gap < 0);
+  const say = ([n, r]) => `<b>${n}</b> ${f2(r.gap)}%p`
+    + (r.z != null ? ` (${f2(r.z)}σ)` : '');
+  h += '<div style="font-size:12.5px;line-height:1.95;margin-top:8px">'
+    + (t ? `총지수는 예년 ${mLbl} 평균 <b>${f2(t.mu)}%</b>보다 <b>${f2(t.gap)}%p</b> `
+         + `${t.gap > 0 ? '높습니다' : '낮습니다'}. ` : '')
+    + (up.length ? `평소보다 더 밀어올린 쪽은 ${up.slice(0, 2).map(say).join(', ')}` : '')
+    + (up.length && dn.length ? ', ' : '')
+    + (dn.length ? `덜 밀어올린 쪽은 ${dn.slice(0, 2).map(say).join(', ')}` : '')
+    + '입니다.'
+    + `<div style="color:#8592a3;margin-top:6px">※ σ 는 예년 ${mLbl} 값들의 표준편차 대비 거리입니다. `
+    + `|σ| ≥ 1 이면 <b>평년과 확연히 다른 달</b>로 봅니다. 표본이 ${nY}개년뿐이라 σ 는 참고치입니다.`
+    + (lag === 12 ? ' 전년동월비는 기저효과가 섞여 있어 전월비보다 계절성이 약합니다.' : '')
+    + '</div></div>';
+  return h;
+}
+
 // CPI 기여도 월별 분석 — 이미 계산된 기여도(chartCap)를 그대로 쓰므로 표와 값이 항상 같다.
 //   상품(농축수산물·공업제품·전기가스수도) vs 서비스(집세·공공·개인) 로 갈라 주도 부문을 판정하고,
 //   공급충격 성격(농축수산물+에너지)과 확산도(상승 품목 비중)를 함께 본다.
@@ -9654,7 +10319,8 @@ function cpiAnalysis(d, cap, cols, lag) {
     + '</div>'
     + '<div style="font-size:12px;color:#8592a3;margin-top:10px;line-height:1.8">'
     + '※ 기여도 = 품목 변화율 × 가중치. 위 표의 값은 기여도 표와 동일한 계산입니다. '
-    + '카테고리 합이 총지수와 미세하게 다를 수 있는 건 가중치 개편(2020↔2022) 연결 때문입니다.</div>';
+    + '카테고리 합이 총지수와 미세하게 다를 수 있는 건 가중치 개편(2020↔2022) 연결 때문입니다.</div>'
+    + cpiSeasonBlock(d, cap, lag);
   return anaShell(`${dateLabel(d)} ${cap.label} ${lag === 1 ? '전월비' : '전년동월비'} 분해`,
     B, lead, body, 'caClose');
 }
@@ -9695,7 +10361,11 @@ function renderCpiContrib() {
   ];
   let chartCap = null;   // 누적막대 차트용 데이터 (선택된 지수)
   const anaCur = cpiAnaMonth && cols.includes(cpiAnaMonth) ? cpiAnaMonth : null;
-  const CATS6 = ['농축수산물', '공업제품', '전기 · 가스 · 수도', '집세', '공공서비스', '개인서비스'];
+  // 누적막대 스택 순서 = 이 배열 순서. Chart.js 는 첫 데이터셋을 바닥에 깐다.
+  //   개인서비스를 맨 앞에 둬서 0 축에 붙인다 — 기저를 이루는 항목이라 0 에서 바로 읽어야
+  //   높이를 눈으로 재지 않고 값을 알 수 있다. 나머지는 그 위로 쌓인다.
+  //   Headline / Core / 생활물가 / 전월세포함 네 지수 모두 이 배열을 공유한다.
+  const CATS6 = ['개인서비스', '농축수산물', '공업제품', '전기 · 가스 · 수도', '집세', '공공서비스'];
   let out = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">`
     + `<div class="mode"><button id="ctbM" class="${lag === 1 ? 'active' : ''}">MoM</button>`
     + `<button id="ctbY" class="${lag === 12 ? 'active' : ''}">YoY</button></div>`
@@ -9721,8 +10391,13 @@ function renderCpiContrib() {
     const TA = avg22(T);
     let W20 = 0, W22 = 0;
     S.forEach(nd => { if (!nd.agg && memb(nd)) { W20 += nd.w20 || 0; W22 += nd.w22 || 0; } });
+    // 계절 비교('예년 7월')를 하려면 기간 설정과 무관한 전 구간이 필요하다.
+    //   → 전 구간으로 계산한 뒤, 화면·표에는 보이는 구간만 잘라 쓴다.
+    const ALLD = periodDates;
+    const keepI = ALLD.map((d, i) => inRange(d) ? i : -1).filter(i => i >= 0);
+    const sl = a => keepI.map(i => a[i]);
     // 리레이팅 계수 f_i = 지수총(2022평균) / 품목지수(2022평균) — 신규 품목은 첫 관측월 연결
-    const contribs = new Map();
+    const contribsF = new Map();
     S.forEach(nd => {
       if (nd.agg || !memb(nd)) return;
       const m = im.get(nd.n);
@@ -9736,7 +10411,7 @@ function renderCpiContrib() {
           }
         }
       }
-      contribs.set(nd.n, cols.map(d => {
+      contribsF.set(nd.n, ALLD.map(d => {
         if (!m) return null;
         const p = prevOf(d, lag); if (!p) return null;
         const a = m.get(d), b = m.get(p), t = T.get(p);
@@ -9750,24 +10425,31 @@ function renderCpiContrib() {
       }));
     });
     // 집계행 = 하위 품목 기여도의 합 (가법성 보장)
-    const aggArr = new Map();
+    const aggArrF = new Map();
     for (let i = 0; i < S.length; i++) {
       const nd = S[i]; if (!nd.agg) continue;
-      const sum = cols.map(() => 0), has = cols.map(() => false);
+      const sum = ALLD.map(() => 0), has = ALLD.map(() => false);
       for (let j = i + 1; j < S.length; j++) {
         const x = S[j]; if (x.lv <= nd.lv) break;
         if (x.agg || !memb(x)) continue;
-        contribs.get(x.n).forEach((v, k) => { if (v != null) { sum[k] += v; has[k] = true; } });
+        contribsF.get(x.n).forEach((v, k) => { if (v != null) { sum[k] += v; has[k] = true; } });
       }
-      aggArr.set(nd.n, sum.map((v, k) => has[k] ? v : null));
+      aggArrF.set(nd.n, sum.map((v, k) => has[k] ? v : null));
     }
-    const totRow = cols.map(d => { const p = prevOf(d, lag);
+    const totRowF = ALLD.map(d => { const p = prevOf(d, lag);
       const t = T.get(d), tp = p && T.get(p);
       return t != null && tp ? (t / tp - 1) * 100 : null; });
+    // 화면용(보이는 구간)
+    const contribs = new Map(); contribsF.forEach((v, n) => contribs.set(n, sl(v)));
+    const aggArr = new Map(); aggArrF.forEach((v, n) => aggArr.set(n, sl(v)));
+    const totRow = sl(totRowF);
     const sumRow = aggArr.get('총지수') || cols.map(() => null);
     if (key === cpiCtbChartIdx)   // 차트 데이터 캡처 (카테고리 파티션 + 전체 행별 배열)
       chartCap = { label, cats: CATS6.map(n => [n, aggArr.get(n)])
-        .filter(([, a]) => a && a.some(v => v != null)), totRow, contribs, aggArr };
+        .filter(([, a]) => a && a.some(v => v != null)), totRow, contribs, aggArr,
+        // 계절 비교용 — 기간 설정과 무관한 전 구간
+        allDates: ALLD, totRowF,
+        catsFull: CATS6.map(n => [n, aggArrF.get(n)]).filter(([, a]) => a && a.some(v => v != null)) };
     if (!cpiCtbCollapsed[key])
       cpiCtbCollapsed[key] = new Set(S.filter(n => n.agg && n.lv >= 2).map(n => n.n));
     const colSet = cpiCtbCollapsed[key];
@@ -11108,7 +11790,7 @@ document.getElementById('endSel').onchange = e => {
   try {
     catalog = await loadCatalog();
     const nav = document.getElementById('nav');
-    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false, usCpiInserted = false, gdpInserted = false;
+    let comboInserted = false, cpiInserted = false, retInserted = false, usInserted = false, usEmpInserted = false, krInserted = false, krEmpInserted = false, totInserted = false, usCpiInserted = false, gdpInserted = false, usPpiInserted = false;
     catalog.forEach(item => {
       // 메뉴 숨김: 품목상세·CPI 흡수 지표·가계신용·국제수지·PPI 기본분류(산업별은 PPI 탭 내부)
       if (NAV_HIDE.includes(item.id)) return;
@@ -11183,6 +11865,20 @@ document.getElementById('endSel').onchange = e => {
       if (item.id === 'kr_household_loan') {   // 가계부채 → 전용 화면 (월간/분기 토글)
         const b = document.createElement('button');
         b.id = 'hdBtn'; b.textContent = HDEBT.name; b.onclick = enterHdebt;
+        nav.appendChild(b);
+        return;
+      }
+      if (US_PPI.ids.includes(item.id)) {   // 생산자물가 2종 → 전용 화면 하나
+        if (!usPpiInserted) {
+          const b = document.createElement('button');
+          b.id = 'usPpiBtn'; b.textContent = US_PPI.name; b.onclick = enterUsPpi;
+          nav.appendChild(b); usPpiInserted = true;
+        }
+        return;
+      }
+      if (item.id === 'us_pce') {     // 미국 PCE → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'usPceBtn'; b.textContent = US_PCE.name; b.onclick = enterUsPce;
         nav.appendChild(b);
         return;
       }

@@ -9,6 +9,12 @@ scripts/fetch_seibro_repo.js (Playwright) 를 subprocess로 실행해 JSON을 �
 
 Playwright/Node 가 없으면 SeibroError 를 던지고, fetch.py 는 이 지표만
 실패 처리하고 나머지는 계속 진행한다(자금흐름 REPO 섹터만 비게 됨).
+
+단위 (중요):
+    SEIBro 화면의 '일별거래현황' 표는 **십억원** 단위다.
+    자금흐름 탭의 다른 계열(FREESIS·한국은행)은 억원이라 10을 곱해 맞춘다.
+    ※ 2026-09 발견: 이 환산을 빼먹어 기관RP 가 272조 대신 27조로 10배 작게
+      표시되고 있었다. 화면 표기를 반드시 확인할 것.
 """
 import json
 import os
@@ -18,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "fetch_seibro_repo.js"
+BILLION_TO_EOK = 10        # 십억원 → 억원
 
 
 class SeibroError(RuntimeError):
@@ -46,7 +53,8 @@ def fetch(indicator: dict) -> list[dict]:
     except json.JSONDecodeError:
         raise SeibroError(f"스크래퍼 JSON 파싱 실패: {proc.stdout[:200]}")
 
-    data = [{"d": r["date"], "v": r["balance"]}
+    # 십억원 → 억원 (자금흐름 탭 공통 단위)
+    data = [{"d": r["date"], "v": r["balance"] * BILLION_TO_EOK}
             for r in rows if r.get("date") and r.get("balance") is not None]
     if not data:
         raise SeibroError("SEIBro 응답이 비었습니다 (페이지 구조 변경 가능)")

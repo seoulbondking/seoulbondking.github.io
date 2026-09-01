@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import (bea, kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax,
+from fetchers import (bea, pce_diffusion, kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax,
                       acm, krx, ecos_xlsx, nowcast)
 
 ROOT = Path(__file__).parent
@@ -42,6 +42,7 @@ SOURCES = {
     "ecos_xlsx": ecos_xlsx.fetch,
     "nowcast": nowcast.fetch,
     "bea": bea.fetch,
+    "pce_diffusion": pce_diffusion.fetch,
 }
 
 KST = timezone(timedelta(hours=9))

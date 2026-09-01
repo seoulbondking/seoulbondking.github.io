@@ -181,6 +181,7 @@
         <button data-uc2="price" class="active">물가</button>
         <button data-uc2="real">실질소비</button>
         <button data-uc2="income">소득·저축</button>
+        <button data-uc2="diff">확산도</button>
       </div>
       <div id="usCpiTabs" class="mode" style="display:none">
         <button data-uc="chg" class="active">증감률</button>
@@ -327,7 +328,7 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm',
                   'kr_kospi', 'kr_esi', 'kr_swap', 'kr_usdkrw', 'kr_credit_spread',
                   'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
-                  'kr_bank_deposit', 'kr_yield_daily'];
+                  'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion'];
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
@@ -6927,33 +6928,33 @@ function renderUsPpi() {
     + rows.map(render).join('') + '</tbody></table></div>';
   const nameCell = (nm, lv) => `<td style="padding-left:${8 + lv * 15}px">${nm}</td>`;
 
+  // 표 순서는 YoY → MoM (US_macro.xlsm PPI 시트가 MoM·YoY 를 나란히 두는 것과 달리
+  // 화면에서는 방향을 먼저 보고 단월 흔들림을 나중에 보는 쪽이 읽기 좋다).
+  const rowsOf = (rows, ind, lag) => ([nm, lv]) =>
+    `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
+    + cols.map(d => cell(chg(M(ind, nm), d, lag), f2)).join('') + '</tr>';
+  const idxOf = ind => ([nm, lv]) =>
+    `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
+    + cols.map(d => { const m = M(ind, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>';
+  const PCE_ROWS = US_PPI_PCE.map(n => [n, 1]);
+  const ctbRow = (ind, lag) => ([nm, lv, w]) =>
+    `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">`
+    + nameCell(nm + (w ? ` <span style="color:#8592a3;font-weight:400">(${w})</span>` : ''), lv)
+    + cols.map(d => cell(usPpiCtb(ind, nm, d, lag, chg), f2)).join('') + '</tr>';
+
   if (usPpiTab === 'chg') {
-    out += tbl('전월비 (%, 계절조정)', US_PPI_ROWS, ([nm, lv]) =>
-        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
-        + cols.map(d => cell(chg(M(SA, nm), d, 1), f2)).join('') + '</tr>')
-      + tbl('전년동월비 (%, 원계열)', US_PPI_ROWS, ([nm, lv]) =>
-        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
-        + cols.map(d => cell(chg(M(NSA, nm), d, 12), f2)).join('') + '</tr>')
-      + tbl('PCE 연결 항목 — 전년동월비 (%, 원계열)', US_PPI_PCE.map(n => [n, 0]), ([nm]) =>
-        `<tr class="lv1">${nameCell(nm, 1)}`
-        + cols.map(d => cell(chg(M(NSA, nm), d, 12), f2)).join('') + '</tr>');
+    out += tbl('전년동월비 (%, 원계열)', US_PPI_ROWS, rowsOf(US_PPI_ROWS, NSA, 12))
+      + tbl('전월비 (%, 계절조정)', US_PPI_ROWS, rowsOf(US_PPI_ROWS, SA, 1))
+      + tbl('PCE 연결 항목 — 전년동월비 (%, 원계열)', PCE_ROWS, rowsOf(PCE_ROWS, NSA, 12))
+      + tbl('PCE 연결 항목 — 전월비 (%, 계절조정)', PCE_ROWS, rowsOf(PCE_ROWS, SA, 1));
   } else if (usPpiTab === 'idx') {
-    out += tbl('지수 (계절조정)', US_PPI_ROWS, ([nm, lv]) =>
-        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
-        + cols.map(d => { const m = M(SA, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>')
-      + tbl('지수 (원계열)', US_PPI_ROWS, ([nm, lv]) =>
-        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm, lv)}`
-        + cols.map(d => { const m = M(NSA, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>')
-      + tbl('PCE 연결 항목 — 지수 (원계열)', US_PPI_PCE.map(n => [n, 0]), ([nm]) =>
-        `<tr class="lv1">${nameCell(nm, 1)}`
-        + cols.map(d => { const m = M(NSA, nm); return cell(m ? (m.get(d) ?? null) : null, f1); }).join('') + '</tr>');
+    out += tbl('지수 (원계열)', US_PPI_ROWS, idxOf(NSA))
+      + tbl('지수 (계절조정)', US_PPI_ROWS, idxOf(SA))
+      + tbl('PCE 연결 항목 — 지수 (원계열)', PCE_ROWS, idxOf(NSA))
+      + tbl('PCE 연결 항목 — 지수 (계절조정)', PCE_ROWS, idxOf(SA));
   } else {
-    out += tbl('기여도 — 전월비 (%p, 계절조정)', usPpiCtbRows(), ([nm, lv, w]) =>
-        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm + (w ? ` <span style="color:#8592a3;font-weight:400">(${w})</span>` : ''), lv)}`
-        + cols.map(d => cell(usPpiCtb(SA, nm, d, 1, chg), f2)).join('') + '</tr>')
-      + tbl('기여도 — 전년동월비 (%p, 원계열)', usPpiCtbRows(), ([nm, lv, w]) =>
-        `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">${nameCell(nm + (w ? ` <span style="color:#8592a3;font-weight:400">(${w})</span>` : ''), lv)}`
-        + cols.map(d => cell(usPpiCtb(NSA, nm, d, 12, chg), f2)).join('') + '</tr>');
+    out += tbl('기여도 — 전년동월비 (%p, 원계열)', usPpiCtbRows(), ctbRow(NSA, 12))
+      + tbl('기여도 — 전월비 (%p, 계절조정)', usPpiCtbRows(), ctbRow(SA, 1));
   }
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
@@ -6974,8 +6975,8 @@ function renderUsPpi() {
         pointRadius: 2, tension: .1, order: -1 });
       return { labels: cols, datasets: ds, title };
     };
-    [[SA, 1, '전월비 기여도 분해 (%p) — 계절조정'],
-     [NSA, 12, '전년동월비 기여도 분해 (%p) — 원계열']].forEach(([ind, lag, t], i) => {
+    [[NSA, 12, '전년동월비 기여도 분해 (%p) — 원계열'],
+     [SA, 1, '전월비 기여도 분해 (%p) — 계절조정']].forEach(([ind, lag, t], i) => {
       const cfg = stack(ind, lag, t);
       usPpiCharts[i] = new Chart(box.querySelector('#upC' + i), {
         type: 'bar', data: { labels: cfg.labels, datasets: cfg.datasets },
@@ -7009,11 +7010,11 @@ function renderUsPpi() {
         scales: { x: { ticks: xT },
           y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
     });
-    usPpiCharts[0] = line('#upC0', '근원 PPI 전년동월비 (%) — 원계열',
-      [['근원 PPI (식료품·에너지 제외)', '#002060', true]], 12, NSA);
-    usPpiCharts[1] = line('#upC1', '전년동월비 (%) — 원계열',
-      [['PPI 최종수요', '#1a2b4a', true], ['재화', '#8e44ad'], ['서비스', '#1a4fa0'],
-       ['에너지', '#c0392b']], 12, NSA);
+    // 엑셀 시트 서식 그대로 — 단일 계열, 남색, 범례 없음. YoY 먼저, MoM 다음.
+    usPpiCharts[0] = line('#upC0', 'PPI 최종수요 전년동월비 (%) — 원계열',
+      [['PPI 최종수요', '#002060', true]], 12, NSA);
+    usPpiCharts[1] = line('#upC1', 'PPI 최종수요 전월비 (%) — 계절조정',
+      [['PPI 최종수요', '#002060', true]], 1, SA);
   }
 }
 
@@ -7059,8 +7060,12 @@ function usPpiCtb(ind, nm, d, lag, chg) {
 //  가중치가 매달 갱신되고(연쇄가중) 의료비처럼 보험이 대신 내는 지출까지 잡히기 때문이다.
 //  BEA 월별 계열은 계절조정본만 공표된다 — 원계열이 없어 MoM·YoY 모두 SA 에서 뽑는다.
 //  단위: 물가 = 지수(2017=100) · 실질소비/소득 = 백만달러 → 화면에서 조달러로 환산.
-const US_PCE = { id: 'uspce', name: '미국 PCE', ids: ['us_pce'] };
-let usPceData = null, usPceTab = 'price', usPceCharts = [null, null];
+const US_PCE = { id: 'uspce', name: '미국 PCE', ids: ['us_pce', 'us_pce_diffusion'] };
+let usPceData = null, usPceDiff = null, usPceTab = 'price', usPceCharts = [null, null, null, null];
+// 확산도 표시 기준 — 기사·리포트가 쓰는 건 '품목수'다(지출가중은 훨씬 높게 나온다).
+let usPceDiffBase = '품목수', usPceDiffTh = 3;
+// 접힌 그룹 (영문 원문 이름 기준). null 이면 첫 진입 — 세부(lv2 이상)를 접어 시작한다.
+let usPceCollapsed = null;
 //  [BEA 원문 줄이름, 들여쓰기, 한글표시]  — 줄 순서는 T20804 그대로
 const US_PCE_ROWS = [
   ['Personal consumption expenditures (PCE)', 0, 'PCE 개인소비지출'],
@@ -7108,6 +7113,7 @@ const US_PCE_RATE = ['Personal saving as a percentage of disposable personal inc
 
 async function enterUsPce() {
   usPceData = await loadIndicator('us_pce').catch(() => null);
+  usPceDiff = await loadIndicator('us_pce_diffusion').catch(() => null);
   if (!usPceData) { alert('PCE 데이터가 없습니다. python fetch.py us_pce 실행 필요.'); return; }
   current = { id: US_PCE.id, name: US_PCE.name, freq: 'M', unit: '지수·조달러',
               updated_at: usPceData.updated_at, series: [] };
@@ -7145,19 +7151,49 @@ function renderUsPce() {
   const prevN = (d, k) => { const i = idx.get(d); return i >= k ? periodDates[i - k] : null; };
   const chg = (m, d, lag) => { if (!m) return null; const p = prevN(d, lag); if (!p) return null;
     const a = m.get(d), b = m.get(p); return a == null || !b ? null : (a / b - 1) * 100; };
+  // k개월 연율 = (지수_t / 지수_{t−k})^(12/k) − 1.  k=12 면 지수가 1 이라 YoY 와 같다.
+  const ann = (m, d, k) => { if (!m) return null; const p = prevN(d, k); if (!p) return null;
+    const a = m.get(d), b = m.get(p);
+    return a == null || !b ? null : (Math.pow(a / b, 12 / k) - 1) * 100; };
   const lvl = (m, d, div) => { if (!m) return null; const v = m.get(d);
     return v == null ? null : v / (div || 1); };
   const fN = n => v => v == null ? '' : v.toLocaleString('ko-KR', { minimumFractionDigits: n, maximumFractionDigits: n });
   const f2 = fN(2), f1 = fN(1);
   const cell = (v, f) => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`;
   const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
-  const tbl = (title, rows, val, f) =>
-    `<div class="block-title">${title}</div><div class="tscroll">`
-    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
-    + rows.map(([en, lv, ko]) => `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}">`
-        + `<td style="padding-left:${8 + lv * 14}px">${ko}</td>`
-        + cols.map(d => cell(val(en, d), f)).join('') + '</tr>').join('')
-    + '</tbody></table></div>';
+  // 접기/펴기 — 다음 줄의 레벨이 더 깊으면 그 줄은 부모다.
+  //   캐럿이 없는 행에도 같은 폭의 빈칸을 넣어야 같은 레벨끼리 이름이 나란히 선다.
+  if (usPceCollapsed === null) {
+    usPceCollapsed = new Set();
+    US_PCE_ROWS.forEach(([en, lv], i) => {
+      const nx = US_PCE_ROWS[i + 1];
+      if (nx && nx[1] > lv && lv >= 2) usPceCollapsed.add(en);   // 세부는 접고 시작
+    });
+  }
+  const tbl = (title, rows, val, f) => {
+    let body = '', hide = null;
+    rows.forEach(([en, lv, ko], i) => {
+      if (hide != null) { if (lv > hide) return; hide = null; }
+      const nx = rows[i + 1];
+      const kid = !!(nx && nx[1] > lv);
+      const col = usPceCollapsed.has(en);
+      const caret = kid
+        ? `<span class="tcaret">${col ? '＋' : '－'}</span>`
+        : '<span class="tcaret-sp"></span>';
+      body += `<tr class="lv${lv}${lv === 0 ? ' sep-solid' : ''}${kid ? ' parent' : ''}"`
+        + `${kid ? ` data-pcec="${en.replace(/"/g, '&quot;')}"` : ''}>`
+        + `<td style="padding-left:${8 + lv * 14}px${kid ? ';cursor:pointer' : ''}">${caret}${ko}</td>`
+        + cols.map(d => cell(val(en, d), f)).join('') + '</tr>';
+      if (col && kid) hide = lv;
+    });
+    return `<div class="block-title">${title}</div><div class="tscroll">`
+      + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+      + body + '</tbody></table></div>';
+  };
+  const treeBar = '<div style="display:flex;gap:6px;margin-bottom:8px">'
+    + '<button class="mini-btn" id="pceExpand">전체 펼치기</button>'
+    + '<button class="mini-btn" id="pceCollapse">전체 접기</button>'
+    + '<span style="font-size:12px;color:#8592a3;align-self:center">항목의 <b>＋/－</b>를 눌러 접고 펼칩니다</span></div>';
 
   let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
     + '연준의 공식 물가목표는 CPI 가 아니라 <b>PCE</b>입니다. CPI 보다 통상 <b>0.2~0.4%p 낮게</b> 나오는데, '
@@ -7171,7 +7207,7 @@ function renderUsPce() {
   const xT = { maxTicksLimit: 12, font: { size: 10 },
     callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
   usPceCharts.forEach(c => c && c.destroy());
-  usPceCharts = [null, null];
+  usPceCharts = [null, null, null, null];
   const line = (id, title, list, unit) => new Chart(box.querySelector(id), {
     type: 'line', plugins: [LINE_POP],
     data: { labels: cols, datasets: list.map(([nm, col, fn, pop], j) => ({
@@ -7191,24 +7227,28 @@ function renderUsPce() {
   });
 
   if (usPceTab === 'price') {
-    out += tbl('전년동월비 (%)', US_PCE_ROWS, (en, d) => chg(P(en), d, 12), f2)
+    out += treeBar
+         + tbl('전년동월비 (%)', US_PCE_ROWS, (en, d) => chg(P(en), d, 12), f2)
          + tbl('addenda — 전년동월비 (%)', US_PCE_ADD, (en, d) => chg(P(en), d, 12), f2)
          + tbl('전월비 (%)', US_PCE_ROWS, (en, d) => chg(P(en), d, 1), f2)
          + tbl('지수 (2017=100)', US_PCE_ROWS, (en, d) => lvl(P(en), d), f1);
     box.innerHTML = out;
-    // 왼쪽은 엑셀 시트가 그리는 그림 그대로 — 근원 PCE 전년동월비 한 줄, 남색.
-    usPceCharts[0] = line('#ucp0', '근원 PCE 전년동월비 (%)',
-      [['근원 PCE', '#002060', d => chg(P('PCE excluding food and energy'), d, 12), true]], '%');
-    usPceCharts[1] = line('#ucp1', '전년동월비 (%) — 헤드라인·근원·슈퍼코어', [
-      ['PCE', '#1a2b4a', d => chg(P('Personal consumption expenditures (PCE)'), d, 12), true],
-      ['근원 PCE', '#002060', d => chg(P('PCE excluding food and energy'), d, 12)],
-      ['슈퍼코어', '#2e8b57', d => chg(P('PCE services excluding energy and housing'), d, 12)],
-      ['주거', '#c98a1a', d => chg(P('Housing'), d, 12)],
-      ['에너지', '#c0392b', d => chg(P('Energy goods and services'), d, 12)],
-    ], '%');
+    // 모멘텀 비교 — 같은 계열을 12·6·3개월 연율로 겹쳐 방향 전환을 본다.
+    //   창이 짧을수록 최근 흐름을 빨리 반영한다. 3개월이 12개월 아래로 내려가면 둔화,
+    //   위로 올라가면 재가속 신호다. 대신 짧을수록 단월 노이즈에 흔들린다.
+    const WIN = [[12, '12개월 (= YoY)', '#002060', true],
+                 [6, '6개월 연율', '#1a6fc4'],
+                 [3, '3개월 연율', '#c0392b']];
+    const winSet = key => WIN.map(([k, lab, col, pop]) =>
+      [lab, col, d => ann(P(key), d, k), pop]);
+    usPceCharts[0] = line('#ucp0', 'PCE 물가 — 12 / 6 / 3개월 연율 (%)',
+      winSet('Personal consumption expenditures (PCE)'), '%');
+    usPceCharts[1] = line('#ucp1', '근원 PCE — 12 / 6 / 3개월 연율 (%)',
+      winSet('PCE excluding food and energy'), '%');
   } else if (usPceTab === 'real') {
     const T = 1e6;   // 백만달러 → 조달러
-    out += tbl('실질 소비지출 (조달러, 연쇄 2017달러)', US_PCE_ROWS, (en, d) => lvl(R(en), d, T), f2)
+    out += treeBar
+         + tbl('실질 소비지출 (조달러, 연쇄 2017달러)', US_PCE_ROWS, (en, d) => lvl(R(en), d, T), f2)
          + tbl('전년동월비 (%)', US_PCE_ROWS, (en, d) => chg(R(en), d, 12), f2)
          + tbl('전월비 (%)', US_PCE_ROWS, (en, d) => chg(R(en), d, 1), f2);
     box.innerHTML = out;
@@ -7220,6 +7260,9 @@ function renderUsPce() {
       ['· 내구재', '#7b52ab', d => chg(R('Durable goods'), d, 12)],
       ['서비스', '#1a4fa0', d => chg(R('Services'), d, 12)],
     ], '%');
+  } else if (usPceTab === 'diff') {
+    renderUsPceDiff(box, xT);
+    return;
   } else {
     const T = 1e6;
     out += tbl('수준 (조달러, 연율)', US_PCE_INC, (en, d) => lvl(I(en), d, T), f2)
@@ -7237,6 +7280,146 @@ function renderUsPce() {
     ], '%');
   }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('tr.parent[data-pcec]').forEach(tr => {
+    tr.querySelector('td:first-child').onclick = () => {
+      const n = tr.dataset.pcec;
+      usPceCollapsed.has(n) ? usPceCollapsed.delete(n) : usPceCollapsed.add(n);
+      renderUsPce();
+    };
+  });
+  const ex = box.querySelector('#pceExpand'), cl = box.querySelector('#pceCollapse');
+  if (ex) ex.onclick = () => { usPceCollapsed = new Set(); renderUsPce(); };
+  if (cl) cl.onclick = () => {
+    usPceCollapsed = new Set();
+    US_PCE_ROWS.forEach(([en, lv], i) => {
+      const nx = US_PCE_ROWS[i + 1];
+      if (nx && nx[1] > lv) usPceCollapsed.add(en);
+    });
+    renderUsPce();
+  };
+}
+
+// 확산도 — 세부 품목 중 몇 %가 기준을 넘게 올랐나.
+//   "물가가 넓게 퍼졌는가"를 보는 지표. 평균이 낮아도 확산도가 높으면 기조적이다.
+//   BEA 세부표 245개 말단 품목 기준 (계산은 fetchers/pce_diffusion.py 에서 끝냄).
+//   ※ 기준선은 2000~2019 평균 — 코로나 이전 '정상' 수준이다.
+//   ※ 이 탭은 기간 설정과 무관하게 전 구간(1998~)을 그린다.
+const US_PCE_DIFF_W = [[12, '12개월 (= 전년동월비)', '#9b2226'],
+                       [6, '6개월 연율', '#2b3a8f'],
+                       [3, '3개월 연율', '#2e8b57']];
+// 겹쳐 그릴 물가 계열 — 확산도(넓이)와 상승률(높이)을 같이 봐야 성격이 읽힌다.
+const US_PCE_DIFF_OVR = [
+  ['Personal consumption expenditures (PCE)', 'PCE', '#1a2b4a'],
+  ['PCE excluding food and energy', '근원 PCE', '#c98a1a'],
+];
+function renderUsPceDiff(box, xT) {
+  if (!usPceDiff) {
+    box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.9">'
+      + '확산도 데이터가 없습니다.<br>PC에서 <b>python fetch.py us_pce_diffusion</b> 실행 후 새로고침해 주세요.</div>';
+    return;
+  }
+  const nameOf = (k, th, base) =>
+    `${th}% 초과 비중 · ${k}개월${k === 12 ? '' : ' 연율'} (${base})`;
+  const M = n => { const x = usPceDiff.series.find(y => baseName(y.name) === n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : null; };
+  // 물가 계열은 us_pce(T20804)에서 가져와 같은 창으로 연율화한다.
+  const P = n => { if (!usPceData) return null;
+    const x = usPceData.series.find(y => baseName(y.name) === '물가 · ' + n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : null; };
+
+  const base0 = M(nameOf(12, usPceDiffTh, usPceDiffBase));
+  if (!base0) { box.innerHTML = '<div style="padding:24px;color:#c0392b">계열을 찾지 못했습니다.</div>'; return; }
+  const cols = [...base0.keys()].sort();
+  const ci = new Map(cols.map((d, i) => [d, i]));
+  // 연율화 = (지수_t / 지수_{t−k})^(12/k) − 1
+  const annOf = (m, k) => d => { if (!m) return null;
+    const i = ci.get(d); if (i == null || i < k) return null;
+    const a = m.get(d), b = m.get(cols[i - k]);
+    return a == null || !b ? null : (Math.pow(a / b, 12 / k) - 1) * 100; };
+  const mean0019 = m => { const v = [...m.entries()]
+      .filter(([d]) => d >= '2000-01-01' && d <= '2019-12-31').map(([, x]) => x);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+
+  let out = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px">'
+    + '<span style="color:#555">기준</span><div class="mode" id="updBase">'
+    + ['품목수', '지출가중'].map(v =>
+        `<button data-ub="${v}" class="${usPceDiffBase === v ? 'active' : ''}">${v}</button>`).join('')
+    + '</div><span style="color:#555;margin-left:8px">임계치</span><div class="mode" id="updTh">'
+    + [3, 2].map(v => `<button data-ut="${v}" class="${usPceDiffTh === v ? 'active' : ''}">${v}%</button>`).join('')
+    + '</div></div>';
+  // 3행 × 2열 — 행은 창(12/6/3개월), 열은 겹쳐 그릴 물가 계열(PCE / 근원 PCE)
+  US_PCE_DIFF_W.forEach((_, r) => {
+    out += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">'
+      + US_PCE_DIFF_OVR.map((__, c) => `<div style="flex:1;min-width:330px">`
+          + `<div class="cchart" style="height:250px"><canvas id="upd${r * 2 + c}"></canvas></div></div>`).join('')
+      + '</div>';
+  });
+
+  const recent = cols.slice(-13);
+  out += '<div class="block-title">최근 13개월 (%)</div><div class="tscroll">'
+    + '<table class="data vlines"><thead><tr><th>기준</th>'
+    + recent.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
+  US_PCE_DIFF_W.forEach(([k, lab], i) => {
+    const m = M(nameOf(k, usPceDiffTh, usPceDiffBase));
+    out += `<tr class="${i === 0 ? 'lv0 sep-solid' : 'lv1'}"><td>확산도 ${lab}</td>`
+      + recent.map(d => { const v = m ? m.get(d) : null;
+          return `<td>${v == null ? '' : v.toFixed(1)}</td>`; }).join('') + '</tr>';
+  });
+  US_PCE_DIFF_OVR.forEach(([key, lab]) => {
+    US_PCE_DIFF_W.forEach(([k, wl]) => {
+      const f = annOf(P(key), k);
+      out += `<tr class="lv1"><td>${lab} ${wl}</td>`
+        + recent.map(d => { const v = f(d);
+            return `<td>${v == null ? '' : v.toFixed(2)}</td>`; }).join('') + '</tr>';
+    });
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('#updBase button').forEach(b =>
+    b.onclick = () => { usPceDiffBase = b.dataset.ub; renderUsPce(); });
+  box.querySelectorAll('#updTh button').forEach(b =>
+    b.onclick = () => { usPceDiffTh = +b.dataset.ut; renderUsPce(); });
+
+  usPceCharts.forEach(c => c && c.destroy());
+  usPceCharts = [];
+  US_PCE_DIFF_W.forEach(([k, lab, col], r) => {
+    const m = M(nameOf(k, usPceDiffTh, usPceDiffBase));
+    if (!m) return;
+    const mu = mean0019(m);
+    US_PCE_DIFF_OVR.forEach(([key, ovLab, ovCol], c) => {
+      const ds = [
+        { label: `확산도 · ${lab}`, data: cols.map(d => m.get(d) ?? null),
+          borderColor: col, backgroundColor: col, borderWidth: 2.2,
+          pointRadius: 0, tension: .12, spanGaps: true, yAxisID: 'y', order: 2 },
+        { label: `${ovLab} ${lab} (우)`, data: cols.map(annOf(P(key), k)),
+          borderColor: ovCol, backgroundColor: ovCol, borderWidth: 1.8,
+          pointRadius: 0, tension: .12, spanGaps: true, yAxisID: 'y2', order: 1, pop: true },
+      ];
+      if (mu != null) ds.push({ label: `2000~2019 평균 ${mu.toFixed(1)}%`,
+        data: cols.map(() => mu), borderColor: '#b8c0cc', borderWidth: 1.4,
+        borderDash: [5, 4], pointRadius: 0, tension: 0, yAxisID: 'y', order: 3 });
+      usPceCharts[r * 2 + c] = new Chart(box.querySelector('#upd' + (r * 2 + c)), {
+        type: 'line', plugins: [LINE_POP],
+        data: { labels: cols, datasets: ds },
+        options: { responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+            title: { display: true, font: { size: 12.5 },
+              text: `${lab} — 확산도(좌, ${usPceDiffTh}% 초과 ${usPceDiffBase}) vs ${ovLab}(우)` },
+            tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+              callbacks: { title: it => dateLabel(it[0].label),
+                label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}%` } } },
+          scales: { x: { ticks: { maxTicksLimit: 12, font: { size: 10 },
+                     callback: function (v) { const l = this.getLabelForValue(v);
+                       return l && l.slice(5, 7) === '01' ? "'" + l.slice(2, 4) : ''; } } },
+            y: { beginAtZero: true, position: 'left',
+                 ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } },
+            y2: { position: 'right', grid: { drawOnChartArea: false },
+                  ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
+      });
+    });
+  });
 }
 
 // ── 가계부채 ──────────────────────────────────────────────────

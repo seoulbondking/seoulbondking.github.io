@@ -1055,7 +1055,8 @@ indicators:
     source: bea
     unit: 지수·십억달러·%
     freq: M
-    start_year: 2010
+    # 확산도 차트(1998~)에 물가 상승률을 겹쳐 그리므로 시작연도를 맞춘다.
+    start_year: 1998
     series_first: ["물가 · Personal consumption expenditures (PCE)"]
     params:
       tables:
@@ -1069,6 +1070,21 @@ indicators:
           table: T20600
           prefix: "소득·지출"
           lines: [1, 27, 29, 34, 35]
+
+  # ── 미국 PCE 물가 확산도 (BEA 세부표 U20404 + U20405) ───────────
+  #   "세부 품목 중 몇 %가 3% 를 넘게 올랐나" — 물가 상승이 넓게 퍼졌는지 보는 지표.
+  #   400줄 원자료를 브라우저로 보내면 무거워서, 수집 단계에서 계산해 결과만 저장한다.
+  #   말단 품목 판별은 명목 지출액의 가법성으로 트리를 복원해서 한다(fetchers/pce_diffusion.py).
+  #   지출가중·품목수 두 기준을 다 내놓는다 — 리포트마다 쓰는 기준이 달라서다.
+  - id: us_pce_diffusion
+    name: 미국 PCE 물가 확산도
+    source: pce_diffusion
+    unit: '%'
+    freq: M
+    start_year: 1998
+    params:
+      thresholds: [3, 2]
+      windows: [3, 6, 12]
 
   # ── 연준 (FRED) — 지급준비금·정책금리 ────────────────────────────
   #   WRESBAL : 연준에 예치된 지급준비금 잔액. 주간(수요일 마감) 평균, 십억달러.

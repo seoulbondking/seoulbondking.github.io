@@ -1,0 +1,201 @@
+Component,Monthly Percent Change,Relative Importance,Cumulative Relative Importance
+Over-the-counter equity securities,-5.32,0.03,0.03
+Nonelectric cookware and tableware,-3.46,0.15,0.18
+Hotels and motels,-3.33,0.73,0.91
+Gasoline and other motor fuel,-3.01,2.08,2.99
+Motor vehicle rental,-2.96,0.15,3.14
+Vegetables (fresh),-2.58,0.33,3.46
+Other imputed commissions,-2.51,0.05,3.51
+Intercity buses,-2.13,0.01,3.52
+Other road transportation service,-2.13,0.22,3.73
+Railway transportation,-2.13,0.01,3.74
+Water transportation (65),-2.13,0.04,3.77
+Financial service charges and fees,-1.98,0.64,4.41
+Major household appliances,-1.89,0.38,4.79
+Window coverings,-1.85,0.16,4.95
+Fuel oil,-1.66,0.12,5.07
+Therapeutic medical equipment,-1.65,0.25,5.31
+Other medical products,-1.65,0.04,5.36
+Pork,-1.54,0.23,5.59
+Carpets and other floor coverings,-1.49,0.14,5.73
+Photographic equipment,-1.44,0.03,5.75
+Children's and infants' clothing (12),-1.43,0.14,5.89
+"Moving, storage, and freight services",-1.21,0.11,6
+"Clocks, lamps, lighting fixtures, and other household decorative items",-1.08,0.32,6.31
+Dishes and flatware,-1.01,0.15,6.46
+Stationery and miscellaneous printed materials,-0.94,0.16,6.62
+Clothing materials,-0.89,0.01,6.63
+Sewing items,-0.89,0.01,6.64
+Other meats,-0.84,0.23,6.87
+Beef and veal,-0.83,0.31,7.18
+Prescription drugs,-0.77,2.76,9.94
+Women's and girls' clothing (10),-0.74,1.23,11.17
+Processed dairy products,-0.69,0.34,11.51
+Musical instruments (part of 80),-0.63,0.04,11.56
+Postal and delivery services (68),-0.59,0.08,11.64
+Newspapers and periodicals,-0.54,0.47,12.1
+"Other social assistance, not elsewere classified",-0.49,0.04,12.14
+Eggs,-0.49,0.08,12.22
+Miscellaneous household products,-0.47,0.1,12.33
+Museums and libraries,-0.45,0.09,12.42
+"Live entertainment, excluding sports",-0.45,0.28,12.69
+Motion picture theaters,-0.45,0.05,12.75
+Poultry,-0.41,0.37,13.11
+"Tools, hardware, and supplies",-0.36,0.25,13.36
+"Sporting equipment, supplies, guns, and ammunition (part of 80)",-0.32,0.63,13.99
+Other personal business services,-0.32,0.13,14.12
+Nonprescription drugs,-0.31,0.6,14.72
+Processed fruits and vegetables,-0.29,0.23,14.95
+"Amusement parks, campgrounds, and related recreational services",-0.28,0.43,15.38
+Fats and oils,-0.28,0.15,15.53
+Package tours,-0.28,0.12,15.64
+Other depository institutions and regulated investment companies,-0.22,1.37,17.01
+Photo processing,-0.15,0.01,17.02
+Veterinary and other services for pets,-0.15,0.37,17.39
+Funeral and burial services,-0.14,0.15,17.55
+Beer,-0.14,0.49,18.04
+Spectator sports,-0.14,0.27,18.32
+Wine,-0.13,0.34,18.66
+"Calculators, typewriters, and other information processing equipment",-0.13,0,18.66
+Telephone and related communication equipment,-0.13,0.17,18.83
+Physician services (44),-0.1,3.98,22.82
+Residential mental health and substance abuse,-0.09,0.15,22.96
+"Food products, not elsewhere classified",-0.09,1.18,24.15
+Video and audio streaming and rental,-0.09,0.39,24.54
+Homes for the elderly,-0.04,0.19,24.73
+Air transportation (64),-0.04,1.05,25.78
+Net motor vehicle and other transportation insurance (116),-0.03,0.5,26.28
+Furniture,-0.02,0.78,27.07
+Pension funds,-0.01,0.4,27.47
+Motorcycles,0,0.11,27.58
+Food produced and consumed on farms (6),0,0,27.58
+Film and photographic supplies,0,0.01,27.59
+Photo studios,0,0.05,27.64
+Other direct commissions,0,0.05,27.69
+"Trust, fiduciary, and custody activities",0,0.11,27.81
+Employment agency services,0,0.01,27.81
+Medical laboratories,0.01,0.25,28.07
+Professional association dues,0.02,0.06,28.13
+Legal services,0.02,0.74,28.87
+New foreign autos,0.02,0.08,28.95
+New domestic autos,0.02,0.13,29.08
+Domestic services,0.03,0.19,29.27
+Net household insurance (111),0.03,0.09,29.37
+Standard clothing issued to military personnel,0.04,0,29.37
+Commercial and vocational schools (99),0.04,0.42,29.79
+Hairdressing salons and personal grooming establishments,0.05,0.48,30.26
+New light trucks,0.06,1.62,31.88
+Parking fees and tolls,0.07,0.14,32.02
+Internet access (72),0.07,0.56,32.58
+Casino gambling,0.07,0.75,33.33
+Lotteries,0.07,0.33,33.66
+Pari-mutuel net receipts,0.07,0.03,33.69
+Nonprofit hospitals' services to households,0.1,5.34,39.03
+Government hospitals,0.1,1.57,40.59
+Proprietary hospitals,0.1,0.91,41.51
+Other fuels,0.11,0.03,41.54
+Bakery products,0.12,0.6,42.14
+Home health care,0.12,1.01,43.14
+Maintenance and repair of recreational vehicles and sports equipment,0.13,0.04,43.19
+Electricity (27),0.13,1.24,44.42
+"Hair, dental, shaving, and miscellaneous personal care products except electrical products",0.14,0.59,45.02
+Electric appliances for personal care,0.14,0.06,45.08
+Net health insurance (112),0.18,1.36,46.44
+Final consumption expenditures of nonprofit institutions serving households (NPISHs) (132),0.18,2.92,49.36
+Food supplied to military,0.22,0.01,49.37
+Higher education school lunches,0.22,0.1,49.47
+Food supplied to civilians,0.22,0.17,49.63
+Religious organizations' services to households,0.23,0.04,49.68
+Water supply and sewage maintenance,0.24,0.49,50.17
+Membership clubs and participant sports centers,0.24,0.4,50.57
+Tires,0.25,0.26,50.83
+"Flowers, seeds, and potted plants",0.25,0.39,51.22
+Tenant-occupied stationary homes and landlord durables,0.26,3.57,54.78
+Tenant-occupied mobile homes,0.26,0.07,54.85
+Group housing (23),0.26,0.02,54.87
+Owner-occupied mobile homes,0.26,0.44,55.31
+Owner-occupied stationary homes,0.26,11.37,66.68
+Rental value of farm dwellings (22),0.26,0.14,66.82
+"Clothing repair, rental, and alterations",0.28,0.03,66.86
+Miscellaneous personal care services,0.28,0.61,67.46
+Repair and hire of footwear,0.28,0,67.47
+Other purchased meals,0.29,4.99,72.46
+Audio equipment,0.3,0.15,72.6
+Corrective eyeglasses and contact lenses,0.3,0.23,72.83
+Vocational rehabilitation services,0.3,0.08,72.91
+"Coffee, tea, and other beverage materials",0.31,0.13,73.03
+Housing at schools,0.31,0.22,73.25
+Household cleaning products,0.32,0.2,73.45
+Day care and nursery schools,0.33,0.1,73.55
+Child care,0.33,0.31,73.86
+Motor vehicle leasing,0.33,0.29,74.15
+Foundations and grantmaking and giving services to households,0.34,0.05,74.2
+Life insurance (110),0.35,0.59,74.79
+Mutual fund sales charges,0.37,0.05,74.84
+"Land-line telephone services, local charges",0.37,0.03,74.87
+"Land-line telephone services, long-distance charges",0.37,0.02,74.89
+Laundry and drycleaning services,0.37,0.08,74.97
+"Cable, satellite, and other live television services",0.38,0.31,75.28
+Cereals,0.38,0.37,75.65
+Used light trucks,0.4,0.83,76.49
+Nonprofit nursing homes' services to households,0.41,0.36,76.84
+Proprietary and government nursing homes,0.41,0.94,77.79
+Alcohol in purchased meals,0.41,0.81,78.6
+Fish and seafood,0.44,0.11,78.71
+Fresh milk,0.46,0.15,78.85
+Sugar and sweets,0.46,0.36,79.22
+Elementary and secondary school lunches,0.47,0.04,79.26
+Shoes and other footwear,0.47,0.58,79.84
+Other recreational vehicles,0.49,0.17,80.01
+Pleasure aircraft,0.49,0.01,80.03
+Pleasure boats,0.49,0.18,80.2
+Bicycles and accessories,0.49,0.04,80.24
+Computer software and accessories,0.49,1.11,81.35
+Tobacco (127),0.5,0.51,81.86
+Elementary and secondary schools,0.52,0.21,82.07
+Luggage and similar personal items (part of 119),0.52,0.25,82.32
+Used autos,0.53,0.21,82.53
+Dental services (45),0.54,0.98,83.51
+Community food and housing / emergency / other relief services,0.57,0.08,83.6
+Spirits,0.58,0.26,83.86
+Individual and family services,0.59,0.61,84.46
+Cosmetic / perfumes / bath / nail preparations and implements,0.61,0.36,84.83
+Motor vehicle maintenance and repair (60),0.63,1.31,86.13
+Outdoor equipment and supplies,0.67,0.05,86.18
+Natural gas (28),0.68,0.38,86.56
+Pets and related products,0.69,0.55,87.11
+Men's and boys' clothing (11),0.7,0.75,87.86
+Nonprofit private higher education services to households,0.71,0.4,88.26
+Proprietary and public higher education,0.71,0.55,88.8
+Cellular telephone services,0.74,0.76,89.57
+Other household services,0.77,0.22,89.78
+Educational books (96),0.78,0.04,89.83
+"Audio discs, tapes, vinyl, and permanent digital downloads",0.79,0.01,89.84
+"Games, toys, and hobbies",0.8,0.69,90.53
+Commercial banks,0.83,1.31,91.84
+Social advocacy and civic and social organizations,0.84,0.12,91.96
+"Repair and rental of audio-visual, photographic, and information processing equipment",0.86,0.05,92
+Garbage and trash collection,0.9,0.2,92.21
+Household paper products,0.91,0.29,92.5
+"Mineral waters, soft drinks, and vegetable juices",0.92,0.55,93.05
+Labor organization dues,0.93,0.09,93.14
+Other professional medical services,0.98,1.89,95.03
+Intracity mass transit,1.16,0.1,95.13
+Taxicabs and ride sharing services,1.17,0.19,95.32
+Household linens,1.58,0.34,95.66
+Tax preparation and other related services,1.64,0.24,95.89
+Jewelry,1.68,0.42,96.31
+Televisions,1.69,0.17,96.48
+Other video equipment,2.05,0.05,96.53
+Small electric household appliances,2.19,0.06,96.59
+Fruit (fresh),2.24,0.29,96.88
+Exchange-listed equities,2.31,0.04,96.92
+Accessories and parts,2.43,0.36,97.28
+Personal computers/tablets and peripheral equipment,3.49,0.5,97.78
+Watches,3.59,0.09,97.87
+Recreational books (part of 90),4.88,0.16,98.03
+Repair of household appliances,5.05,0.06,98.08
+"Repair of furniture, furnishings, and floor coverings",5.05,0.01,98.09
+Lubricants and fluids,5.48,0.06,98.15
+Portfolio management and investment advice services,5.62,1.78,99.94
+"Video discs, tapes, and permanent digital downloads",7.24,0.06,100

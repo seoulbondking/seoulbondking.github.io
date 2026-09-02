@@ -61,6 +61,13 @@ const chk = (name, elId) => {
     await ev('enterUsPce()');
     for (const t of ['price', 'real', 'income']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
   } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
+  await ev('enterFundFlow()');
+  for (const m of ['change', 'balance']) { ev(`fundMode='${m}'; renderFundFlow();`); chk('자금흐름 > ' + m, 'retailWrap'); }
+  for (const u of ['pct', 'eok']) {
+    ev(`fundMode='season'; fundSeasonUnit='${u}'; renderFundFlow();`);
+    chk('자금흐름 > season/' + u, 'retailWrap');
+  }
+  ev(`fundMode='change';`);
   await ev('enterHdebt()');
   for (const t of ['month', 'quarter']) {
     ev(`hdTab='${t}'; hdSetPeriods(); refresh();`);

@@ -13,9 +13,10 @@ indicators.yaml 예:
     source: freesis
     unit: 조원
     freq: D
-    lookback_days: 20          # 최근 N일 (첫 백필 시 크게)
-    refetch_years: 0
-    params: {}
+    lookback_days: 400         # 평소에는 최근 N일만 받아 아카이브에 병합
+    merge_always: true
+    params:
+      start_date: "2015-01-01" # --full 로 돌릴 때만 여기부터 전부 다시 받는다
 """
 import os
 from datetime import date, timedelta
@@ -87,14 +88,56 @@ def _payload_deposit(start, end):
     }}
 
 
+# ── 참고: MMF현황(기간MMF규모) — 지금은 쓰지 않는다 ──────────────────────
+# 유형별기간설정의 '단기금융'과 같은 통계다. 2026-08-27 대조:
+#   국내 공모 1,862,807 + 국내 사모 704,524
+#   + 해외 공모 34,052 + 해외 사모 411 = 2,601,794
+#   MMF현황 전체                       = 2,601,793 (반올림 1억 차)
+# 이 표에만 개인/법인 구분이 있으므로, 투자자별로 나눠 볼 일이 생기면
+# 아래 두 줄을 fetch() 에 붙이면 된다.
+MMF_COL = {"MMF": "TMPV2", "MMF 개인": "TMPV3", "MMF 법인": "TMPV4"}
+
+
+def _payload_mmf(start, end):
+    """펀드 > 주제 > MMF현황 > 기간MMF규모 (설정원본, 억원)."""
+    return {"dmSearch": {
+        "tmpV40": "100000000", "tmpV41": "1",
+        "tmpV30": start, "tmpV31": end,
+        "tmpV11": "", "tmpV39": "1",
+        "OBJ_NM": "STATFND0400000051BO",
+    }}
+
+
+TIMEOUT = 90       # 긴 범위는 서버가 느리다 (30초로는 2015~ 백필이 끊긴다)
+CHUNK_DAYS = 730   # 한 요청에 담을 최대 기간 — 이보다 길면 잘라서 여러 번 부른다
+
+
 def _records(session, payload):
     """POST → 레코드(dict) 리스트."""
-    resp = session.post(META_URL, json=payload, timeout=30)
+    resp = session.post(META_URL, json=payload, timeout=TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
     if isinstance(data, list):
         return data
     return next((v for v in data.values() if isinstance(v, list)), [])
+
+
+def _records_range(session, build, start, end):
+    """build(start, end) → payload. 범위가 길면 CHUNK_DAYS 씩 잘라 이어붙인다.
+
+    FREESIS 는 범위 전체를 한 번에 주지만, 10년치를 한 번에 물으면 응답이
+    타임아웃된다(2026-09 확인). 조각내면 조각당 1~2초면 돌아온다.
+    """
+    a = date(int(start[:4]), int(start[4:6]), int(start[6:]))
+    z = date(int(end[:4]), int(end[4:6]), int(end[6:]))
+    if (z - a).days <= CHUNK_DAYS:
+        return _records(session, build(start, end))
+    out = []
+    while a <= z:
+        b = min(z, a + timedelta(days=CHUNK_DAYS - 1))
+        out.extend(_records(session, build(a.strftime("%Y%m%d"), b.strftime("%Y%m%d"))))
+        a = b + timedelta(days=1)
+    return out
 
 
 def _to_date(s):
@@ -116,20 +159,25 @@ def fetch(indicator: dict) -> list[dict]:
     lookback = indicator.get("lookback_days", 20)
     end = date.today().strftime("%Y%m%d")
     start = (date.today() - timedelta(days=lookback)).strftime("%Y%m%d")
+    # --full 이면 params.start_date 부터 전부 다시 받는다 (긴 범위는 자동으로 분할).
+    sd = ((indicator.get("params") or {}).get("start_date") or "").strip()
+    if indicator.get("_full") and sd:
+        start = sd.replace("-", "")
+        print(f"  [freesis {indicator['id']}] 전체 재수집: {sd} ~")
     s = _session()
 
     # 펀드/일임 원본 6개 호출 → {소스키: {date: {자산유형: 값}}}
     calls = {
-        "펀드_공모_국내": _payload_fund(start, end, "1", "1"),
-        "펀드_공모_해외": _payload_fund(start, end, "4", "1"),
-        "펀드_사모_국내": _payload_fund(start, end, "1", "2"),
-        "펀드_사모_해외": _payload_fund(start, end, "4", "2"),
-        "일임_국내": _payload_disc(start, end, "1"),
-        "일임_해외": _payload_disc(start, end, "2"),
+        "펀드_공모_국내": lambda a, b: _payload_fund(a, b, "1", "1"),
+        "펀드_공모_해외": lambda a, b: _payload_fund(a, b, "4", "1"),
+        "펀드_사모_국내": lambda a, b: _payload_fund(a, b, "1", "2"),
+        "펀드_사모_해외": lambda a, b: _payload_fund(a, b, "4", "2"),
+        "일임_국내": lambda a, b: _payload_disc(a, b, "1"),
+        "일임_해외": lambda a, b: _payload_disc(a, b, "2"),
     }
     src = {}
-    for key, pl in calls.items():
-        rows = _records(s, pl)
+    for key, build in calls.items():
+        rows = _records_range(s, build, start, end)
         by_date = {}
         for r in rows:
             d = _to_date(r.get(COL["date"]))
@@ -158,7 +206,7 @@ def fetch(indicator: dict) -> list[dict]:
             series.append({"name": name, "data": pts})
 
     # 투자자예탁금
-    dep_rows = _records(s, _payload_deposit(start, end))
+    dep_rows = _records_range(s, _payload_deposit, start, end)
     dep = []
     for r in dep_rows:
         d = _to_date(r.get("TMPV1"))

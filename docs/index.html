@@ -1404,14 +1404,18 @@ function renderPpiMainIndustry(modeBtnsHtml) {
 // ── 자금흐름 (FREESIS: 펀드·투자일임·투자자예탁금) — 카테고리 히트맵 + 추이 ──
 const FUND = { id: 'kr_fund_flow', name: '자금흐름', ids: ['kr_fund_flow', 'kr_bank_flow', 'kr_repo_flow'] };
 let fundData = null, fundCharts = [null, null], fundMode = 'change', fundCollapsed = null;
-// 탭(전일 증감/잔액)별로 좌·우 차트 선택을 따로 보관
-let fundSel = { change: [null, null], balance: [null, null] };
+// 탭(전일 증감/잔액/계절성)별로 좌·우 차트 선택을 따로 보관
+let fundSel = { change: [null, null], balance: [null, null], season: [null, null] };
+let fundSeasonUnit = 'pct';   // 계절성 탭: 'pct' = 월중 증감률 · 'eok' = 월중 증감액
 // 펀드플로우 대시보드와 동일한 섹터·계층 (레벨: 섹터0 > 유형1 > 소분류2 > 항목3)
 // leaves 가 있으면 합계 행(하위 잎 시리즈의 합), 없으면 실제 시리즈 행.
 const EQ_DOM = ['공모 국내 주식', '사모 국내 주식'];
 const EQ_OVS = ['공모 해외 주식', '사모 해외 주식'];
 const EQ_ALL = [...EQ_DOM, ...EQ_OVS, '일임 국내 주식', '일임 해외 주식'];
 const BOND = ['공모 국내 채권', '사모 국내 채권', '일임 국내 채권'];
+// MMF = FREESIS '유형별기간설정'의 단기금융(국내). 화면에는 MMF 가 아니라
+// 법정 명칭인 '단기금융'으로 적혀 있다. 해외 MMF 는 국내의 1.3% 수준이라 뺐다
+// (2026-08-27: 국내 2,567,331 · 해외 34,463 · 협회 MMF현황 전체 2,601,793).
 const MMF = ['공모 국내 MMF', '사모 국내 MMF'];
 const FUND_ROWS = [
   { name: 'REPO', lv: 0, leaves: ['기관RP'] },
@@ -1495,6 +1499,7 @@ function renderFundFlow() {
   if (selPair[0] === null) selPair[0] = new Set(['MMF']);        // 왼쪽 차트 기본
   if (selPair[1] === null) selPair[1] = new Set(['채권형']);      // 오른쪽 차트 기본
   if (fundCollapsed === null) fundCollapsed = new Set();
+  if (fundMode === 'season') { renderFundSeason(box, bal, rows, selPair); return; }
   // 셀 강조: 배경 대신 굵은 글씨 + 진하기(증감 크기에 비례) — 초록=증가 · 빨강=감소
   let mx = 1e-6;
   if (fundMode === 'change') rows.forEach(r => cols.forEach(d => { const v = val(r, d); if (v != null) mx = Math.max(mx, Math.abs(v)); }));
@@ -1510,7 +1515,7 @@ function renderFundFlow() {
 
   let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
     + '<div class="mode" id="fundModeBtns">'
-    + [['change', '전일 증감'], ['balance', '잔액']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
+    + [['change', '전일 증감'], ['balance', '잔액'], ['season', '계절성']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
     + '</div><span style="font-size:12px;color:#555">단위: <b>' + unit + '</b></span></div>'
     + '<div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
@@ -1589,6 +1594,204 @@ function renderFundFlow() {
           tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', numOpt)} ${unit}` } } },
         scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
     });
+  });
+}
+
+// ── 자금흐름 · 계절성 ──────────────────────────────────────────────
+// 일별 잔액 → 월말 잔액 → 월중 변동. 가로축은 1~12월, 선 하나가 한 해다.
+// 월중 변동은 '이번 달 말 − 지난 달 말'이라 첫 달(2015-01)을 계산하려면
+// 2014-12 월말이 있어야 한다 → indicators.yaml 의 start_date 를 2014-12-01 로 둔다.
+const MONTHS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+// 연도별 선 12개를 겹치므로 색이 서로 최대한 멀어야 한다. 명도·채도를 번갈아
+// 흔들어 인접한 두 해가 붙어 보이지 않게 했다.
+const SEASON_HUES = ['#1f77b4', '#e6550d', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
+                     '#e377c2', '#17becf', '#bcbd22', '#7f3f98', '#0b7b6b', '#b8860b',
+                     '#5c6bc0', '#c2185b', '#558b2f', '#ef6c00'];
+
+function renderFundSeason(box, bal, rows, selPair) {
+  const pct = fundSeasonUnit === 'pct';
+  const unit = pct ? '%' : '조원';
+  const SCALE = pct ? 1 : 1e4;                 // 억원 → 조원
+  const numOpt = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+  // 월말값: 그 달에서 값이 있는 마지막 날. 시리즈마다 마지막 영업일이 달라
+  // (예: 은행 통계는 하루 늦다) 달의 뒤에서부터 값을 찾아 내려온다.
+  const mDates = new Map();
+  periodDates.forEach(d => { const k = d.slice(0, 7); (mDates.get(k) || mDates.set(k, []).get(k)).push(d); });
+  const yms = [...mDates.keys()].sort();
+  const ymIdx = new Map(yms.map((y, i) => [y, i]));
+  const prevYm = ym => {                       // 달력상 직전 달 (데이터 공백이면 null)
+    const i = ymIdx.get(ym); if (i == null || i < 1) return null;
+    const p = yms[i - 1];
+    const gap = (+ym.slice(0, 4) - +p.slice(0, 4)) * 12 + (+ym.slice(5) - +p.slice(5));
+    return gap === 1 ? p : null;
+  };
+  const balMonth = (name, ym) => {
+    const ds = mDates.get(ym) || [];
+    for (let i = ds.length - 1; i >= 0; i--) { const v = bal(name, ds[i]); if (v != null) return v; }
+    return null;
+  };
+  const balAt = (r, ym) => r.leaves
+    ? (() => { let s = 0, ok = false; r.leaves.forEach(k => { const x = balMonth(k, ym); if (x != null) { s += x; ok = true; } }); return ok ? s : null; })()
+    : balMonth(r.name, ym);
+  // 한 항목의 월중 변동: Map('YYYY-MM' → 값)
+  const mchg = r => {
+    const out = new Map();
+    yms.forEach(ym => {
+      const p = prevYm(ym); if (!p) return;
+      const a = balAt(r, ym), b = balAt(r, p);
+      if (a == null || b == null) return;
+      out.set(ym, pct ? (b ? (a / b - 1) * 100 : null) : (a - b) / SCALE);
+    });
+    return out;
+  };
+  const years = [...new Set(yms.map(y => y.slice(0, 4)))].sort();
+
+  // 마지막 달이 아직 진행 중인가 — 그렇다면 '전월말 → 최근일'의 부분 변동이다.
+  // 선차트에는 그려서 올해 흐름을 보되, 월별 평균·상승 연수에서는 뺀다
+  // (반쪽짜리 달을 온전한 달들과 같이 평균 내면 왜곡된다).
+  const lastYm = yms[yms.length - 1] || '';
+  const lastD = (mDates.get(lastYm) || []).slice(-1)[0] || '';
+  const partialYm = (() => {
+    if (!lastD) return null;
+    const y = +lastD.slice(0, 4), mo = +lastD.slice(5, 7), dd = +lastD.slice(8, 10);
+    const eom = new Date(y, mo, 0).getDate();       // 그 달의 말일
+    return eom - dd > 4 ? lastYm : null;            // 연휴를 감안해 4일 여유
+  })();
+  const full = ym => ym !== partialYm;              // 온전히 끝난 달인가
+
+  // 표: 행=항목, 열=1~12월, 값=전체 연도 평균
+  const avgByMonth = r => {
+    const m = mchg(r);
+    return MONTHS.map(mm => {
+      const xs = years.filter(y => full(`${y}-${mm}`)).map(y => m.get(`${y}-${mm}`)).filter(v => v != null);
+      return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+    });
+  };
+  const rowAvg = new Map(rows.map(r => [r.name, avgByMonth(r)]));
+  let mx = 1e-6;
+  rowAvg.forEach(a => a.forEach(v => { if (v != null) mx = Math.max(mx, Math.abs(v)); }));
+  const cellStyle = v => {
+    if (v == null || !v) return '';
+    const t = Math.min(1, Math.abs(v) / mx);
+    const w = t > 0.5 ? 800 : (t > 0.15 ? 700 : 600);
+    const col = v > 0 ? [17, 105, 62] : [176, 32, 28];
+    const light = v > 0 ? [72, 152, 116] : [200, 96, 90];
+    const mix = col.map((c, i) => Math.round(light[i] + (c - light[i]) * (0.4 + 0.6 * t)));
+    return `color:rgb(${mix.join(',')});font-weight:${w}`;
+  };
+
+  const span = years.length ? `${years[0]}~${years[years.length - 1]}` : '';
+  let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+    + '<div class="mode" id="fundModeBtns">'
+    + [['change', '전일 증감'], ['balance', '잔액'], ['season', '계절성']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><div class="mode" id="fundSeasonUnitBtns">'
+    + [['pct', '증감률 %'], ['eok', '증감액 조원']].map(([v, t]) => `<button data-su="${v}" class="${fundSeasonUnit === v ? 'active' : ''}">${t}</button>`).join('')
+    + `</div><span style="font-size:12px;color:#555">월중 변동 · <b>${span}</b> · 단위 <b>${unit}</b></span></div>`
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="fundChart${i}"></canvas></div></div>`).join('')
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">표의 <b>항목 이름을 클릭</b>하면 그 항목의 계절성을 차트로 봅니다. '
+    + `표의 숫자는 <b>그 달의 평균 월중 변동</b>입니다 (항목별 전 기간) (초록=증가 · 빨강=감소).`
+    + (partialYm ? ` <b>${+partialYm.slice(5)}월은 아직 진행 중</b>이라 ${prevYm(partialYm) ? +prevYm(partialYm).slice(5) + '월말' : '전월말'}→${lastD.slice(5).replace('-', '/')} 부분 변동이며, 선차트에만 점선으로 넣고 평균·연수 집계에서는 뺐습니다.` : '')
+    + '</div>'
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + MONTHS.map(m => `<th>${+m}월</th>`).join('') + '</tr></thead><tbody>';
+  let hideLv = null;
+  rows.forEach(r => {
+    if (hideLv != null) { if (r.lv > hideLv) return; hideLv = null; }
+    const collapsed = fundCollapsed.has(r.name);
+    const caret = r._kids
+      ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
+    const inL = selPair[0].has(r.name);
+    const mark = inL ? `<b style="color:${PALETTE[0]}">◀</b> ` : '';
+    const cls = r.lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(r.lv, 3)}`;
+    out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${r.name}</td>`
+      + rowAvg.get(r.name).map(v => `<td style="${cellStyle(v)}">${v == null ? '' : v.toLocaleString('ko-KR', numOpt)}</td>`).join('')
+      + '</tr>';
+    if (collapsed && r._kids) hideLv = r.lv;
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('#fundModeBtns button').forEach(b => b.onclick = () => { fundMode = b.dataset.fm; renderFundFlow(); });
+  box.querySelectorAll('#fundSeasonUnitBtns button').forEach(b => b.onclick = () => { fundSeasonUnit = b.dataset.su; renderFundFlow(); });
+  box.querySelectorAll('.fcaret').forEach(el => el.onclick = e => {
+    e.stopPropagation(); const n = el.dataset.fcar;
+    fundCollapsed.has(n) ? fundCollapsed.delete(n) : fundCollapsed.add(n); renderFundFlow();
+  });
+  // 계절성은 한 항목만 본다 (겹친 선이 이미 연도로 12개다)
+  box.querySelectorAll('[data-fname]').forEach(td => {
+    td.onclick = () => { selPair[0] = new Set([td.dataset.fname]); renderFundFlow(); };
+  });
+
+  const pick = [...selPair[0]][0] || 'MMF';
+  const target = rows.find(r => r.name === pick) || rows[0];
+  const m = mchg(target);
+  const fmt = v => v == null ? '-' : v.toLocaleString('ko-KR', numOpt) + (pct ? '%' : '조');
+
+  // 항목마다 시작 연도가 다르다 (은행·RP 계열은 더 길다). 빈 해는 범례에서 뺀다.
+  const mYears = years.filter(y => MONTHS.some(mm => m.get(`${y}-${mm}`) != null));
+  const mSpan = mYears.length ? `${mYears[0]}~${mYears[mYears.length - 1]}` : span;
+
+  // ① 연도별 겹친 선 — 해마다 다른 색. 올해만 굵게.
+  const last = mYears[mYears.length - 1];
+  const dsYears = mYears.map((y, i) => {
+    const cur = y === last;
+    const col = SEASON_HUES[i % SEASON_HUES.length];
+    return {
+      label: y + (cur && partialYm ? ' *' : ''),
+      data: MONTHS.map(mm => m.get(`${y}-${mm}`) ?? null),
+      borderColor: col, backgroundColor: col,
+      borderWidth: cur ? 3 : 1.6, pointRadius: cur ? 3 : 0, pointHitRadius: 8,
+      tension: 0.15, spanGaps: false, pop: cur, order: cur ? 1 : 2,
+      // 진행 중인 달로 이어지는 마지막 구간은 점선으로
+      segment: !cur || !partialYm ? undefined : {
+        borderDash: c => c.p1DataIndex === +partialYm.slice(5) - 1 ? [5, 3] : undefined,
+      },
+    };
+  });
+  if (fundCharts[0]) fundCharts[0].destroy();
+  fundCharts[0] = new Chart(box.querySelector('#fundChart0'), {
+    type: 'line', plugins: [LINE_POP],
+    data: { labels: MONTHS.map(x => +x + '월'), datasets: dsYears },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 8 } },
+        title: { display: true, text: `${pick} · 연도별 월중 변동 (${unit})`, font: { size: 12 } },
+        tooltip: { itemSort: (a, b) => b.parsed.y - a.parsed.y,
+          callbacks: { label: it => ` ${it.dataset.label}: ${fmt(it.parsed.y)}` } } },
+      scales: { x: { ticks: { font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+
+  // ② 월별 평균 + 상승/하락 연수 (진행 중인 달은 제외)
+  const stat = MONTHS.map(mm => {
+    const xs = mYears.filter(y => full(`${y}-${mm}`)).map(y => m.get(`${y}-${mm}`)).filter(v => v != null);
+    const up = xs.filter(v => v > 0).length;
+    return { avg: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null,
+             up, down: xs.length - up, n: xs.length };
+  });
+  if (fundCharts[1]) fundCharts[1].destroy();
+  fundCharts[1] = new Chart(box.querySelector('#fundChart1'), {
+    type: 'bar',
+    data: { labels: MONTHS.map(x => +x + '월'), datasets: [
+      { type: 'line', label: '상승한 해 (개, 우축)', data: stat.map(s => s.up),
+        borderColor: '#c98a1a', backgroundColor: '#c98a1a', borderWidth: 2,
+        pointRadius: 3, tension: 0.15, yAxisID: 'y1', order: 1, pop: true },
+      { type: 'bar', label: `평균 월중 변동 (${unit})`, data: stat.map(s => s.avg),
+        backgroundColor: stat.map(s => s.avg == null ? '#ccc' : (s.avg > 0 ? 'rgba(17,105,62,0.75)' : 'rgba(176,32,28,0.75)')),
+        borderWidth: 0, yAxisID: 'y', order: 2 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: `${pick} · 월별 평균과 상승 연수 (${mSpan})`, font: { size: 12 } },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex, callbacks: {
+          label: it => it.dataset.yAxisID === 'y1'
+            ? ` 상승 ${stat[it.dataIndex].up} / 하락 ${stat[it.dataIndex].down} (총 ${stat[it.dataIndex].n}년)`
+            : ` 평균: ${fmt(it.parsed.y)}` } } },
+      scales: { x: { ticks: { font: { size: 10 } } },
+        y: { position: 'left', ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+        y1: { position: 'right', min: 0, suggestedMax: years.length,
+              ticks: { font: { size: 10 }, stepSize: 2 }, grid: { drawOnChartArea: false } } } },
   });
 }
 

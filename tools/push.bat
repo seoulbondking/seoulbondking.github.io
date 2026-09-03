@@ -24,16 +24,24 @@ if "%MSG%"=="" set MSG=code: update
 echo ================================================================>>"%LOG%"
 call :say "push start - %MSG%"
 
-REM --- stale index.lock guard -------------------------------------
-REM  Same trap as daily_update.bat: a killed git leaves index.lock
-REM  behind, every later "git add" fails silently, and nothing ships.
-if exist ".git\index.lock" (
+REM --- stale lock guard -------------------------------------------
+REM  A killed git leaves *.lock behind and every later command fails
+REM  silently. daily_update.bat only checked index.lock, but git also
+REM  writes HEAD.lock and refs\heads\<branch>.lock - an interrupted
+REM  "git reset" left all three behind (2026-09-03). Check them all.
+set LOCKS=
+if exist ".git\index.lock" set LOCKS=1
+if exist ".git\HEAD.lock" set LOCKS=1
+if exist ".git\refs\heads\main.lock" set LOCKS=1
+if defined LOCKS (
     tasklist /fi "imagename eq git.exe" 2>nul | find /i "git.exe" >nul
     if errorlevel 1 (
-        call :say "WARNING: stale .git\index.lock - removing"
-        del /f /q ".git\index.lock"
+        call :say "WARNING: stale git lock files - removing"
+        del /f /q ".git\index.lock" 2>nul
+        del /f /q ".git\HEAD.lock" 2>nul
+        del /f /q ".git\refs\heads\main.lock" 2>nul
     ) else (
-        call :say "ERROR: git.exe is running and holds index.lock - aborting"
+        call :say "ERROR: git.exe is running and holds a lock - aborting"
         goto :fail
     )
 )

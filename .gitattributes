@@ -1,0 +1,23 @@
+# 줄바꿈 정책 — CRLF/LF 차이로 파일 전체가 "바뀐 것처럼" 뜨는 걸 막는다.
+#
+# 2026-09 증상: cleveland_pce_components.csv(201줄)와 daily_update.bat(95줄)이
+# git status 에 통째로 수정됨으로 떴는데, git diff --ignore-all-space 로 보면
+# 실제 변경은 0줄이었다. 저장소에는 LF 로 들어 있는데 윈도우 편집기가
+# 작업트리에 CRLF 로 써서 생긴 차이다.
+#
+# 아래 규칙이 있으면 git 이 스테이징 전에 CRLF→LF 로 정규화해서 비교하므로
+# 작업트리 줄바꿈이 무엇이든 diff 가 생기지 않는다.
+
+# 기본: 텍스트로 판단되는 파일은 저장소·작업트리 모두 LF
+*               text=auto eol=lf
+
+# 배치 파일만 예외 — cmd.exe 는 CRLF 를 기대한다 (LF 면 라벨/goto 가 깨질 수 있다)
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# 바이너리 — 절대 변환하지 않는다
+*.xlsx          binary
+*.xlsm          binary
+*.png           binary
+*.jpg           binary
+*.pdf           binary

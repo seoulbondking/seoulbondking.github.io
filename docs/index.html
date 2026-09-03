@@ -82,6 +82,13 @@
   table.data tbody tr.flat td { font-weight: 400; }   /* 형제 행 — 첫 행 자동 굵게 해제 */
   table.data tr.sep-solid td { border-bottom: 2px solid #9aa7b8; }   /* 실선 */
   table.data tr.sep-dot td { border-bottom: 1px dotted #b0bac7; }    /* 점선 */
+  /* 자금흐름 섹션 머리(투신·증권·은행…): 구분선을 아래가 아니라 '위'에 둬야
+     섹션과 그 하위 항목이 한 덩어리로 읽힌다. 옅은 배경으로 블록을 만든다. */
+  table.data tr.fund-sec td {
+    border-top: 2px solid #8fa0b6; background: #eef2f7;
+    border-bottom: 1px solid #dbe2ea;
+  }
+  table.data tr.fund-sec td:first-child { font-weight: 800; letter-spacing: .3px; }
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
   table.data tr.lv3 td:first-child { padding-left: 56px; }
@@ -1418,8 +1425,8 @@ const BOND = ['공모 국내 채권', '사모 국내 채권', '일임 국내 채
 // (2026-08-27: 국내 2,567,331 · 해외 34,463 · 협회 MMF현황 전체 2,601,793).
 const MMF = ['공모 국내 MMF', '사모 국내 MMF'];
 const FUND_ROWS = [
-  { name: 'REPO', lv: 0, leaves: ['기관RP'] },
-  { name: '기관RP', lv: 1 },
+  // 기관RP 는 하위 항목이 없어 REPO 섹션과 내용이 같다. 한 줄로 합쳤다.
+  { name: '기관REPO', lv: 0, leaves: ['기관RP'] },
   { name: '투신', lv: 0, leaves: [...BOND, ...MMF, ...EQ_ALL] },
   { name: '채권형', lv: 1, leaves: BOND },
   { name: '공모 국내 채권', lv: 2 }, { name: '사모 국내 채권', lv: 2 }, { name: '일임 국내 채권', lv: 2 },
@@ -1532,7 +1539,7 @@ function renderFundFlow() {
       ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
     const inL = selPair[0].has(r.name), inR = selPair[1].has(r.name);
     const mark = (inL ? `<b style="color:${PALETTE[0]}">◀</b>` : '') + (inR ? `<b style="color:${PALETTE[1]}">▶</b>` : '');
-    const cls = r.lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(r.lv, 3)}`;
+    const cls = r.lv === 0 ? 'lv0 fund-sec' : `lv${Math.min(r.lv, 3)}`;
     out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${mark ? ' ' : ''}${r.name}</td>`
       + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', numOpt);
         return `<td style="${cellStyle(v)}">${t}</td>`; }).join('') + '</tr>';
@@ -1606,7 +1613,12 @@ const MONTHS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11'
 // 흔들어 인접한 두 해가 붙어 보이지 않게 했다.
 const SEASON_HUES = ['#1f77b4', '#e6550d', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
                      '#e377c2', '#17becf', '#bcbd22', '#7f3f98', '#0b7b6b', '#b8860b',
-                     '#5c6bc0', '#c2185b', '#558b2f', '#ef6c00'];
+                     '#5c6bc0', '#c2185b', '#558b2f', '#ef6c00', '#00838f', '#6d4c41',
+                     '#3949ab', '#ad1457'];
+// 연도 수가 팔레트보다 많으면 색이 겹친다. 그럴 땐 색상환을 연도 수로 등분해
+// 중복 없이 뽑는다 (예: 2010~ 17년치).
+const seasonHue = (i, n) => n <= SEASON_HUES.length
+  ? SEASON_HUES[i] : `hsl(${Math.round(360 * i / n)},68%,45%)`;
 
 function renderFundSeason(box, bal, rows, selPair) {
   const pct = fundSeasonUnit === 'pct';
@@ -1704,7 +1716,7 @@ function renderFundSeason(box, bal, rows, selPair) {
       ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
     const inL = selPair[0].has(r.name);
     const mark = inL ? `<b style="color:${PALETTE[0]}">◀</b> ` : '';
-    const cls = r.lv === 0 ? 'lv0 sep-solid' : `lv${Math.min(r.lv, 3)}`;
+    const cls = r.lv === 0 ? 'lv0 fund-sec' : `lv${Math.min(r.lv, 3)}`;
     out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${r.name}</td>`
       + rowAvg.get(r.name).map(v => `<td style="${cellStyle(v)}">${v == null ? '' : v.toLocaleString('ko-KR', numOpt)}</td>`).join('')
       + '</tr>';
@@ -1736,7 +1748,7 @@ function renderFundSeason(box, bal, rows, selPair) {
   const last = mYears[mYears.length - 1];
   const dsYears = mYears.map((y, i) => {
     const cur = y === last;
-    const col = SEASON_HUES[i % SEASON_HUES.length];
+    const col = seasonHue(i, mYears.length);
     return {
       label: y + (cur && partialYm ? ' *' : ''),
       data: MONTHS.map(mm => m.get(`${y}-${mm}`) ?? null),
@@ -10343,14 +10355,17 @@ function renderCpiSeas() {
     o = o || {};
     if (cpiCharts[i]) { cpiCharts[i].destroy(); cpiCharts[i] = null; }
     cpiCharts[i] = new Chart(box.querySelector('#csC' + i), {
+      plugins: [LINE_POP],
       data: { labels: MN, datasets },
       options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: title, font: { size: 12 } },
-          tooltip: { callbacks: { label: it => it.parsed.y == null ? null
-            : ` ${it.dataset.label}: ${it.parsed.y.toFixed(2)}${o.pct ? '%' : ''}` } },
+          // 선이 여러 개면 값이 큰 순으로 정렬해야 눈으로 짚기 쉽다
+          tooltip: { itemSort: o.sortDesc ? (a, b) => b.parsed.y - a.parsed.y : undefined,
+            callbacks: { label: it => it.parsed.y == null ? null
+              : ` ${it.dataset.label}: ${it.parsed.y.toFixed(2)}${o.pct ? '%' : ''}` } },
         },
         scales: { x: { ticks: { font: { size: 10 } } },
           y: { ticks: { font: { size: 10 } },
@@ -10358,16 +10373,17 @@ function renderCpiSeas() {
       },
     });
   };
-  // 연도별 선 — 최근 연도일수록 진하게
+  // 연도별 선 — 해마다 다른 색(SEASON_HUES). 올해만 굵게 + 흰 후광으로 띄운다.
   const ds = yrs.map((y, i) => {
     const last = i === yrs.length - 1;
-    const a = 0.25 + 0.75 * (i + 1) / yrs.length;
+    const col = seasonHue(i, yrs.length);
     return { type: 'line', label: `${y}`, data: MN.map((_v, m) => val(y, m + 1)),
-      borderColor: last ? '#c0392b' : `rgba(26,79,160,${a.toFixed(2)})`,
-      borderWidth: last ? 3 : 1.6, pointRadius: last ? 2.5 : 0, tension: 0.25, spanGaps: true };
+      borderColor: col, backgroundColor: col,
+      borderWidth: last ? 3 : 1.6, pointRadius: last ? 3 : 0, pointHitRadius: 8,
+      tension: 0.25, spanGaps: true, pop: last, order: last ? 1 : 2 };
   });
   mk(0, `${seasItem} — 연도별 ${ { idx: '원지수', reb: '연초=100', mom: '전월비 %' }[seasBase] }`, ds,
-     { pct: seasBase !== 'idx' });
+     { pct: seasBase !== 'idx', sortDesc: true });
   mk(1, `${seasItem} — 월별 평균 전월비 (계절요인, %)`, [
     { type: 'bar', label: '평균 전월비', data: byM,
       backgroundColor: byM.map(v => v == null ? '#ccc' : (v >= 0 ? '#c0392bcc' : '#2c6fbfcc')) },

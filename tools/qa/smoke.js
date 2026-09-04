@@ -59,7 +59,7 @@ const chk = (name, elId) => {
   } else { console.log('  미국 생산자물가              (데이터 없음 — python fetch.py us_ppi us_ppi_nsa)'); }
   if (w.__MACRO__ && w.__MACRO__.us_pce) {
     await ev('enterUsPce()');
-    for (const t of ['price', 'real', 'income']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
+    for (const t of ['price', 'real', 'income', 'mkt']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
   } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
   await ev('enterFundFlow()');
   for (const m of ['change', 'balance']) { ev(`fundMode='${m}'; renderFundFlow();`); chk('자금흐름 > ' + m, 'retailWrap'); }

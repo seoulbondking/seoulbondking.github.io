@@ -82,13 +82,13 @@
   table.data tbody tr.flat td { font-weight: 400; }   /* 형제 행 — 첫 행 자동 굵게 해제 */
   table.data tr.sep-solid td { border-bottom: 2px solid #9aa7b8; }   /* 실선 */
   table.data tr.sep-dot td { border-bottom: 1px dotted #b0bac7; }    /* 점선 */
-  /* 자금흐름 섹션 머리(투신·증권·은행…): 구분선을 아래가 아니라 '위'에 둬야
-     섹션과 그 하위 항목이 한 덩어리로 읽힌다. 옅은 배경으로 블록을 만든다. */
-  table.data tr.fund-sec td {
+  /* 섹션 머리 행: 구분선을 아래가 아니라 '위'에 둬야 섹션과 그 하위 항목이
+     한 덩어리로 읽힌다. 옅은 배경으로 블록을 만든다. (자금흐름·PCE 시장기반) */
+  table.data tr.sec-head td {
     border-top: 2px solid #8fa0b6; background: #eef2f7;
     border-bottom: 1px solid #dbe2ea;
   }
-  table.data tr.fund-sec td:first-child { font-weight: 800; letter-spacing: .3px; }
+  table.data tr.sec-head td:first-child { font-weight: 800; letter-spacing: .3px; }
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
   table.data tr.lv3 td:first-child { padding-left: 56px; }
@@ -188,6 +188,7 @@
         <button data-uc2="price" class="active">물가</button>
         <button data-uc2="real">실질소비</button>
         <button data-uc2="income">소득·저축</button>
+        <button data-uc2="mkt">시장기반</button>
         <button data-uc2="diff">확산도</button>
       </div>
       <div id="usCpiTabs" class="mode" style="display:none">
@@ -1539,7 +1540,7 @@ function renderFundFlow() {
       ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
     const inL = selPair[0].has(r.name), inR = selPair[1].has(r.name);
     const mark = (inL ? `<b style="color:${PALETTE[0]}">◀</b>` : '') + (inR ? `<b style="color:${PALETTE[1]}">▶</b>` : '');
-    const cls = r.lv === 0 ? 'lv0 fund-sec' : `lv${Math.min(r.lv, 3)}`;
+    const cls = r.lv === 0 ? 'lv0 sec-head' : `lv${Math.min(r.lv, 3)}`;
     out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${mark ? ' ' : ''}${r.name}</td>`
       + cols.map(d => { const v = val(r, d); const t = v == null ? '' : v.toLocaleString('ko-KR', numOpt);
         return `<td style="${cellStyle(v)}">${t}</td>`; }).join('') + '</tr>';
@@ -1716,7 +1717,7 @@ function renderFundSeason(box, bal, rows, selPair) {
       ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
     const inL = selPair[0].has(r.name);
     const mark = inL ? `<b style="color:${PALETTE[0]}">◀</b> ` : '';
-    const cls = r.lv === 0 ? 'lv0 fund-sec' : `lv${Math.min(r.lv, 3)}`;
+    const cls = r.lv === 0 ? 'lv0 sec-head' : `lv${Math.min(r.lv, 3)}`;
     out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${r.name}</td>`
       + rowAvg.get(r.name).map(v => `<td style="${cellStyle(v)}">${v == null ? '' : v.toLocaleString('ko-KR', numOpt)}</td>`).join('')
       + '</tr>';
@@ -7475,6 +7476,66 @@ function renderUsPce() {
       ['· 내구재', '#7b52ab', d => chg(R('Durable goods'), d, 12)],
       ['서비스', '#1a4fa0', d => chg(R('Services'), d, 12)],
     ], '%');
+  } else if (usPceTab === 'mkt') {
+    // 시장기반(market-based) PCE — 실제로 거래 가격이 관찰되는 항목만 모은 보조지수.
+    // 전체 PCE 의 약 87%. 나머지(비시장)는 BEA 가 방법을 정해 '귀속'한 값이라
+    // 물가가 아니라 금리·주가·손해율이 지수를 움직인다.
+    const MK = [
+      ['헤드라인 PCE', P('Personal consumption expenditures (PCE)'), 0],
+      ['시장기반 PCE', P('Market-based PCE'), 1],
+      ['비시장 몫 (전체 − 시장기반, %p)', null, 1],
+      ['근원 PCE', P('PCE excluding food and energy'), 0],
+      ['시장기반 근원 PCE', P('Market-based PCE excluding food and energy'), 1],
+      ['비시장 몫 (%p)', null, 1],
+    ];
+    // 격차 행은 바로 위 두 줄(전체·시장기반)의 차다.
+    const mval = (i, fn, d) => MK[i][1] !== null ? fn(MK[i][1], d)
+      : (() => { const a = fn(MK[i - 2][1], d), b = fn(MK[i - 1][1], d);
+                 return a == null || b == null ? null : a - b; })();
+    const mtbl = (title, fn) => {
+      const body = MK.map(([ko, m, lv], i) =>
+        `<tr class="${lv === 0 ? 'lv0 sec-head' : 'lv1'}${m === null ? ' flat' : ''}">`
+        + `<td style="padding-left:${8 + lv * 16}px">${ko}</td>`
+        + cols.map(d => cell(mval(i, fn, d), f2)).join('') + '</tr>').join('');
+      return `<div class="block-title">${title}</div><div class="tscroll">`
+        + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+        + body + '</tbody></table></div>';
+    };
+    out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+      + '<b>시장기반(market-based) PCE</b> 는 실제 거래 가격이 관찰되는 항목만 모은 BEA 보조지수로, '
+      + '전체 PCE 의 <b>약 87%</b> 입니다. 빠지는 <b>비시장(nonmarket)</b> 항목은 값을 치르지 않아 '
+      + 'BEA 가 정해둔 방법으로 추정(귀속)하는 것들입니다 — '
+      + '<b>무상 금융서비스(FISIM, 예금·대출 금리마진)</b>, <b>포트폴리오 운용수수료(자산잔고×요율 → 주가에 연동)</b>, '
+      + '<b>보험 서비스(보험료−예상보험금)</b>, <b>비영리기관(NPISH) 서비스</b>, 도박·중고차 마진 등. '
+      + '물가가 아니라 <b>금리·주가·손해율</b>이 지수를 흔듭니다.<br>'
+      + '<span style="color:#c0392b">자가주거 귀속임대료(OER)는 귀속 항목이지만 관찰된 임대료로 디플레이트하므로 시장기반에 포함됩니다.</span> '
+      + '월러 이사가 근원 물가를 볼 때 강조하는 지표이고, BEA 는 포트폴리오 수수료 출처를 바꿔 비시장의 영향을 줄이는 개편을 진행 중입니다.</div>'
+      + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+      + [0, 1, 2, 3].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:280px"><canvas id="ucp${i}"></canvas></div></div>`).join('')
+      + '</div>'
+      + mtbl('전년동월비 (%)', (m, d) => chg(m, d, 12))
+      + mtbl('6개월 연율 (%)', (m, d) => ann(m, d, 6))
+      + mtbl('3개월 연율 (%)', (m, d) => ann(m, d, 3))
+      + mtbl('전월비 (%)', (m, d) => chg(m, d, 1));
+    box.innerHTML = out;
+    // 창(12/6/3개월)마다 같은 4계열을 그린다. 창이 짧을수록 최근 흐름이 빨리 드러난다.
+    const HEAD = 'Personal consumption expenditures (PCE)', CORE = 'PCE excluding food and energy';
+    const MHEAD = 'Market-based PCE', MCORE = 'Market-based PCE excluding food and energy';
+    const four = k => [
+      ['헤드라인 PCE', '#002060', d => ann(P(HEAD), d, k), true],
+      ['시장기반 PCE', '#7f9fd0', d => ann(P(MHEAD), d, k)],
+      ['근원 PCE', '#9b2226', d => ann(P(CORE), d, k), true],
+      ['시장기반 근원', '#c98a1a', d => ann(P(MCORE), d, k)],
+    ];
+    const gapAt = (a, b, k) => d => { const x = ann(P(a), d, k), y = ann(P(b), d, k);
+      return x == null || y == null ? null : x - y; };
+    [[0, 12, '전년동월비 (%)'], [1, 6, '6개월 연율 (%)'], [2, 3, '3개월 연율 (%)']]
+      .forEach(([i, k, t]) => { usPceCharts[i] = line('#ucp' + i, `${t} — 전체 vs 시장기반`, four(k), '%'); });
+    usPceCharts[3] = line('#ucp3', '비시장 몫 — 근원 기준 (전체 − 시장기반, %p)', [
+      ['12개월', '#002060', gapAt(CORE, MCORE, 12), true],
+      ['6개월 연율', '#1a6fc4', gapAt(CORE, MCORE, 6)],
+      ['3개월 연율', '#c0392b', gapAt(CORE, MCORE, 3)],
+    ], '%p');
   } else if (usPceTab === 'diff') {
     renderUsPceDiff(box, xT);
     return;

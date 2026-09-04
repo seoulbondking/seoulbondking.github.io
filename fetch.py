@@ -110,6 +110,44 @@ def archive_start_year(payload: dict) -> int | None:
         return None
 
 
+ALERT_TAIL_DAYS = 20      # 알림 계산에 필요한 최근 영업일 수 (5영업일 변동 + 여유)
+# 알림 배지가 보는 지표. 일별 지표를 전부 담으면 금리 커브까지 딸려와 120KB 가 된다.
+# 대시보드 index.html 의 FUND_ALERTS 가 쓰는 지표만 여기 적는다.
+ALERT_INDICATORS = ["kr_fund_flow", "kr_repo_flow", "kr_bank_flow"]
+
+
+def write_alert_tail(all_indicators: list[dict]) -> None:
+    """알림용 '최근 며칠' 요약 파일 하나 (docs/data/alerts.js).
+
+    대시보드 좌측 메뉴의 알림 배지는 첫 화면부터 떠야 하는데, 그러자고
+    kr_fund_flow.js(2015년 백필 뒤 1.2MB)를 통째로 받는 건 낭비다.
+    꼬리만 잘라 담으면 10KB 남짓이라 부담이 없다.
+    """
+    tail = {}
+    for ind in all_indicators:
+        if ind["id"] not in ALERT_INDICATORS:
+            continue
+        path = DATA_DIR / f"{ind['id']}.json"
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        for s in payload.get("series", []):
+            if s.get("data"):
+                tail[s["name"]] = s["data"][-ALERT_TAIL_DAYS:]
+    body = json.dumps({
+        "updated_at": datetime.now(KST).strftime("%Y-%m-%d %H:%M KST"),
+        "days": ALERT_TAIL_DAYS,
+        "series": tail,
+    }, ensure_ascii=False)
+    (DATA_DIR / "alerts.js").write_text(
+        f"window.__MACRO_ALERTS__={body};", encoding="utf-8")
+    print(f"[ok]   alerts.js: 시리즈 {len(tail)}개 × 최근 {ALERT_TAIL_DAYS}영업일"
+          f" ({len(body.encode('utf-8')) / 1024:.1f}KB)")
+
+
 def main():
     load_dotenv()
     config = yaml.safe_load((ROOT / "indicators.yaml").read_text(encoding="utf-8"))
@@ -234,6 +272,7 @@ def main():
         f"window.__MACRO_INDEX__={cat_body};", encoding="utf-8"
     )
     print(f"[ok]   index.json: 지표 {len(catalog)}개")
+    write_alert_tail(all_indicators)
 
     if failures:
         print(f"\n⚠ 실패한 지표: {failures}")

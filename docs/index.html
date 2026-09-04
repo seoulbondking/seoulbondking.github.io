@@ -1466,8 +1466,19 @@ const fundDlab = d => d.slice(2).replace(/-/g, '.');   // 2026-07-23 → 26.07.2
 const FUND_ALERTS = [
   { key: 'RP', name: '기관REPO', ind: 'kr_repo_flow', leaves: ['기관RP'],
     days: 5, limit: 50000 },        // 5조 = 50,000억
+  { key: 'MMF', name: 'MMF', ind: 'kr_fund_flow',
+    leaves: ['공모 국내 MMF', '사모 국내 MMF'],
+    days: 5, limit: 150000 },       // 15조. 평시 90분위가 8.9조, 98분위가 14.2조라
+                                    // 평소엔 조용하지만 분기말 주(중앙 10.4조·90분위 23.5조)
+                                    // 에는 계절 요인만으로도 울릴 수 있다.
 ];
 let fundAlertState = null;
+
+// 분기말 구간인가 — 3·6·9·12월 하순 ~ 다음 달 초.
+// MMF 는 이 구간에 12년 내내 예외 없이 크게 움직였다(분기말 주 중앙 10.4조).
+// 그래서 임계치를 넘어도 '뉴스'가 아니라 '달력'일 수 있다고 표시만 해 준다.
+const fundQEnd = d => { const m = +d.slice(5, 7), dd = +d.slice(8, 10);
+  return ([3, 6, 9, 12].includes(m) && dd >= 24) || ([1, 4, 7, 10].includes(m) && dd <= 8); };
 
 function computeFundAlerts(series) {
   const S = {};
@@ -1480,7 +1491,8 @@ function computeFundAlerts(series) {
     const now = ds[ds.length - 1], base = ds[ds.length - 1 - a.days];
     const sum = d => a.leaves.reduce((t, n) => t + S[n].get(d), 0);
     const chg = sum(now) - sum(base);
-    return { ...a, chg, now, base, hit: Math.abs(chg) >= a.limit };
+    return { ...a, chg, now, base, hit: Math.abs(chg) >= a.limit,
+             qend: fundQEnd(now) || fundQEnd(base) };
   });
 }
 
@@ -1493,7 +1505,8 @@ function paintFundBadge() {
     s.className = 'navbadge' + (a.chg > 0 ? ' up' : '');
     s.textContent = `${a.key} ${a.chg > 0 ? '▲' : '▼'}${Math.abs(a.chg / 1e4).toFixed(0)}조`;
     s.title = `${a.name} 최근 ${a.days}영업일 ${(a.chg / 1e4).toFixed(1)}조`
-      + ` (${fundDlab(a.base)} → ${fundDlab(a.now)}) · 임계 ±${(a.limit / 1e4).toFixed(0)}조`;
+      + ` (${fundDlab(a.base)} → ${fundDlab(a.now)}) · 임계 ±${(a.limit / 1e4).toFixed(0)}조`
+      + (a.qend ? '\n분기말 구간 — 계절 요인일 수 있습니다' : '');
     btn.appendChild(s);
   });
 }
@@ -1511,15 +1524,29 @@ function fundAlertStrip() {
         + `background:${bg};border:1px solid ${bd};color:${col}">`
         + `${a.hit ? '⚠ ' : ''}<b>${a.name}</b> 최근 ${a.days}영업일 `
         + `<b>${t > 0 ? '+' : ''}${t.toFixed(1)}조</b> `
-        + `<span style="opacity:.7">(${fundDlab(a.base)}→${fundDlab(a.now)} · 임계 ±${(a.limit / 1e4).toFixed(0)}조)</span></span>`;
+        + `<span style="opacity:.7">(${fundDlab(a.base)}→${fundDlab(a.now)} · 임계 ±${(a.limit / 1e4).toFixed(0)}조)</span>`
+        + (a.qend && a.hit ? ' <span style="opacity:.7">· 분기말</span>' : '') + '</span>';
     }).join('') + '</div>';
 }
 
-// 메뉴를 그린 직후 배지에 필요한 지표만 따로 불러온다 (kr_repo_flow 는 1.5KB).
+// 메뉴를 그린 직후 배지를 붙인다. 비동기라 첫 화면을 막지 않는다.
+//   fetch.py 가 만드는 data/alerts.js 는 감시 대상 지표의 '최근 20영업일'만 담은
+//   17KB 짜리 요약이다. kr_fund_flow.js 는 2015년 백필 뒤 1.2MB 라, 배지 하나 띄우려고
+//   그걸 통째로 받을 이유가 없다.
+//   요약 파일이 아직 없으면(구버전 데이터) 지표 원본으로 물러선다.
 async function refreshFundAlerts() {
-  const ids = [...new Set(FUND_ALERTS.map(a => a.ind))];
-  const got = await Promise.all(ids.map(id => loadIndicator(id).catch(() => null)));
-  fundAlertState = computeFundAlerts(got.filter(Boolean).flatMap(g => g.series));
+  let series = null;
+  try {
+    await loadScript('data/alerts.js');
+    const a = window.__MACRO_ALERTS__;
+    if (a && a.series) series = Object.entries(a.series).map(([name, data]) => ({ name, data }));
+  } catch (e) { /* 아래 폴백 */ }
+  if (!series) {
+    const ids = [...new Set(FUND_ALERTS.map(a => a.ind))];
+    const got = await Promise.all(ids.map(id => loadIndicator(id).catch(() => null)));
+    series = got.filter(Boolean).flatMap(g => g.series);
+  }
+  fundAlertState = computeFundAlerts(series);
   paintFundBadge();
 }
 

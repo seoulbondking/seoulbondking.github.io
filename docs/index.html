@@ -89,6 +89,14 @@
     border-bottom: 1px solid #dbe2ea;
   }
   table.data tr.sec-head td:first-child { font-weight: 800; letter-spacing: .3px; }
+  /* 좌측 메뉴 알림 배지 — 자금흐름 옆 'RP ▼7조' */
+  .navbadge {
+    display: inline-block; margin-left: 6px; padding: 1px 6px;
+    font-size: 10.5px; font-weight: 700; line-height: 1.5;
+    border-radius: 9px; vertical-align: middle;
+    background: #fdecea; color: #b0201c; border: 1px solid #f3bdb8;
+  }
+  .navbadge.up { background: #e8f5ee; color: #11693e; border-color: #b6ddc7; }
   table.data tr.lv1 td:first-child { padding-left: 24px; }
   table.data tr.lv2 td:first-child { padding-left: 40px; }
   table.data tr.lv3 td:first-child { padding-left: 56px; }
@@ -1448,6 +1456,73 @@ const FUND_ROWS = [
 ];
 const fundDlab = d => d.slice(2).replace(/-/g, '.');   // 2026-07-23 → 26.07.23
 
+// ── 자금흐름 주간 알림 ─────────────────────────────────────────────
+// 최근 5영업일 변동이 임계치를 넘으면 좌측 메뉴 '자금흐름' 옆에 배지를 띄운다.
+// 지금은 기관REPO 하나만 켠다. SEIBro 이력이 2026-07-20 부터 6주뿐이라
+// 분포(90/98분위) 기반 임계치를 뽑을 표본이 없어서, 우선 5조 고정값으로 간다.
+// 이력이 쌓이면 limit 을 '직전 3년 |5영업일 변동| 90분위'로 바꾸는 게 낫다.
+// (참고 분포 — 채권형 평시 90% 3조 / MMF 평시 90% 9조 · 분기말 23조.
+//  MMF·채권형은 분기말 계절성이 커서 고정 임계치를 쓰면 분기마다 오작동한다.)
+const FUND_ALERTS = [
+  { key: 'RP', name: '기관REPO', ind: 'kr_repo_flow', leaves: ['기관RP'],
+    days: 5, limit: 50000 },        // 5조 = 50,000억
+];
+let fundAlertState = null;
+
+function computeFundAlerts(series) {
+  const S = {};
+  series.forEach(s => S[s.name] = new Map(s.data.map(p => [p.d, p.v])));
+  return FUND_ALERTS.map(a => {
+    if (!a.leaves.every(n => S[n])) return { ...a, chg: null };
+    const ds = [...S[a.leaves[0]].keys()].sort()
+      .filter(d => a.leaves.every(n => S[n].get(d) != null));
+    if (ds.length <= a.days) return { ...a, chg: null };
+    const now = ds[ds.length - 1], base = ds[ds.length - 1 - a.days];
+    const sum = d => a.leaves.reduce((t, n) => t + S[n].get(d), 0);
+    const chg = sum(now) - sum(base);
+    return { ...a, chg, now, base, hit: Math.abs(chg) >= a.limit };
+  });
+}
+
+function paintFundBadge() {
+  const btn = document.getElementById('fundBtn');
+  if (!btn) return;
+  btn.querySelectorAll('.navbadge').forEach(el => el.remove());
+  (fundAlertState || []).filter(a => a.hit).forEach(a => {
+    const s = document.createElement('span');
+    s.className = 'navbadge' + (a.chg > 0 ? ' up' : '');
+    s.textContent = `${a.key} ${a.chg > 0 ? '▲' : '▼'}${Math.abs(a.chg / 1e4).toFixed(0)}조`;
+    s.title = `${a.name} 최근 ${a.days}영업일 ${(a.chg / 1e4).toFixed(1)}조`
+      + ` (${fundDlab(a.base)} → ${fundDlab(a.now)}) · 임계 ±${(a.limit / 1e4).toFixed(0)}조`;
+    btn.appendChild(s);
+  });
+}
+
+// 자금흐름 탭 상단 한 줄 요약 — 감시 항목의 현재 상태를 임계치와 나란히 보여준다.
+function fundAlertStrip() {
+  const st = (fundAlertState || []).filter(a => a.chg != null);
+  if (!st.length) return '';
+  return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    + st.map(a => {
+      const t = (a.chg / 1e4), col = a.hit ? (t > 0 ? '#11693e' : '#b0201c') : '#5a6a7e';
+      const bg = a.hit ? (t > 0 ? '#e8f5ee' : '#fdecea') : '#f4f6f9';
+      const bd = a.hit ? (t > 0 ? '#b6ddc7' : '#f3bdb8') : '#e0e4ea';
+      return `<span style="font-size:12px;padding:3px 10px;border-radius:12px;`
+        + `background:${bg};border:1px solid ${bd};color:${col}">`
+        + `${a.hit ? '⚠ ' : ''}<b>${a.name}</b> 최근 ${a.days}영업일 `
+        + `<b>${t > 0 ? '+' : ''}${t.toFixed(1)}조</b> `
+        + `<span style="opacity:.7">(${fundDlab(a.base)}→${fundDlab(a.now)} · 임계 ±${(a.limit / 1e4).toFixed(0)}조)</span></span>`;
+    }).join('') + '</div>';
+}
+
+// 메뉴를 그린 직후 배지에 필요한 지표만 따로 불러온다 (kr_repo_flow 는 1.5KB).
+async function refreshFundAlerts() {
+  const ids = [...new Set(FUND_ALERTS.map(a => a.ind))];
+  const got = await Promise.all(ids.map(id => loadIndicator(id).catch(() => null)));
+  fundAlertState = computeFundAlerts(got.filter(Boolean).flatMap(g => g.series));
+  paintFundBadge();
+}
+
 async function enterFundFlow() {
   const parts = await Promise.all(FUND.ids.map(id => loadIndicator(id).catch(() => null)));
   const got = parts.filter(Boolean);
@@ -1459,6 +1534,7 @@ async function enterFundFlow() {
   current = { id: FUND.id, name: FUND.name, freq: 'D', unit: (fundData || {}).unit || '억원',
               updated_at: (fundData || {}).updated_at || '-', series: [] };
   view = 'fund';
+  if (fundData) { fundAlertState = computeFundAlerts(fundData.series); paintFundBadge(); }
   document.getElementById('title').textContent = FUND.name;
   document.getElementById('updatedAt').textContent = fundData ? '데이터 갱신: ' + fundData.updated_at : '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'fundBtn'));
@@ -1525,6 +1601,7 @@ function renderFundFlow() {
     + '<div class="mode" id="fundModeBtns">'
     + [['change', '전일 증감'], ['balance', '잔액'], ['season', '계절성']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
     + '</div><span style="font-size:12px;color:#555">단위: <b>' + unit + '</b></span></div>'
+    + fundAlertStrip()
     + '<div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:270px"><canvas id="fundChart${i}"></canvas></div></div>`).join('')
@@ -1700,6 +1777,7 @@ function renderFundSeason(box, bal, rows, selPair) {
     + '</div><div class="mode" id="fundSeasonUnitBtns">'
     + [['pct', '증감률 %'], ['eok', '증감액 조원']].map(([v, t]) => `<button data-su="${v}" class="${fundSeasonUnit === v ? 'active' : ''}">${t}</button>`).join('')
     + `</div><span style="font-size:12px;color:#555">월중 변동 · <b>${span}</b> · 단위 <b>${unit}</b></span></div>`
+    + fundAlertStrip()
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="fundChart${i}"></canvas></div></div>`).join('')
     + '</div>'
@@ -12451,6 +12529,7 @@ document.getElementById('endSel').onchange = e => {
       mapMetric = e.target.dataset.mm; renderMap();
     });
     document.getElementById('exportBtn').onclick = exportExcel;
+    refreshFundAlerts();          // 배지는 비동기로 따라붙는다 (첫 화면을 막지 않는다)
     if (catalog.length) select(catalog[0].id);
     else document.getElementById('title').textContent = '지표가 없습니다. fetch.py를 먼저 실행하세요.';
   } catch (e) {

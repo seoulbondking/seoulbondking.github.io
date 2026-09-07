@@ -243,6 +243,7 @@
         <button data-ue="hrs">시간·급여</button>
         <button data-ue="dur">실업기간</button>
         <button data-ue="flow">노동이동</button>
+        <button data-ue="lmci">고용압력</button>
       </div>
       <div class="mode" id="modeButtons">
         <button data-mode="level" class="active">원자료</button>
@@ -6061,7 +6062,7 @@ function usCpiContribCharts(box, SA, NSA, cols, prevD) {
 
 const US_EMP = { id: 'us_emp', name: '미국 고용상황',
                  ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur', 'us_ahe',
-                       'us_flows'] };
+                       'us_flows', 'us_lmci'] };
 // 실업기간 표시 순서 (Empsit 'Number of Unemployed'). 5주미만+5~14주+15주이상 = 전체 실업자
 const DUR_ROWS = ['5주 미만', '5~14주', '15주 이상', '15~26주', '27주 이상 (장기실업)'];
 // 업종별 시간·급여 표시 순서 (Empsit CES 02/11 세트)
@@ -6140,9 +6141,9 @@ const NFP_GROUPS = {
 };
 
 async function enterUsEmp() {
-  const [nfp, labor, lf, hours, earn, dur, ahe, flows] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  const [nfp, labor, lf, hours, earn, dur, ahe, flows, lmci] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
   if (!nfp || !labor) { alert('미국 고용 데이터가 없습니다. python fetch.py us_nfp us_labor us_lf us_hours us_earn 실행 필요.'); return; }
-  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe, flows };
+  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe, flows, lmci };
   current = { id: US_EMP.id, name: US_EMP.name, freq: 'M', unit: '', updated_at: nfp.updated_at, series: [] };
   view = 'usemp'; usEmpTab = 'main';
   document.getElementById('title').textContent = US_EMP.name;
@@ -6156,7 +6157,7 @@ async function enterUsEmp() {
   }
   if (!window.__US_EMP_NOTES__) await loadScript('data/us_emp_notes.js').catch(() => {});
   const ds = new Set();
-  [nfp, labor, lf, hours, earn, dur, ahe, flows].filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  [nfp, labor, lf, hours, earn, dur, ahe, flows, lmci].filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -6174,6 +6175,7 @@ function renderUsEmp() {
   if (usEmpTab === 'hrs') { renderUsHoursEarn(); return; }
   if (usEmpTab === 'dur') { renderUsDur(); return; }
   if (usEmpTab === 'flow') { renderUsFlows(); return; }
+  if (usEmpTab === 'lmci') { renderUsLmci(); return; }
   renderUsEmpMain();
 }
 
@@ -8733,6 +8735,102 @@ function renderUsEmpMain() {
 }
 
 // 비농업 취업자 산업별 전월 증감 분해 (14산업 스택 = 총 증감)
+// ── 고용시장 압력 (구인배율 · 임금추적기 · KC연준 LMCI) ─────────────
+// 구인배율 V/U = JOLTS 구인건수 ÷ 실업자 = "실업자 한 명당 빈 일자리 수".
+//   1 을 넘으면 일자리가 구직자보다 많다는 뜻이라 임금 압력이 올라간다.
+// 임금추적기(애틀랜타 연준)는 '같은 사람'의 전년비 임금상승률 중위값이다.
+//   AHE 처럼 평균이 아니라서 고임금자 은퇴 같은 구성 변화에 덜 흔들린다.
+// KC연준 LMCI 는 24개 노동지표를 두 축(활동수준·모멘텀)으로 요약한 z-score다.
+//   따로 표준화할 필요 없이 그대로 쓴다.
+function renderUsLmci() {
+  const box = document.getElementById('retailWrap');
+  const L = usEmpData.lmci;
+  if (!L) { box.innerHTML = '<div style="padding:24px;color:#888">고용압력 데이터가 없습니다. <b>python fetch.py us_lmci</b> 실행 필요.</div>'; return; }
+  const M = n => { const x = L.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const JO = M('구인건수 (JOLTS)'), UN = M('실업자');
+  const WG = M('임금추적기 전체'), WSW = M('임금추적기 이직자'), WST = M('임금추적기 잔류자');
+  const LA = M('KC연준 LMCI 활동수준'), MO = M('KC연준 LMCI 모멘텀');
+  const all = [...new Set(L.series.flatMap(s => s.data.map(p => p.d)))].sort();
+  const vu = d => { const a = JO.get(d), b = UN.get(d); return a == null || !b ? null : a / b; };
+  const gap = d => { const a = WSW.get(d), b = WST.get(d); return a == null || b == null ? null : a - b; };
+  const g = m => d => m.get(d) ?? null;
+  const f2 = v => v == null ? '' : v.toFixed(2), f1 = v => v == null ? '' : v.toFixed(1);
+
+  const last = all[all.length - 1];
+  const lastOf = fn => { for (let i = all.length - 1; i >= 0; i--) { const v = fn(all[i]); if (v != null) return [all[i], v]; } return [null, null]; };
+  const [dv, vv] = lastOf(vu), [dw, wv] = lastOf(g(WG)), [dm, mv] = lastOf(g(MO));
+
+  let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + '<b>구인배율(V/U)</b> = JOLTS 구인건수 ÷ 실업자 — "실업자 한 명당 빈 일자리 수"입니다. '
+    + '1을 넘으면 일자리가 구직자보다 많다는 뜻이라 임금 압력이 올라갑니다.<br>'
+    + '<b>임금추적기</b>(애틀랜타 연준)는 <b>같은 사람</b>의 전년비 임금상승률 중위값이라, 평균인 AHE 와 달리 '
+    + '고임금자 은퇴 같은 구성 변화에 덜 흔들립니다. <b>KC연준 LMCI</b> 는 24개 노동지표를 활동수준·모멘텀 두 축의 '
+    + 'z-score(σ)로 요약한 지수로, 0이 장기평균입니다.<br>'
+    + `최신 — 구인배율 <b>${f2(vv)}</b>(${dateLabel(dv)}) · 임금추적기 <b>${f1(wv)}%</b>(${dateLabel(dw)}) · LMCI 모멘텀 <b>${f2(mv)}σ</b>(${dateLabel(dm)})</div>`
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1, 2].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="usL${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const cols = periodDates.filter(inRange).filter(d => all.includes(d));
+  const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  out += '<div class="block-title">최근 수치</div><div class="tscroll">'
+    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+    + [['구인배율 V/U (배)', vu, f2, 0],
+       ['구인건수 (천건)', g(JO), v => v == null ? '' : Math.round(v).toLocaleString('ko-KR'), 1],
+       ['실업자 (천명)', g(UN), v => v == null ? '' : Math.round(v).toLocaleString('ko-KR'), 1],
+       ['임금추적기 전체 (%)', g(WG), f1, 0],
+       ['이직자 (%)', g(WSW), f1, 1],
+       ['잔류자 (%)', g(WST), f1, 1],
+       ['이직 프리미엄 (%p)', gap, f1, 1],
+       ['KC연준 LMCI 활동수준 (σ)', g(LA), f2, 0],
+       ['KC연준 LMCI 모멘텀 (σ)', g(MO), f2, 1],
+      ].map(([nm, fn, fmt, lv]) => `<tr class="${lv === 0 ? 'lv0 sec-head' : 'lv1'}"><td style="padding-left:${8 + lv * 16}px">${nm}</td>`
+        + cols.map(d => { const v = fn(d); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`; }).join('') + '</tr>').join('')
+    + '</tbody></table></div>';
+  box.innerHTML = out;
+
+  usEmpCharts.forEach(c => c && c.destroy());
+  usEmpCharts = [null, null, null, null];
+  const xT = { maxTicksLimit: 10, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  // sets: [이름, 색, fn, 축, 굵게]
+  const mk = (i, title, sets, y2) => new Chart(box.querySelector('#usL' + i), {
+    type: 'line', plugins: [REC_SHADE, LINE_POP],
+    data: { labels: all, datasets: sets.map(([nm, col, fn, ax, pop], j) => ({
+      label: nm + (ax === 'y2' ? ' (우)' : ''), data: all.map(fn),
+      borderColor: col, backgroundColor: col, yAxisID: ax || 'y',
+      borderWidth: pop ? 2.2 : 1.6, pointRadius: 0, pointHitRadius: 8,
+      tension: .12, spanGaps: true, pop: !!pop, order: j })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { recShade: { bands: NBER_REC },
+        legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: xT },
+        y: { ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+        ...(y2 ? { y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } } } : {}) } },
+  });
+
+  usEmpCharts[0] = mk(0, '임금추적기 (%, 좌) · 구인배율 V/U (배, 우)', [
+    ['임금추적기 전체', '#3aa9e0', g(WG), 'y', true],
+    ['구인배율 V/U', '#1a2b4a', vu, 'y2'],
+  ], true);
+  usEmpCharts[1] = mk(1, 'KC연준 노동시장여건지수 (σ)', [
+    ['활동수준', '#1a4fa0', g(LA), 'y', true],
+    ['모멘텀', '#c0392b', g(MO), 'y'],
+  ]);
+  usEmpCharts[2] = mk(2, '임금추적기 — 이직자 vs 잔류자 (%, 좌) · 이직 프리미엄 (%p, 우)', [
+    ['이직자', '#c0392b', g(WSW), 'y', true],
+    ['잔류자', '#8592a3', g(WST), 'y'],
+    ['이직 프리미엄', '#c98a1a', gap, 'y2'],
+  ], true);
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+}
+
 // 가로 막대 끝에 값을 적는다 (datalabels 플러그인이 없어 직접 그린다)
 const BAR_END_LABEL = {
   id: 'barEndLabel',

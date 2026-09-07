@@ -80,7 +80,7 @@ const chk = (name, elId) => {
   }
   await ev('enterTaylor()'); chk('테일러 준칙', 'retailWrap');
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
-  for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow']) {
+  for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow', 'lmci']) {
     ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');
   }
 

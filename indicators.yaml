@@ -1420,6 +1420,31 @@ indicators:
         LNS17000000: 취업 → 취업
         UNEMPLOY: 실업자 (수준)
 
+  # 고용시장 압력 — 구인배율·임금추적기·캔자스시티 연준 LMCI
+  #   구인배율(V/U) = JOLTS 구인건수 ÷ 실업자. "실업자 한 명당 빈 일자리 수".
+  #   애틀랜타 연준 임금추적기는 개인 단위 전년비 임금상승률의 '중위값'이라
+  #     구성 변화(고임금자 은퇴 등)에 덜 흔들린다. AHE 와 성격이 다르다.
+  #   KC 연준 LMCI 는 24개 노동지표를 두 축으로 요약한 z-score. 그대로 쓰면 된다.
+  - id: us_lmci
+    name: 미국 고용시장 압력
+    source: fred
+    unit: 배·%·σ
+    freq: M
+    start_year: 1995
+    refetch_years: 2
+    series_first: ["구인건수 (JOLTS)"]
+    params:
+      series:
+        JTSJOL: 구인건수 (JOLTS)
+        UNEMPLOY: 실업자
+        # 주의: '전체'만 ID 에 W 가 빠져 있다 (UMHGO). 하위 항목은 UMHWG+접미사.
+        #   FRBATLWGT12MMUMHWGO 로 쓰면 400 이 난다 (2026-09 확인).
+        FRBATLWGT12MMUMHGO: 임금추적기 전체
+        FRBATLWGT12MMUMHWGJSW: 임금추적기 이직자
+        FRBATLWGT12MMUMHWGJST: 임금추적기 잔류자
+        FRBKCLMCILA: KC연준 LMCI 활동수준
+        FRBKCLMCIM: KC연준 LMCI 모멘텀
+
   # JOLTS — 구인·채용·이직·해고 (전산업, 천건 및 %)
   - id: us_jolts
     name: 미국 JOLTS (구인·이직)

@@ -6068,7 +6068,7 @@ const DUR_ROWS = ['5주 미만', '5~14주', '15주 이상', '15~26주', '27주 �
 const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '제조업', '민간 서비스업',
   '도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
-let usEmpSel = null, usIndCharts = [null, null];
+let usEmpSel = null, usIndCharts = [null, null, null];
 let usMainCol = null;   // 종합 탭 전월증감 트리에서 접어둔 그룹
 let usCesCol = null;    // 시간·급여 업종 트리 (두 표 공통)
 let usDurCol = null;    // 실업기간 트리
@@ -8733,6 +8733,28 @@ function renderUsEmpMain() {
 }
 
 // 비농업 취업자 산업별 전월 증감 분해 (14산업 스택 = 총 증감)
+// 가로 막대 끝에 값을 적는다 (datalabels 플러그인이 없어 직접 그린다)
+const BAR_END_LABEL = {
+  id: 'barEndLabel',
+  afterDatasetsDraw(c) {
+    const ds = c.data.datasets[0], meta = c.getDatasetMeta(0), ctx = c.ctx;
+    if (!ds || !meta) return;
+    ctx.save();
+    ctx.font = '700 11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach((el, i) => {
+      const v = ds.data[i];
+      if (v == null) return;
+      ctx.fillStyle = v >= 0 ? '#1a4fa0' : '#6b7684';
+      ctx.textAlign = v >= 0 ? 'left' : 'right';
+      ctx.fillText((v > 0 ? '+' : '') + Math.round(v).toLocaleString('ko-KR'),
+                   el.x + (v >= 0 ? 6 : -6), el.y);
+    });
+    ctx.restore();
+  },
+};
+let usIndBarMonth = null;   // 가로 막대에 쓸 기준월 (null = 표시 구간의 마지막 달)
+
 function renderUsNfpIndustry() {
   const box = document.getElementById('retailWrap');
   const nfp = usEmpData.nfp;
@@ -8767,6 +8789,16 @@ function renderUsNfpIndustry() {
     + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart0"></canvas></div></div>'
     + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart1"></canvas></div></div>'
     + '</div>';
+
+  // 부문별 전월비 증감 — 한 달을 가로 막대로. 어느 업종이 끌고 끌어내렸는지 한눈에 본다.
+  const barCols = cols.length ? cols : periodDates;
+  if (!barCols.includes(usIndBarMonth)) usIndBarMonth = barCols[barCols.length - 1];
+  out += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;font-size:12px">'
+    + '<b>부문별 전월비 증감</b><select id="usIndBarSel" style="font-size:12px">'
+    + barCols.slice().reverse().map(d => `<option value="${d}"${d === usIndBarMonth ? ' selected' : ''}>${dateLabel(d)}</option>`).join('')
+    + '</select><span style="color:#8592a3">파란 막대 = 증가 · 회색 막대 = 감소</span></div>'
+    + '<div class="cchart" style="height:430px;margin-bottom:16px"><canvas id="usNfpBar"></canvas></div>';
+
   out += treeTable('전월 증감 (천명)', delta);
   out += treeTable('취업자 수 (천명)', level);
   box.innerHTML = out;
@@ -8807,6 +8839,33 @@ function renderUsNfpIndustry() {
   usIndCharts.forEach((c, i) => { if (c) { c.destroy(); usIndCharts[i] = null; } });
   usIndCharts[0] = mkChart('usNfpChart0', delta, '전월 증감 (천명)', '총 증감', { stacked: true });
   usIndCharts[1] = mkChart('usNfpChart1', level, '취업자 수 (천명)', '총 취업자 수', { lines: true, dual: true });
+
+  // 가로 막대 — 선택한 달의 14개 산업 전월비 증감
+  const bd = usIndBarMonth;
+  const vals = NFP_LEAVES.map(n => delta(n, bd));
+  const mxAbs = Math.max(10, ...vals.filter(v => v != null).map(Math.abs));
+  const tot = delta('비농업 전체', bd);
+  usIndCharts[2] = new Chart(box.querySelector('#usNfpBar'), {
+    type: 'bar', plugins: [BAR_END_LABEL],
+    data: { labels: NFP_LEAVES, datasets: [{
+      label: '전월 증감', data: vals,
+      backgroundColor: vals.map(v => v == null ? '#ccc' : (v >= 0 ? '#1a6fc4' : '#9aa5b1')),
+      borderWidth: 0, barPercentage: 0.72, categoryPercentage: 0.86 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 30, left: 30 } },
+      plugins: { legend: { display: false },
+        title: { display: true, font: { size: 13 },
+          text: `부문별 비농업고용 전월비 증감 (천명) — ${dateLabel(bd)}`
+            + (tot == null ? '' : ` · 전체 ${tot > 0 ? '+' : ''}${Math.round(tot).toLocaleString('ko-KR')}`) },
+        tooltip: { callbacks: { label: it => ` ${it.label}: ${it.parsed.x == null ? '-' : (it.parsed.x > 0 ? '+' : '') + Math.round(it.parsed.x).toLocaleString('ko-KR')}천` } } },
+      scales: {
+        x: { suggestedMin: -mxAbs * 1.18, suggestedMax: mxAbs * 1.18,
+             ticks: { font: { size: 10 }, callback: v => v.toLocaleString('ko-KR') },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { font: { size: 11 } }, grid: { display: false } } } },
+  });
+  const sel = box.querySelector('#usIndBarSel');
+  if (sel) sel.onchange = () => { usIndBarMonth = sel.value; renderUsEmp(); };
 }
 
 // ── 소매판매 종합 (상품군별·업태별 + 카드사용액 직접입력) ──────

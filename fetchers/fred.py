@@ -16,11 +16,31 @@ indicators.yaml 사용 예:
         DCOILWTICO: WTI
 """
 import os
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
 URL = "https://api.stlouisfed.org/fred/series/observations"
+
+
+def _period_end(d: str, freq: str) -> str:
+    """FRED 는 월·분기 관측치를 기간 '첫날'로 준다 (2026년 8월 → 2026-08-01).
+
+    BLS·BEA 수집기는 월말(2026-08-31)로 맞춰 두었으므로, 그대로 섞으면
+    같은 달인데 날짜가 달라 대시보드 가로축에서 두 칸으로 갈라진다.
+    """
+    if freq not in ("M", "Q", "A"):
+        return d
+    try:
+        y, m, _ = (int(x) for x in d.split("-"))
+    except ValueError:
+        return d
+    if freq == "Q":
+        m = ((m - 1) // 3) * 3 + 3
+    elif freq == "A":
+        m = 12
+    nxt = date(y + (m == 12), (m % 12) + 1, 1)
+    return (nxt - timedelta(days=1)).isoformat()
 
 
 class FredError(RuntimeError):
@@ -44,6 +64,7 @@ def fetch(indicator: dict) -> list[dict]:
     #   예) WRESBAL·RRPONTSYD 는 십억달러인데 WTREGEN 은 '백만달러'라 1000배 크다.
     #       params.scale: {WTREGEN: 0.001} 로 수집 단계에서 맞춰 둔다.
     scale = p.get("scale") or {}
+    freq = indicator.get("freq", "D")
 
     start_year = indicator.get("_start_year") or indicator.get("start_year") \
         or date.today().year - indicator.get("lookback_years", 15)
@@ -70,7 +91,8 @@ def fetch(indicator: dict) -> list[dict]:
             if v in (None, "", "."):        # FRED 결측치는 '.'
                 continue
             try:
-                pts.append({"d": o["date"], "v": float(v) * float(scale.get(sid, 1))})
+                pts.append({"d": _period_end(o["date"], freq),
+                            "v": float(v) * float(scale.get(sid, 1))})
             except (KeyError, ValueError):
                 continue
         if pts:

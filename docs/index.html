@@ -242,6 +242,7 @@
         <button data-ue="industry">산업별 고용상황</button>
         <button data-ue="hrs">시간·급여</button>
         <button data-ue="dur">실업기간</button>
+        <button data-ue="flow">노동이동</button>
       </div>
       <div class="mode" id="modeButtons">
         <button data-mode="level" class="active">원자료</button>
@@ -6059,7 +6060,8 @@ function usCpiContribCharts(box, SA, NSA, cols, prevD) {
 }
 
 const US_EMP = { id: 'us_emp', name: '미국 고용상황',
-                 ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur', 'us_ahe'] };
+                 ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur', 'us_ahe',
+                       'us_flows'] };
 // 실업기간 표시 순서 (Empsit 'Number of Unemployed'). 5주미만+5~14주+15주이상 = 전체 실업자
 const DUR_ROWS = ['5주 미만', '5~14주', '15주 이상', '15~26주', '27주 이상 (장기실업)'];
 // 업종별 시간·급여 표시 순서 (Empsit CES 02/11 세트)
@@ -6138,9 +6140,9 @@ const NFP_GROUPS = {
 };
 
 async function enterUsEmp() {
-  const [nfp, labor, lf, hours, earn, dur, ahe] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  const [nfp, labor, lf, hours, earn, dur, ahe, flows] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
   if (!nfp || !labor) { alert('미국 고용 데이터가 없습니다. python fetch.py us_nfp us_labor us_lf us_hours us_earn 실행 필요.'); return; }
-  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe };
+  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe, flows };
   current = { id: US_EMP.id, name: US_EMP.name, freq: 'M', unit: '', updated_at: nfp.updated_at, series: [] };
   view = 'usemp'; usEmpTab = 'main';
   document.getElementById('title').textContent = US_EMP.name;
@@ -6154,7 +6156,7 @@ async function enterUsEmp() {
   }
   if (!window.__US_EMP_NOTES__) await loadScript('data/us_emp_notes.js').catch(() => {});
   const ds = new Set();
-  [nfp, labor, lf, hours, earn, dur, ahe].filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
+  [nfp, labor, lf, hours, earn, dur, ahe, flows].filter(Boolean).forEach(ind => ind.series.forEach(s => s.data.forEach(p => ds.add(p.d))));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -6171,7 +6173,128 @@ function renderUsEmp() {
   if (usEmpTab === 'lf') { renderUsLf(); return; }
   if (usEmpTab === 'hrs') { renderUsHoursEarn(); return; }
   if (usEmpTab === 'dur') { renderUsDur(); return; }
+  if (usEmpTab === 'flow') { renderUsFlows(); return; }
   renderUsEmpMain();
+}
+
+// ── 노동시장 이동 (CPS gross flows) ────────────────────────────────
+// BLS 가 CPS 응답자를 두 달 연속 매칭해 만든 흐름 통계. 1990년부터 있다.
+//   재취업률 = (실업자 → 취업) ÷ '전월' 실업자 × 100
+// 분모가 전월인 이유: 8월의 U→E 흐름은 7월 말에 실업자였던 사람들에서 나온다.
+// 당월 실업자로 나누면 값이 어긋난다 (2026-07 기준 23.63% vs 24.23%, 공표치는 23.6%).
+const NBER_REC = [['1990-07', '1991-03'], ['2001-03', '2001-11'],
+                  ['2007-12', '2009-06'], ['2020-02', '2020-04']];
+const REC_SHADE = {
+  id: 'recShade',
+  beforeDatasetsDraw(c, _a, opts) {
+    const bands = (opts && opts.bands) || [], x = c.scales.x;
+    if (!x || !bands.length) return;
+    const L = c.data.labels, ctx = c.ctx, top = c.chartArea.top, h = c.chartArea.bottom - top;
+    ctx.save(); ctx.fillStyle = (opts && opts.color) || 'rgba(150,130,200,0.20)';
+    bands.forEach(([s, e]) => {
+      let i0 = L.findIndex(l => l.slice(0, 7) >= s);
+      if (i0 < 0) return;
+      let i1 = L.findIndex(l => l.slice(0, 7) > e);
+      i1 = i1 < 0 ? L.length - 1 : i1 - 1;
+      if (i1 < i0) return;
+      const a = x.getPixelForValue(i0), b = x.getPixelForValue(i1);
+      ctx.fillRect(a, top, Math.max(2, b - a), h);
+    });
+    ctx.restore();
+  },
+};
+
+function renderUsFlows() {
+  const box = document.getElementById('retailWrap');
+  const F = usEmpData.flows;
+  if (!F) { box.innerHTML = '<div style="padding:24px;color:#888">노동이동 데이터가 없습니다. <b>python fetch.py us_flows</b> 실행 필요.</div>'; return; }
+  const M = n => { const x = F.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const UE = M('실업자 → 취업'), UU = M('실업자 → 실업'), UN = M('실업자 → 비경활');
+  const EU = M('취업 → 실업'), EN = M('취업 → 비경활'), NE = M('비경활 → 취업'), UNL = M('실업자 (수준)');
+  const all = [...new Set(F.series.flatMap(s => s.data.map(p => p.d)))].sort();
+  const pIdx = new Map(all.map((d, i) => [d, i]));
+  const prev = d => { const i = pIdx.get(d); return i >= 1 ? all[i - 1] : null; };
+  // 실업자 풀에서 나가는 세 갈래. 분모는 전월 실업자 수준.
+  const share = (m, d) => { const p = prev(d); const b = p == null ? null : UNL.get(p);
+    const a = m.get(d); return a == null || !b ? null : a / b * 100; };
+  const ma = (fn, d, n) => { const v = [];
+    for (let k = 0; k < n; k++) { const i = pIdx.get(d) - k; if (i < 0) return null;
+      const x = fn(all[i]); if (x == null) return null; v.push(x); }
+    return v.reduce((p, q) => p + q, 0) / n; };
+  const reemp = d => share(UE, d);
+  const f1 = v => v == null ? '' : v.toFixed(1), f2 = v => v == null ? '' : v.toFixed(2);
+  const n0 = v => v == null ? '' : Math.round(v).toLocaleString('ko-KR');
+
+  const last = all[all.length - 1];
+  const cur = reemp(last), cur3 = ma(reemp, last, 3), prv = reemp(prev(last));
+
+  let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + '<b>재취업률</b> = (실업자 → 취업) ÷ <b>전월</b> 실업자 × 100 — "실업자 100명 중 다음 달 취업한 사람 수"입니다. '
+    + 'BLS 가 CPS 응답자를 두 달 연속 매칭해 만든 흐름 통계이고 1990년부터 있습니다. '
+    + '분모가 전월인 이유는 이번 달의 U→E 흐름이 <b>지난달 말 실업자 풀</b>에서 나오기 때문입니다.<br>'
+    + `최신 <b>${dateLabel(last)}</b> — 단월 <b>${f1(cur)}%</b> (전월 ${f1(prv)}%) · 3개월 평균 <b>${f1(cur3)}%</b>. `
+    + '보라색 음영은 NBER 경기침체 구간입니다.</div>'
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="usF${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // 표 — 기간 선택기 구간
+  const cols = periodDates.filter(inRange).filter(d => pIdx.has(d));
+  const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const tbl = (title, rows) => `<div class="block-title">${title}</div><div class="tscroll">`
+    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+    + rows.map(([nm, fn, fmt, lv]) => `<tr class="${lv === 0 ? 'lv0 sec-head' : 'lv1'}"><td style="padding-left:${8 + (lv || 0) * 16}px">${nm}</td>`
+        + cols.map(d => { const v = fn(d); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt(v)}</td>`; }).join('') + '</tr>').join('')
+    + '</tbody></table></div>';
+
+  out += tbl('실업자 풀에서 나가는 비율 (%, 분모 = 전월 실업자)', [
+      ['재취업률 (→ 취업)', d => share(UE, d), f2, 0],
+      ['3개월 평균', d => ma(reemp, d, 3), f2, 1],
+      ['계속 실업 (→ 실업)', d => share(UU, d), f2, 0],
+      ['노동시장 이탈 (→ 비경활)', d => share(UN, d), f2, 0],
+    ])
+    + tbl('흐름 수준 (천명)', [
+      ['실업자 → 취업', d => UE.get(d) ?? null, n0, 0],
+      ['실업자 → 실업', d => UU.get(d) ?? null, n0, 1],
+      ['실업자 → 비경활', d => UN.get(d) ?? null, n0, 1],
+      ['취업 → 실업', d => EU.get(d) ?? null, n0, 0],
+      ['취업 → 비경활', d => EN.get(d) ?? null, n0, 1],
+      ['비경활 → 취업', d => NE.get(d) ?? null, n0, 0],
+      ['실업자 (수준)', d => UNL.get(d) ?? null, n0, 0],
+    ]);
+  box.innerHTML = out;
+
+  usEmpCharts.forEach(c => c && c.destroy());
+  usEmpCharts = [null, null, null, null];
+  const xT = { maxTicksLimit: 12, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const mk = (i, labels, title, sets, opts) => new Chart(box.querySelector('#usF' + i), {
+    type: 'line', plugins: [REC_SHADE, LINE_POP],
+    data: { labels, datasets: sets.map(([nm, col, fn, pop], j) => ({
+      label: nm, data: labels.map(fn), borderColor: col, backgroundColor: col,
+      borderWidth: pop ? 2.2 : 1.6, pointRadius: 0, pointHitRadius: 8,
+      tension: .12, spanGaps: true, pop: !!pop, order: j })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { recShade: { bands: NBER_REC },
+        legend: { display: sets.length > 1, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}%` } } },
+      scales: { x: { ticks: xT }, y: { ticks: { font: { size: 10 } }, ...(opts || {}) } } },
+  });
+
+  // ① 재취업률 3개월 평균 — 전 기간 (기간 선택기와 무관하게 1990년부터)
+  usEmpCharts[0] = mk(0, all, '재취업률 — 실업자에서 취업으로 이동한 비율 (3개월 평균, %)',
+    [['재취업률 3ma', '#9b2226', d => ma(reemp, d, 3), true]]);
+  // ② 실업자의 다음 달 행선지 — 세 갈래 비중 (3ma). 합은 100% 근처다.
+  usEmpCharts[1] = mk(1, all, '실업자의 다음 달 행선지 (3개월 평균, %)', [
+    ['→ 취업', '#2e8b57', d => ma(x => share(UE, x), d, 3), true],
+    ['→ 계속 실업', '#8592a3', d => ma(x => share(UU, x), d, 3)],
+    ['→ 비경활 (이탈)', '#c98a1a', d => ma(x => share(UN, x), d, 3)],
+  ]);
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
 }
 
 // 업종별 주당근로시간(CES 02) · 주당급여(CES 11) — Empsit 사업체조사 상세

@@ -80,6 +80,9 @@ const chk = (name, elId) => {
   }
   await ev('enterTaylor()'); chk('테일러 준칙', 'retailWrap');
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
+  for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow']) {
+    ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');
+  }
 
   // nav 에 나와야 할 지표가 빠지지 않았는지
   const src = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

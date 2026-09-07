@@ -1394,6 +1394,32 @@ indicators:
         LNS13008275: 평균 실업기간
         LNS13008276: 중위 실업기간
 
+  # 노동시장 이동 (CPS gross flows) — 재취업률 계산용.
+  #   BLS 가 CPS 를 두 달 연속 매칭해 만든 흐름 통계다. 1990년부터 있다.
+  #   재취업률 = (실업자 → 취업) ÷ 전월 실업자 × 100
+  #            = "실업자 100명 중 다음 달 취업한 사람 수"
+  #   분모로 쓸 전월 실업자 수준(UNEMPLOY)도 같이 받는다.
+  #   BLS API 에도 있지만 FRED 쪽이 시리즈ID 가 단순해 FRED 로 받는다.
+  - id: us_flows
+    name: 미국 노동시장 이동
+    source: fred
+    unit: 천명
+    freq: M
+    start_year: 1990
+    refetch_years: 2
+    series_first: ["실업자 → 취업"]
+    params:
+      series:
+        LNS17100000: 실업자 → 취업
+        LNS17500000: 실업자 → 실업
+        LNS17900000: 실업자 → 비경활
+        LNS17400000: 취업 → 실업
+        LNS17800000: 취업 → 비경활
+        LNS17200000: 비경활 → 취업
+        LNS17600000: 비경활 → 실업
+        LNS17000000: 취업 → 취업
+        UNEMPLOY: 실업자 (수준)
+
   # JOLTS — 구인·채용·이직·해고 (전산업, 천건 및 %)
   - id: us_jolts
     name: 미국 JOLTS (구인·이직)

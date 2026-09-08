@@ -73,10 +73,14 @@ def fetch(indicator: dict) -> list[dict]:
     out = []
     for sid, label in names.items():
         try:
-            r = requests.get(URL, params={
-                "series_id": sid, "api_key": key, "file_type": "json",
-                "observation_start": start,
-            }, timeout=60)
+            q = {"series_id": sid, "api_key": key, "file_type": "json",
+                 "observation_start": start}
+            # 일별 계열을 월별로 받고 싶을 때: params.frequency: m (+ aggregation_method)
+            #   FRED 가 서버에서 집계해 주므로 같은 달에 여러 점이 생기지 않는다.
+            if p.get("frequency"):
+                q["frequency"] = p["frequency"]
+                q["aggregation_method"] = p.get("aggregation_method", "avg")
+            r = requests.get(URL, params=q, timeout=60)
             r.raise_for_status()
             data = r.json()
         except Exception as e:

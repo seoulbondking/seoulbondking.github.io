@@ -20,8 +20,8 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import (bea, pce_diffusion, kosis, ecos, reb, bls, freesis, bok, seibro, fred, infomax,
-                      acm, krx, ecos_xlsx, nowcast)
+from fetchers import (bea, frbsf, pce_diffusion, kosis, ecos, reb, bls, freesis,
+                      bok, seibro, fred, infomax, acm, krx, ecos_xlsx, nowcast)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -43,6 +43,7 @@ SOURCES = {
     "nowcast": nowcast.fetch,
     "bea": bea.fetch,
     "pce_diffusion": pce_diffusion.fetch,
+    "frbsf": frbsf.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -220,6 +221,21 @@ def main():
                         ind["_krx_checked"] = old["_checked"]
                 else:
                     series = merge_series(old["series"], series)
+
+        # drop_before: 이 날짜 이전 관측치는 버린다.
+        #   과거 수집분이 지금과 다른 통계였을 때 쓴다. 아카이브에 이미 들어간
+        #   값도 매번 걸러내므로, 파일을 손으로 고쳐도 다시 살아나지 않는다.
+        #   (2026-09: kr_repo_flow 의 2026-01 두 점이 895조 — 이후 260~280조대와
+        #    3배 차이가 나고 사이에 195일 공백이 있어 다른 계열로 판단해 버렸다.)
+        cut_d = ind.get("drop_before")
+        if cut_d:
+            n_before = sum(len(s["data"]) for s in series)
+            for s in series:
+                s["data"] = [p for p in s["data"] if p["d"] >= cut_d]
+            series = [s for s in series if s["data"]]
+            n_after = sum(len(s["data"]) for s in series)
+            if n_before != n_after:
+                print(f"  [drop] {ind['id']}: {cut_d} 이전 관측치 {n_before - n_after}개 제외")
 
         # series_first 에 지정된 항목(총계 등)을 맨 앞으로 정렬
         pinned = ind.get("series_first", [])

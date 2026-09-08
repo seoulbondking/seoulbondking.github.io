@@ -829,6 +829,10 @@ indicators:
     freq: D
     merge_always: true
     seibro_limit: 30            # 스크랩할 최근 일수
+    # 2026-01-03·01-06 두 점이 895조로 잡혔는데 7월 이후는 260~280조대다.
+    # 3배 넘게 차이 나고 사이에 195일 공백이 있어 같은 계열로 볼 수 없어 버린다.
+    # 과거를 되살리려면 SEIBro 화면·단위를 먼저 확인하고 이 줄을 지우면 된다.
+    drop_before: "2026-07-20"
     params: {}
 
   # ── 시장금리 (인포맥스 엑셀) — 금리 분해용 ──────────────────────
@@ -1393,6 +1397,52 @@ indicators:
         LNS13008636: 27주 이상 (장기실업)
         LNS13008275: 평균 실업기간
         LNS13008276: 중위 실업기간
+
+  # PCE 수요·공급 분해 (SF 연준 Shapiro) — 물가 상승분이 수요 때문인지 공급 때문인지.
+  #   품목별로 가격·수량의 '예상 밖 변화'가 같은 방향이면 수요, 반대면 공급,
+  #   구분이 안 되면 모호. 셋을 더하면 PCE 인플레이션이 된다.
+  #   CSV 는 최근 5년만 담고 있다 (전 기간은 같은 페이지의 엑셀).
+  - id: us_pce_sd
+    name: 미국 PCE 수요·공급 분해
+    source: frbsf
+    unit: '%p'
+    freq: M
+    merge_always: true
+    params:
+      # 엑셀 한 장에 12열, 1969년부터 있다. 이게 기본 경로.
+      xlsx: supply-demand-pce-inflation.xlsx
+      sheet: Data
+      local: data/supply-demand-pce-inflation.xlsx   # 내려받기 실패 시 사본
+      # 예비 — 엑셀이 막혔을 때만. 차트 CSV 는 최근 5년만 담고 있다.
+      files:
+        - {csv: "supply-demand-pce-core-yoy-chart-4.csv", prefix: "근원 YoY"}
+        - {csv: "supply-demand-pce-headline-yoy-chart-3.csv", prefix: "헤드라인 YoY"}
+        - {csv: "supply-demand-pce-core-monthly-chart-2.csv", prefix: "근원 월간연율"}
+        - {csv: "supply-demand-pce-headline-monthly-chart-1.csv", prefix: "헤드라인 월간연율"}
+
+  # 미국 정책금리 (월) — 수요·공급 분해 차트의 보조축용. 1969년부터 이어 붙인다.
+  #   연준의 '목표'가 시대마다 달라 한 계열로는 1969년까지 못 간다.
+  #     2008-12~   DFEDTARU/L  목표 '범위'(상·하단)
+  #     1982~2008  DFEDTAR     목표 '한 점'
+  #     ~1982      목표 공표 없음 → FEDFUNDS(실효)로 대신한다
+  #   대시보드에서 상단 → 단일목표 → 실효 순으로 이어 붙여 한 선으로 그린다.
+  #   DFEDTAR* 는 일별이라 FRED 쪽에서 월말값(eop)으로 집계해 받는다.
+  - id: us_polrate
+    name: 미국 정책금리 (월)
+    source: fred
+    unit: '%'
+    freq: M
+    start_year: 1969
+    refetch_years: 2
+    series_first: ["연방기금 목표 상단"]
+    params:
+      frequency: m
+      aggregation_method: eop
+      series:
+        DFEDTARU: 연방기금 목표 상단
+        DFEDTARL: 연방기금 목표 하단
+        DFEDTAR: 연방기금 목표 (2008년 이전)
+        FEDFUNDS: 실효 연방기금금리
 
   # 노동시장 이동 (CPS gross flows) — 재취업률 계산용.
   #   BLS 가 CPS 를 두 달 연속 매칭해 만든 흐름 통계다. 1990년부터 있다.

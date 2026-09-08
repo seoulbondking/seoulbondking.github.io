@@ -197,6 +197,7 @@
         <button data-uc2="real">실질소비</button>
         <button data-uc2="income">소득·저축</button>
         <button data-uc2="mkt">시장기반</button>
+        <button data-uc2="sd">수요·공급</button>
         <button data-uc2="diff">확산도</button>
       </div>
       <div id="usCpiTabs" class="mode" style="display:none">
@@ -346,7 +347,9 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm',
                   'kr_kospi', 'kr_esi', 'kr_swap', 'kr_usdkrw', 'kr_credit_spread',
                   'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
-                  'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion'];
+                  'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion',
+                  // 전용 탭에서만 쓰는 미국 보조 지표 — 대그룹 메뉴에는 안 띄운다
+                  'us_pce_sd', 'us_polrate', 'us_flows', 'us_lmci'];
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
@@ -7506,8 +7509,11 @@ function usPpiCtb(ind, nm, d, lag, chg) {
 //  가중치가 매달 갱신되고(연쇄가중) 의료비처럼 보험이 대신 내는 지출까지 잡히기 때문이다.
 //  BEA 월별 계열은 계절조정본만 공표된다 — 원계열이 없어 MoM·YoY 모두 SA 에서 뽑는다.
 //  단위: 물가 = 지수(2017=100) · 실질소비/소득 = 백만달러 → 화면에서 조달러로 환산.
-const US_PCE = { id: 'uspce', name: '미국 PCE', ids: ['us_pce', 'us_pce_diffusion'] };
-let usPceData = null, usPceDiff = null, usPceTab = 'price', usPceCharts = [null, null, null, null];
+const US_PCE = { id: 'uspce', name: '미국 PCE',
+                 ids: ['us_pce', 'us_pce_diffusion', 'us_pce_sd', 'us_polrate'] };
+let usPceData = null, usPceDiff = null, usPceSd = null, usPceRate = null,
+    usPceTab = 'price', usPceCharts = [null, null, null, null];
+let usSdTab = 'core';   // 수요·공급 분해: 근원 / 헤드라인
 // 확산도 표시 기준 — 기사·리포트가 쓰는 건 '품목수'다(지출가중은 훨씬 높게 나온다).
 let usPceDiffBase = '품목수', usPceDiffTh = 3;
 // 접힌 그룹 (영문 원문 이름 기준). null 이면 첫 진입 — 세부(lv2 이상)를 접어 시작한다.
@@ -7560,6 +7566,8 @@ const US_PCE_RATE = ['Personal saving as a percentage of disposable personal inc
 async function enterUsPce() {
   usPceData = await loadIndicator('us_pce').catch(() => null);
   usPceDiff = await loadIndicator('us_pce_diffusion').catch(() => null);
+  usPceSd = await loadIndicator('us_pce_sd').catch(() => null);
+  usPceRate = await loadIndicator('us_polrate').catch(() => null);
   if (!usPceData) { alert('PCE 데이터가 없습니다. python fetch.py us_pce 실행 필요.'); return; }
   current = { id: US_PCE.id, name: US_PCE.name, freq: 'M', unit: '지수·조달러',
               updated_at: usPceData.updated_at, series: [] };
@@ -7573,8 +7581,11 @@ async function enterUsPce() {
     });
     document.getElementById('usPceTabs').dataset.bound = '1';
   }
+  // 기간 선택기에는 수요·공급 분해(1969~)까지 포함한다.
+  // us_pce 는 2010년부터라, 그 이전을 고르면 다른 탭의 열이 비는 건 정상이다.
   const ds = new Set();
-  usPceData.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  [usPceData, usPceSd].filter(Boolean)
+    .forEach(ind => ind.series.forEach(x => x.data.forEach(p => ds.add(p.d))));
   periodDates = [...ds].sort();
   const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
@@ -7583,6 +7594,139 @@ async function enterUsPce() {
   endD = periodDates[periodDates.length - 1];
   sSel.value = startD; eSel.value = endD;
   refresh();
+}
+
+// ── PCE 수요·공급 분해 (SF 연준 Shapiro) ───────────────────────────
+// 품목별로 가격과 수량의 '예상 밖 변화'가 같은 방향이면 수요 주도, 반대면 공급 주도,
+// 통계적으로 구분이 안 되면 모호로 분류한다. 셋을 더하면 PCE 인플레이션이 된다.
+// 워시 의장이 잭슨홀에서 인용했고, 월러·윌리엄스의 디스인플레 논거와 연결된다.
+function renderUsPceSd(box, xT) {
+  if (!usPceSd) {
+    box.innerHTML = '<div style="padding:24px;color:#888">수요·공급 분해 데이터가 없습니다. <b>python fetch.py us_pce_sd us_polrate</b> 실행 필요.</div>';
+    return;
+  }
+  const base = usSdTab === 'core' ? '근원' : '헤드라인';
+  const M = n => { const x = usPceSd.series.find(y => baseName(y.name) === n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const Y = k => M(`${base} YoY · ${k}`), A = k => M(`${base} 월간연율 · ${k}`);
+  const yD = Y('수요'), yS = Y('공급'), yA = Y('모호');
+  const aD = A('수요'), aS = A('공급'), aA = A('모호');
+  // 정책금리는 시대마다 공표 형태가 달라 한 계열로 1969년까지 못 간다.
+  //   2008-12~ 목표 상단 / 1982~2008 단일 목표 / 그 이전 실효금리 순으로 잇는다.
+  const RT = (() => {
+    const m = new Map();
+    if (!usPceRate) return m;
+    const S = n => { const x = usPceRate.series.find(y => baseName(y.name) === n);
+      return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+    const up = S('연방기금 목표 상단'), old = S('연방기금 목표 (2008년 이전)'), eff = S('실효 연방기금금리');
+    [...new Set([...up.keys(), ...old.keys(), ...eff.keys()])].forEach(d => {
+      const v = up.get(d) ?? old.get(d) ?? eff.get(d);
+      if (v != null) m.set(d, v);
+    });
+    return m;
+  })();
+  const allSd = [...new Set(usPceSd.series.flatMap(s => s.data.map(p => p.d)))].sort();
+  // 기간 선택기를 따른다. 선택 구간에 분해 데이터가 없으면 전 기간으로 되돌린다.
+  const inSel = allSd.filter(inRange);
+  const all = inSel.length > 1 ? inSel : allSd;
+  const g = m => d => m.get(d) ?? null;
+  const sum3 = (a, b, c) => d => { const x = a.get(d), y = b.get(d), z = c.get(d);
+    return x == null || y == null || z == null ? null : x + y + z; };
+  const f2 = v => v == null ? '' : v.toFixed(2);
+
+  // 요약 줄은 기간 선택과 무관하게 항상 '가장 최근 달'을 보여준다
+  const last = allSd[allSd.length - 1];
+  const dv = yD.get(last), sv = yS.get(last), av = yA.get(last);
+  const arrow = (m) => { const i = allSd.indexOf(last); if (i < 1) return '';
+    const p = m.get(allSd[i - 1]), c = m.get(last);
+    return p == null || c == null ? '' : (c > p ? ' ▲' : (c < p ? ' ▼' : ' ─')); };
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+    + '<div class="mode" id="usSdTabs">'
+    + [['core', '근원'], ['head', '헤드라인']].map(([v, t]) => `<button data-sd="${v}" class="${usSdTab === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div></div>'
+    + '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + 'SF 연준 <b>Adam Shapiro</b> 의 분해입니다. PCE 품목별로 가격과 수량의 <b>예상 밖 변화</b>가 '
+    + '같은 방향이면 <b>수요 주도</b>, 반대 방향이면 <b>공급 주도</b>, 통계적으로 구분이 안 되면 <b>모호</b>로 분류합니다. '
+    + '10년 롤링 회귀로 매달 다시 판정하고, 셋을 더하면 PCE 인플레이션이 됩니다.<br>'
+    + `최신 <b>${dateLabel(last)}</b> ${base} 전년동월비 — 수요 <b>${f2(dv)}%p</b>${arrow(yD)} · `
+    + `공급 <b>${f2(sv)}%p</b>${arrow(yS)} · 모호 <b>${f2(av)}%p</b>${arrow(yA)} `
+    + `(합 ${f2((dv || 0) + (sv || 0) + (av || 0))}%p)</div>`
+    + (inSel.length > 1 ? '' : '<div style="font-size:12px;color:#c0392b;margin-bottom:8px">'
+        + '선택한 기간에 분해 데이터가 없어 전 기간으로 표시합니다.</div>')
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usSd${i}"></canvas></div></div>`).join('')
+    + '</div>'
+    + '<div class="cchart" style="height:300px;margin-bottom:14px"><canvas id="usSd2"></canvas></div>';
+
+  const cols = all;
+  const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  const tbl = (title, rows) => `<div class="block-title">${title}</div><div class="tscroll">`
+    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+    + rows.map(([nm, fn, lv]) => `<tr class="${lv === 0 ? 'lv0 sec-head' : 'lv1'}"><td style="padding-left:${8 + lv * 16}px">${nm}</td>`
+        + cols.map(d => { const v = fn(d); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f2(v)}</td>`; }).join('') + '</tr>').join('')
+    + '</tbody></table></div>';
+  out += tbl(`${base} PCE 전년동월비 기여도 (%p)`, [
+      [`${base} PCE (합)`, sum3(yD, yS, yA), 0],
+      ['수요 주도', g(yD), 1], ['공급 주도', g(yS), 1], ['모호', g(yA), 1],
+    ])
+    + tbl(`${base} PCE 월간 연율 기여도 (%p)`, [
+      [`${base} PCE (합)`, sum3(aD, aS, aA), 0],
+      ['수요 주도', g(aD), 1], ['공급 주도', g(aS), 1], ['모호', g(aA), 1],
+    ]);
+  box.innerHTML = out;
+  box.querySelectorAll('#usSdTabs button').forEach(b =>
+    b.onclick = () => { usSdTab = b.dataset.sd; renderUsPce(); });
+
+  usPceCharts.forEach(c => c && c.destroy());
+  usPceCharts = [null, null, null, null];
+  const DEM = '#3f6fd8', SUP = '#e8974a', AMB = '#b9bfc9';
+  // 기준금리를 우축에 겹쳐 그린다 (원 차트와 같은 구성)
+  const withRate = (id, title, col, m) => new Chart(box.querySelector(id), {
+    type: 'line', plugins: [LINE_POP],
+    data: { labels: all, datasets: [
+      { label: `${base} ${title} (좌)`, data: all.map(g(m)), borderColor: col, backgroundColor: col,
+        borderWidth: 2.4, pointRadius: 0, pointHitRadius: 8, tension: .12, spanGaps: true, pop: true, order: 1, yAxisID: 'y' },
+      { label: '미 기준금리 상단 (우)', data: all.map(g(RT)), borderColor: '#333', backgroundColor: '#333',
+        borderWidth: 1.2, pointRadius: 0, tension: .1, spanGaps: true, order: 2, yAxisID: 'y2' },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: `${title} 인플레와 기준금리` },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+      scales: { x: { ticks: xT },
+        y: { ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+        y2: { position: 'right', min: 0, grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } } } },
+  });
+  usPceCharts[0] = withRate('#usSd0', '수요 주도', DEM, yD);
+  usPceCharts[1] = withRate('#usSd1', '공급 주도', SUP, yS);
+
+  // 세 갈래 누적 막대 = 전년동월비 그 자체
+  usPceCharts[2] = new Chart(box.querySelector('#usSd2'), {
+    type: 'bar',
+    data: { labels: all, datasets: [
+      { label: '수요 주도', data: all.map(g(yD)), backgroundColor: DEM, stack: 's', borderWidth: 0 },
+      { label: '공급 주도', data: all.map(g(yS)), backgroundColor: SUP, stack: 's', borderWidth: 0 },
+      { label: '모호', data: all.map(g(yA)), backgroundColor: AMB, stack: 's', borderWidth: 0 },
+      { type: 'line', label: `${base} PCE 전년동월비`, data: all.map(sum3(yD, yS, yA)),
+        borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: .1, order: 0 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: `${base} PCE 전년동월비 기여도 분해 (%p)` },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%p` } } },
+      scales: { x: { stacked: true, ticks: xT },
+        y: { stacked: true, ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
 }
 
 function renderUsPce() {
@@ -7766,6 +7910,9 @@ function renderUsPce() {
       ['6개월 연율', '#1a6fc4', gapAt(CORE, MCORE, 6)],
       ['3개월 연율', '#c0392b', gapAt(CORE, MCORE, 3)],
     ], '%p');
+  } else if (usPceTab === 'sd') {
+    renderUsPceSd(box, xT);
+    return;
   } else if (usPceTab === 'diff') {
     renderUsPceDiff(box, xT);
     return;

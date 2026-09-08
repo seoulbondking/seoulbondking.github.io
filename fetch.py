@@ -220,6 +220,16 @@ def main():
                     if old.get("_checked"):
                         ind["_krx_checked"] = old["_checked"]
                 else:
+                    # 기존 지표에 시리즈를 새로 추가하면, 증분 수집이라 그 시리즈만
+                    # 최근 refetch_years 치로 짧게 들어온다. 조용히 지나가면 나중에
+                    # "왜 이 계열만 2년치지?" 로 되돌아온다 (2026-09: us_lmci 임금추적기).
+                    if incremental:
+                        known = {s["name"] for s in old.get("series", [])}
+                        fresh = [s["name"] for s in series if s["name"] not in known]
+                        if fresh:
+                            print(f"  [warn] {ind['id']}: 아카이브에 없던 시리즈 {fresh} —"
+                                  f" 증분이라 최근 {ind.get('refetch_years', 2)}년치만 들어옵니다."
+                                  f" 전체 이력이 필요하면 'python fetch.py {ind['id']} --full'")
                     series = merge_series(old["series"], series)
 
         # drop_before: 이 날짜 이전 관측치는 버린다.

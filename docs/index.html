@@ -380,6 +380,15 @@ const gridEveryN = (labels, n = 6, color = 'rgba(0,0,0,0.08)') => ({
 });
 
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
+// 특정 탭을 처음 열 때 기간 시작을 옮긴다 (사용자가 고른 뒤에는 건드리지 않는다).
+function setPeriodStart(ym) {
+  const d = periodDates.find(x => x >= ym);
+  if (!d || d === startD) return false;
+  startD = d;
+  const sel = document.getElementById('startSel');
+  if (sel) sel.value = startD;
+  return true;
+}
 const lagYoY = () =>
   ({ Q: 4, A: 1, W: 52, M: 12 }[current.freq] || 12);
 const stripCode = n => n.replace(/ \[[^\]]*\]$/, '');
@@ -6073,6 +6082,7 @@ const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '
   '도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
 let usEmpSel = null, usIndCharts = [null, null, null];
+let usLmciInit = false;   // 고용압력 탭 첫 진입에만 기간 시작을 2017년으로 옮긴다
 let usMainCol = null;   // 종합 탭 전월증감 트리에서 접어둔 그룹
 let usCesCol = null;    // 시간·급여 업종 트리 (두 표 공통)
 let usDurCol = null;    // 실업기간 트리
@@ -6178,7 +6188,12 @@ function renderUsEmp() {
   if (usEmpTab === 'hrs') { renderUsHoursEarn(); return; }
   if (usEmpTab === 'dur') { renderUsDur(); return; }
   if (usEmpTab === 'flow') { renderUsFlows(); return; }
-  if (usEmpTab === 'lmci') { renderUsLmci(); return; }
+  if (usEmpTab === 'lmci') {
+    // 고용압력은 사이클을 봐야 해서 기본 시작을 2017년으로 잡는다.
+    // 한 번만 옮기고, 이후 사용자가 고른 기간을 그대로 따른다.
+    if (!usLmciInit) { usLmciInit = true; setPeriodStart('2017-01'); }
+    renderUsLmci(); return;
+  }
   renderUsEmpMain();
 }
 
@@ -8897,14 +8912,17 @@ function renderUsLmci() {
   const JO = M('구인건수 (JOLTS)'), UN = M('실업자');
   const WG = M('임금추적기 전체'), WSW = M('임금추적기 이직자'), WST = M('임금추적기 잔류자');
   const LA = M('KC연준 LMCI 활동수준'), MO = M('KC연준 LMCI 모멘텀');
-  const all = [...new Set(L.series.flatMap(s => s.data.map(p => p.d)))].sort();
+  const allL = [...new Set(L.series.flatMap(s => s.data.map(p => p.d)))].sort();
+  // 기간 선택기를 따른다. 선택 구간에 데이터가 없으면 전 기간으로 되돌린다.
+  const inSel = allL.filter(inRange);
+  const all = inSel.length > 1 ? inSel : allL;
   const vu = d => { const a = JO.get(d), b = UN.get(d); return a == null || !b ? null : a / b; };
   const gap = d => { const a = WSW.get(d), b = WST.get(d); return a == null || b == null ? null : a - b; };
   const g = m => d => m.get(d) ?? null;
   const f2 = v => v == null ? '' : v.toFixed(2), f1 = v => v == null ? '' : v.toFixed(1);
 
-  const last = all[all.length - 1];
-  const lastOf = fn => { for (let i = all.length - 1; i >= 0; i--) { const v = fn(all[i]); if (v != null) return [all[i], v]; } return [null, null]; };
+  // 요약 줄은 기간 선택과 무관하게 항상 '가장 최근 값'을 보여준다
+  const lastOf = fn => { for (let i = allL.length - 1; i >= 0; i--) { const v = fn(allL[i]); if (v != null) return [allL[i], v]; } return [null, null]; };
   const [dv, vv] = lastOf(vu), [dw, wv] = lastOf(g(WG)), [dm, mv] = lastOf(g(MO));
 
   let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
@@ -8914,11 +8932,13 @@ function renderUsLmci() {
     + '고임금자 은퇴 같은 구성 변화에 덜 흔들립니다. <b>KC연준 LMCI</b> 는 24개 노동지표를 활동수준·모멘텀 두 축의 '
     + 'z-score(σ)로 요약한 지수로, 0이 장기평균입니다.<br>'
     + `최신 — 구인배율 <b>${f2(vv)}</b>(${dateLabel(dv)}) · 임금추적기 <b>${f1(wv)}%</b>(${dateLabel(dw)}) · LMCI 모멘텀 <b>${f2(mv)}σ</b>(${dateLabel(dm)})</div>`
+    + (inSel.length > 1 ? '' : '<div style="font-size:12px;color:#c0392b;margin-bottom:8px">'
+        + '선택한 기간에 데이터가 없어 전 기간으로 표시합니다.</div>')
     + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">'
     + [0, 1, 2].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="usL${i}"></canvas></div></div>`).join('')
     + '</div>';
 
-  const cols = periodDates.filter(inRange).filter(d => all.includes(d));
+  const cols = all;
   const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
   out += '<div class="block-title">최근 수치</div><div class="tscroll">'
     + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
@@ -8941,7 +8961,7 @@ function renderUsLmci() {
   const xT = { maxTicksLimit: 10, font: { size: 10 },
     callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
   // sets: [이름, 색, fn, 축, 굵게]
-  const mk = (i, title, sets, y2) => new Chart(box.querySelector('#usL' + i), {
+  const mk = (i, title, sets, y2, yOpt) => new Chart(box.querySelector('#usL' + i), {
     type: 'line', plugins: [REC_SHADE, LINE_POP],
     data: { labels: all, datasets: sets.map(([nm, col, fn, ax, pop], j) => ({
       label: nm + (ax === 'y2' ? ' (우)' : ''), data: all.map(fn),
@@ -8958,7 +8978,8 @@ function renderUsLmci() {
             label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
       scales: { x: { ticks: xT },
         y: { ticks: { font: { size: 10 } },
-             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' },
+             ...(yOpt || {}) },
         ...(y2 ? { y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } } } : {}) } },
   });
 
@@ -8966,10 +8987,15 @@ function renderUsLmci() {
     ['임금추적기 전체', '#3aa9e0', g(WG), 'y', true],
     ['구인배율 V/U', '#1a2b4a', vu, 'y2'],
   ], true);
-  usEmpCharts[1] = mk(1, 'KC연준 노동시장여건지수 (σ)', [
+  // 모멘텀은 2020년 봄에 −11.5σ 까지 빠져 축을 다 잡아먹는다. −4 에서 자른다.
+  //   잘리는 건 2020-04(−11.50) · 05(−8.48) · 06(−5.19) 세 달뿐이다.
+  const MO_FLOOR = -4;
+  const nCut = all.filter(d => { const v = MO.get(d); return v != null && v < MO_FLOOR; }).length;
+  usEmpCharts[1] = mk(1, 'KC연준 노동시장여건지수 (σ)'
+      + (nCut ? `  ※ ${MO_FLOOR}σ 아래 ${nCut}개월 절단` : ''), [
     ['활동수준', '#1a4fa0', g(LA), 'y', true],
     ['모멘텀', '#c0392b', g(MO), 'y'],
-  ]);
+  ], false, { min: MO_FLOOR });
   usEmpCharts[2] = mk(2, '임금추적기 — 이직자 vs 잔류자 (%, 좌) · 이직 프리미엄 (%p, 우)', [
     ['이직자', '#c0392b', g(WSW), 'y', true],
     ['잔류자', '#8592a3', g(WST), 'y'],

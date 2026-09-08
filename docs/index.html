@@ -244,6 +244,7 @@
         <button data-ue="hrs">시간·급여</button>
         <button data-ue="dur">실업기간</button>
         <button data-ue="flow">노동이동</button>
+        <button data-ue="jolts">JOLTS</button>
         <button data-ue="lmci">고용압력</button>
       </div>
       <div class="mode" id="modeButtons">
@@ -349,7 +350,7 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
                   'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion',
                   // 전용 탭에서만 쓰는 미국 보조 지표 — 대그룹 메뉴에는 안 띄운다
-                  'us_pce_sd', 'us_polrate', 'us_flows', 'us_lmci'];
+                  'us_pce_sd', 'us_polrate', 'us_flows', 'us_lmci', 'us_jolts'];
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
@@ -381,12 +382,16 @@ const gridEveryN = (labels, n = 6, color = 'rgba(0,0,0,0.08)') => ({
 
 const inRange = d => (!startD || d >= startD) && (!endD || d <= endD);
 // 특정 탭을 처음 열 때 기간 시작을 옮긴다 (사용자가 고른 뒤에는 건드리지 않는다).
+function syncPeriodSel() {
+  const a = document.getElementById('startSel'), b = document.getElementById('endSel');
+  if (a) a.value = startD;
+  if (b) b.value = endD;
+}
 function setPeriodStart(ym) {
   const d = periodDates.find(x => x >= ym);
   if (!d || d === startD) return false;
   startD = d;
-  const sel = document.getElementById('startSel');
-  if (sel) sel.value = startD;
+  syncPeriodSel();
   return true;
 }
 const lagYoY = () =>
@@ -6074,7 +6079,7 @@ function usCpiContribCharts(box, SA, NSA, cols, prevD) {
 
 const US_EMP = { id: 'us_emp', name: '미국 고용상황',
                  ids: ['us_nfp', 'us_labor', 'us_lf', 'us_hours', 'us_earn', 'us_unemp_dur', 'us_ahe',
-                       'us_flows', 'us_lmci'] };
+                       'us_flows', 'us_lmci', 'us_jolts'] };
 // 실업기간 표시 순서 (Empsit 'Number of Unemployed'). 5주미만+5~14주+15주이상 = 전체 실업자
 const DUR_ROWS = ['5주 미만', '5~14주', '15주 이상', '15~26주', '27주 이상 (장기실업)'];
 // 업종별 시간·급여 표시 순서 (Empsit CES 02/11 세트)
@@ -6082,7 +6087,12 @@ const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '
   '도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
 let usEmpSel = null, usIndCharts = [null, null, null];
-let usLmciInit = false;   // 고용압력 탭 첫 진입에만 기간 시작을 2017년으로 옮긴다
+// 미국 고용상황: 서브탭마다 기간 선택을 따로 기억한다.
+//   탭이 8개인데 선택기를 하나로 공유하면, 고용압력에서 2017년으로 늘려둔 뒤
+//   산업별로 넘어갔을 때 표가 116열이 된다.
+let usEmpPeriod = {};                          // 탭 → {s, e}
+let usEmpPeriod0 = null;                       // 화면 진입 시 공통 기본 기간
+const USEMP_DEF_START = { lmci: '2017-01' };   // 첫 진입 기본 시작 (없으면 공통 기본값)
 let usMainCol = null;   // 종합 탭 전월증감 트리에서 접어둔 그룹
 let usCesCol = null;    // 시간·급여 업종 트리 (두 표 공통)
 let usDurCol = null;    // 실업기간 트리
@@ -6154,9 +6164,13 @@ const NFP_GROUPS = {
 };
 
 async function enterUsEmp() {
-  const [nfp, labor, lf, hours, earn, dur, ahe, flows, lmci] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
+  const [nfp, labor, lf, hours, earn, dur, ahe, flows, lmci, jolts] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
   if (!nfp || !labor) { alert('미국 고용 데이터가 없습니다. python fetch.py us_nfp us_labor us_lf us_hours us_earn 실행 필요.'); return; }
-  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe, flows, lmci };
+  usEmpData = { nfp, labor, lf, hours, earn, dur, ahe, flows, lmci, jolts };
+  usEmpPeriod = {}; usEmpPeriod0 = null;   // 화면을 새로 열면 탭별 기간 기억을 비운다
+  // JOLTS 화면은 원래 대그룹 메뉴의 독립 뷰였다. 렌더 함수(renderJolts)를 그대로
+  // 쓰되 데이터만 여기서 채워, 고용상황의 서브탭으로 들어오게 한다.
+  joltsData = { us_jolts: jolts, us_lf: lf, us_labor: labor };
   current = { id: US_EMP.id, name: US_EMP.name, freq: 'M', unit: '', updated_at: nfp.updated_at, series: [] };
   view = 'usemp'; usEmpTab = 'main';
   document.getElementById('title').textContent = US_EMP.name;
@@ -6164,7 +6178,19 @@ async function enterUsEmp() {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'usEmpBtn'));
   if (!document.getElementById('usEmpTabs').dataset.bound) {
     document.getElementById('usEmpTabs').addEventListener('click', e => {
-      if (!e.target.dataset.ue) return; usEmpTab = e.target.dataset.ue; refresh();
+      if (!e.target.dataset.ue) return;
+      usEmpPeriod[usEmpTab] = { s: startD, e: endD };        // 떠나는 탭 저장
+      usEmpTab = e.target.dataset.ue;
+      const p = usEmpPeriod[usEmpTab];
+      if (p && periodDates.includes(p.s) && periodDates.includes(p.e)) {
+        startD = p.s; endD = p.e;                            // 돌아온 탭 복원
+      } else {
+        // 첫 진입 — 직전 탭의 기간을 물려받지 않고 기본값에서 시작한다
+        if (usEmpPeriod0) { startD = usEmpPeriod0.s; endD = usEmpPeriod0.e; }
+        if (USEMP_DEF_START[usEmpTab]) setPeriodStart(USEMP_DEF_START[usEmpTab]);
+      }
+      syncPeriodSel();
+      refresh();
     });
     document.getElementById('usEmpTabs').dataset.bound = '1';
   }
@@ -6178,6 +6204,7 @@ async function enterUsEmp() {
   startD = periodDates[Math.max(0, periodDates.length - 36)];
   endD = periodDates[periodDates.length - 1];
   sSel.value = startD; eSel.value = endD;
+  usEmpPeriod0 = { s: startD, e: endD };   // 탭 첫 진입 때 되돌아갈 기본값
   refresh();
 }
 
@@ -6188,12 +6215,12 @@ function renderUsEmp() {
   if (usEmpTab === 'hrs') { renderUsHoursEarn(); return; }
   if (usEmpTab === 'dur') { renderUsDur(); return; }
   if (usEmpTab === 'flow') { renderUsFlows(); return; }
-  if (usEmpTab === 'lmci') {
-    // 고용압력은 사이클을 봐야 해서 기본 시작을 2017년으로 잡는다.
-    // 한 번만 옮기고, 이후 사용자가 고른 기간을 그대로 따른다.
-    if (!usLmciInit) { usLmciInit = true; setPeriodStart('2017-01'); }
-    renderUsLmci(); return;
+  if (usEmpTab === 'jolts') {
+    if (!usEmpData.jolts) { document.getElementById('retailWrap').innerHTML =
+      '<div style="padding:24px;color:#888">JOLTS 데이터가 없습니다. <b>python fetch.py us_jolts</b> 실행 필요.</div>'; return; }
+    renderJolts(); return;
   }
+  if (usEmpTab === 'lmci') { renderUsLmci(); return; }
   renderUsEmpMain();
 }
 
@@ -12906,12 +12933,6 @@ document.getElementById('endSel').onchange = e => {
       if (item.id === 'us_fed') {     // 연준 → 전용 화면
         const b = document.createElement('button');
         b.id = 'fedBtn'; b.textContent = FED.name; b.onclick = enterFed;
-        nav.appendChild(b);
-        return;
-      }
-      if (item.id === 'us_jolts') {   // JOLTS → 전용 화면
-        const b = document.createElement('button');
-        b.id = 'joltsBtn'; b.textContent = JOLTS.name; b.onclick = enterJolts;
         nav.appendChild(b);
         return;
       }

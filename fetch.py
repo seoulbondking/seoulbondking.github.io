@@ -20,8 +20,9 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import (bea, frbsf, pce_diffusion, kosis, ecos, reb, bls, freesis,
-                      bok, seibro, fred, infomax, acm, krx, ecos_xlsx, nowcast)
+from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos, reb, bls,
+                      freesis, bok, seibro, fred, infomax, acm, krx, ecos_xlsx,
+                      nowcast)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -44,6 +45,8 @@ SOURCES = {
     "bea": bea.fetch,
     "pce_diffusion": pce_diffusion.fetch,
     "frbsf": frbsf.fetch,
+    "mof": mof.fetch,
+    "cftc": cftc.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -202,6 +205,7 @@ def main():
                 this_year - ind.get("refetch_years", 2) if incremental else target_start
             )
             ind["_full"] = force_full      # 수집기가 '이미 받은 날짜 건너뛰기'를 무시할 수 있게
+            ind["_has_archive"] = old is not None
 
             try:
                 series = fetch_fn(ind)

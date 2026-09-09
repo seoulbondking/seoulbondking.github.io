@@ -350,7 +350,9 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
                   'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion',
                   // 전용 탭에서만 쓰는 미국 보조 지표 — 대그룹 메뉴에는 안 띄운다
-                  'us_pce_sd', 'us_polrate', 'us_flows', 'us_lmci', 'us_jolts'];
+                  'us_pce_sd', 'us_polrate', 'us_flows', 'us_lmci', 'us_jolts',
+                  // 엔캐리 탭 전용 보조 지표
+                  'mkt_jgb', 'mkt_cot_jpy'];
 
 // 메뉴에서 내린 전용 뷰. 렌더 함수와 데이터는 그대로 남겨 두었으니, 여기서 이름만 빼면
 // 다시 나타난다. (지우려면: 'ppi' 처럼 문자열을 배열에서 제거)
@@ -581,6 +583,7 @@ function refresh() {
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
   const isUCpi = view === 'uscpi', isFed = view === 'fed', isHd = view === 'hdebt';
+  const isYen = view === 'yen';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
@@ -602,7 +605,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -615,11 +618,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -639,6 +642,7 @@ function refresh() {
   else if (isCard) renderCard();
   else if (isUCpi) renderUsCpi();
   else if (isFed) renderFed();
+  else if (isYen) renderYen();
   else if (isHd) renderHdebt();
   else if (isUPpi) renderUsPpi();
   else if (isUPce) renderUsPce();
@@ -8509,6 +8513,234 @@ function renderHdebt() {
 // ── 연준 (FRED) — 지급준비금·IORB ──────────────────────────────
 //  WRESBAL 은 주간(수요일 마감) 평균, IORB/IOER 은 일별이라 날짜 축이 다르다.
 //  둘을 한 축에 놓되 선은 spanGaps 로 이어 그린다.
+// ── 엔캐리 트레이드 ──────────────────────────────────────────────
+// IMF 'Anatomy of Sudden Yen Appreciations' 는 급격한 엔 절상을 세 동인으로 본다.
+// 아래 계수는 논문이 VAR 로 추정한 '충격 첫 주' 반응이다.
+//   ① 미일 2년물 금리차 0.1%p 축소 → 엔 0.4% 절상
+//   ② VIX 10% 상승               → 엔 0.2% 절상
+//   ③ 캐리 포지션 8% 감소         → 엔 0.6% 절상
+// 2년물을 쓰는 이유는 중앙은행 정책금리 '경로 기대'를 가장 잘 담기 때문이다.
+const YEN = { id: 'yen', name: '엔캐리', ids: ['mkt_yen', 'mkt_jgb', 'mkt_cot_jpy'] };
+const YEN_COEF = { gap: 0.4 / 0.1, vix: 0.2 / 10, pos: 0.6 / 8 };  // 1단위당 절상 %
+let yenData = null, yenCharts = [null, null, null, null], yenWin = 5;   // 변화 측정 기간(영업일)
+
+async function enterYen() {
+  const got = await Promise.all(YEN.ids.map(id => loadIndicator(id).catch(() => null)));
+  if (!got[0]) { alert('엔캐리 데이터가 없습니다. python fetch.py mkt_yen mkt_jgb mkt_cot_jpy 실행 필요.'); return; }
+  yenData = { yen: got[0], jgb: got[1], cot: got[2] };
+  current = { id: YEN.id, name: YEN.name, freq: 'D', unit: '엔·%·계약',
+              updated_at: got[0].updated_at, series: [] };
+  view = 'yen';
+  document.getElementById('title').textContent = YEN.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + got[0].updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'yenBtn'));
+  // 가로축은 달러/엔 기준. 금리차·VIX 는 같은 영업일에 붙고, 주간인 COT 는 점으로 얹는다.
+  const ds = new Set();
+  got[0].series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 1300)];   // 기본 최근 5년가량
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderYen() {
+  const box = document.getElementById('retailWrap');
+  const { yen, jgb, cot } = yenData;
+  const M = (ind, n) => { const x = ind && ind.series.find(y => baseName(y.name) === n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const FX = M(yen, '달러/엔'), VIX = M(yen, 'VIX'), US2 = M(yen, '미국 국채 2년');
+  const JP2 = M(jgb, '일본 국채 2년'), NET = M(cot, '엔 투기 순포지션');
+  if (!FX.size) { box.innerHTML = '<div style="padding:24px;color:#888">엔화 데이터가 없습니다.</div>'; return; }
+  // 금리차는 두 계열이 다 있는 날만. JGB 는 일본 휴장, UST 는 미국 휴장이 달라 교집합을 쓴다.
+  const GAP = new Map();
+  US2.forEach((v, d) => { const j = JP2.get(d); if (j != null) GAP.set(d, v - j); });
+  // 캐리 포지션 = 투기 순매도 규모(계약). 순매수로 돌아서면 0 으로 본다.
+  const POS = new Map();
+  NET.forEach((v, d) => POS.set(d, Math.max(0, -v)));
+
+  const all = periodDates;
+  const cols = all.filter(inRange);
+  const use = cols.length > 2 ? cols : all;
+  const last = [...FX.keys()].sort().pop();
+  const at = (m, d) => { const ks = [...m.keys()].sort();
+    for (let i = ks.length - 1; i >= 0; i--) if (ks[i] <= d) return [ks[i], m.get(ks[i])];
+    return [null, null]; };
+  // k영업일 전 값 (그 계열 자신의 날짜 기준)
+  const back = (m, d, k) => { const ks = [...m.keys()].sort().filter(x => x <= d);
+    const i = ks.length - 1 - k; return i >= 0 ? [ks[i], m.get(ks[i])] : [null, null]; };
+
+  const f1 = v => v == null ? '-' : v.toFixed(1), f2 = v => v == null ? '-' : v.toFixed(2);
+  const n0 = v => v == null ? '-' : Math.round(v).toLocaleString('ko-KR');
+  const sg = (v, f) => v == null ? '-' : (v > 0 ? '+' : '') + f(v);
+
+  // ── 세 동인의 현재 상태와 IMF 계수로 환산한 '예상 절상률' ─────────
+  const W = yenWin;
+  const rows = [];
+  const [dG, vG] = at(GAP, last), [, vG0] = back(GAP, last, W);
+  const [dV, vV] = at(VIX, last), [, vV0] = back(VIX, last, W);
+  const [dP, vP] = at(POS, last), [, vP0] = back(POS, last, 1);   // COT 는 주간이라 1기 전
+  const dGap = vG != null && vG0 != null ? vG - vG0 : null;
+  const dVix = vV != null && vV0 ? (vV / vV0 - 1) * 100 : null;
+  const dPos = vP != null && vP0 ? (vP / vP0 - 1) * 100 : null;
+  const cG = dGap == null ? null : -dGap * YEN_COEF.gap;     // 금리차 축소 → 절상(+)
+  const cV = dVix == null ? null : dVix * YEN_COEF.vix;      // VIX 상승 → 절상(+)
+  const cP = dPos == null ? null : -dPos * YEN_COEF.pos;     // 포지션 축소 → 절상(+)
+  const cSum = [cG, cV, cP].every(x => x == null) ? null
+    : [cG, cV, cP].reduce((a, b) => a + (b || 0), 0);
+  const [, fxNow] = at(FX, last), [, fx0] = back(FX, last, W);
+  const fxChg = fxNow != null && fx0 ? -(fxNow / fx0 - 1) * 100 : null;   // 엔 절상률(+)
+
+  let out = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+    + '<b>변화 측정 기간</b><div class="mode" id="yenWinBtns">'
+    + [[5, '1주'], [21, '1개월'], [63, '3개월']].map(([v, t]) =>
+        `<button data-yw="${v}" class="${yenWin === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><span style="color:#8592a3">IMF 계수는 \'충격 첫 주\' 기준이라 1주가 원문에 가장 가깝습니다</span></div>'
+    + '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + '엔캐리는 <b>금리가 낮은 엔을 빌려 고금리 자산에 넣는</b> 거래입니다. 엔이 강해지면 갚아야 할 '
+    + '원금이 커져 손실이 나고, 청산이 청산을 부르는 <b>자기강화적 되감기</b>가 일어납니다.<br>'
+    + 'IMF <b>Anatomy of Sudden Yen Appreciations</b> 는 급격한 엔 절상을 세 동인으로 설명합니다 — '
+    + `<b>미일 2년물 금리차</b>(0.1%p 축소 → 첫 주 ${YEN_COEF.gap * 0.1}% 절상), `
+    + `<b>VIX</b>(10% 상승 → ${YEN_COEF.vix * 10}%), `
+    + `<b>캐리 포지션</b>(8% 축소 → ${(YEN_COEF.pos * 8).toFixed(1)}%). `
+    + '2년물을 쓰는 건 정책금리 <b>경로 기대</b>를 가장 잘 담기 때문입니다.<br>'
+    + `<span style="color:#c0392b">상관을 이용한 규칙이지 예측 모형이 아닙니다.</span> `
+    + '금리차가 좁혀져도 엔이 약한 국면이 실제로 있었습니다(2026년 상반기) — '
+    + '일본 기업의 해외수익이 엔으로 환류되는지, GPIF 같은 큰손의 자산배분이 바뀌는지가 함께 걸려 있습니다.<br>'
+    + '오른쪽 아래 <b>1년 롤링 상관</b>은 그 관계가 지금 살아 있는지를 봅니다. '
+    + '<b>+0.8 이상</b>이면 금리차로 환율을 읽어도 되는 국면이고, <b>0 근처나 음수</b>면 '
+    + '금리차 말고 다른 것이 환율을 움직이고 있다는 뜻입니다.</div>'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="yc${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
+    + [2, 3].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="yc${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  const wl = W === 5 ? '1주' : (W === 21 ? '1개월' : '3개월');
+  out += `<div class="block-title">세 동인의 현재 상태 — ${dateLabel(last)} 기준 (${wl} 변화)</div>`
+    + '<div class="tscroll"><table class="data vlines"><thead><tr>'
+    + '<th>동인</th><th>현재</th><th>변화</th><th>IMF 계수</th><th>엔 절상 기여 (%)</th></tr></thead><tbody>'
+    + `<tr class="lv1"><td>미일 2년 금리차 (%p)</td><td>${f2(vG)}</td><td>${sg(dGap, f2)}%p</td>`
+    + `<td style="color:#8592a3">0.1%p↓ → +0.4%</td><td style="font-weight:700">${sg(cG, f2)}</td></tr>`
+    + `<tr class="lv1"><td>VIX</td><td>${f1(vV)}</td><td>${sg(dVix, f1)}%</td>`
+    + `<td style="color:#8592a3">10%↑ → +0.2%</td><td style="font-weight:700">${sg(cV, f2)}</td></tr>`
+    + `<tr class="lv1"><td>엔 투기 순매도 (계약)</td><td>${n0(vP)}</td><td>${sg(dPos, f1)}%</td>`
+    + `<td style="color:#8592a3">8%↓ → +0.6%</td><td style="font-weight:700">${sg(cP, f2)}</td></tr>`
+    + `<tr class="lv0 sec-head"><td>합계 — 계수로 본 엔 절상 압력</td><td colspan="3"></td>`
+    + `<td style="font-weight:800">${sg(cSum, f2)}</td></tr>`
+    + `<tr class="lv1"><td style="color:#8592a3">실제 엔 절상률 (${wl})</td><td colspan="3"></td>`
+    + `<td style="font-weight:700">${sg(fxChg, f2)}</td></tr>`
+    + '</tbody></table></div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-top:6px;line-height:1.8">'
+    + '엔 절상 기여는 각 동인의 변화에 IMF 계수를 곱한 값입니다(+ 가 엔 강세). '
+    + '투기 순매도는 CFTC 주간(화요일 기준) 자료라 변화는 <b>직전 주 대비</b>로 계산합니다.</div>';
+
+  // ── 최근 흐름 표 ────────────────────────────────────────────────
+  const tcols = use.slice(-Math.min(use.length, 24));
+  const th = tcols.map(d => `<th>${dateLabel(d)}</th>`).join('');
+  out += '<div class="block-title">최근 값</div><div class="tscroll">'
+    + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
+    + [['달러/엔', d => FX.get(d) ?? null, f1, 0],
+       ['미일 2년 금리차 (%p)', d => GAP.get(d) ?? null, f2, 0],
+       ['미국 국채 2년', d => US2.get(d) ?? null, f2, 1],
+       ['일본 국채 2년', d => JP2.get(d) ?? null, f2, 1],
+       ['VIX', d => VIX.get(d) ?? null, f1, 0],
+       ['엔 투기 순포지션 (계약)', d => NET.get(d) ?? null, n0, 0],
+      ].map(([nm, fn, fmt, lv]) => `<tr class="${lv === 0 ? 'lv0 sec-head' : 'lv1'}">`
+        + `<td style="padding-left:${8 + lv * 16}px">${nm}</td>`
+        + tcols.map(d => { const v = fn(d);
+            return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${v == null ? '' : fmt(v)}</td>`; }).join('')
+        + '</tr>').join('')
+    + '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('#yenWinBtns button').forEach(b =>
+    b.onclick = () => { yenWin = +b.dataset.yw; renderYen(); });
+
+  yenCharts.forEach(c => c && c.destroy());
+  yenCharts = [null, null, null, null];
+  const xT = { maxTicksLimit: 9, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const mk = (i, title, sets, y2opt) => new Chart(box.querySelector('#yc' + i), {
+    plugins: [LINE_POP],
+    data: { labels: use, datasets: sets },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: title },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}` } } },
+      scales: { x: { ticks: xT },
+        y: { ticks: { font: { size: 10 } } },
+        y2: { position: 'right', grid: { drawOnChartArea: false },
+              ticks: { font: { size: 10 } }, ...(y2opt || {}) } } },
+  });
+  const line = (nm, col, m, ax, pop, w) => ({ type: 'line', label: nm,
+    data: use.map(d => m.get(d) ?? null), borderColor: col, backgroundColor: col,
+    yAxisID: ax, borderWidth: w || (pop ? 2.4 : 1.7), pointRadius: 0, pointHitRadius: 8,
+    tension: .1, spanGaps: true, pop: !!pop });
+
+  yenCharts[0] = mk(0, '달러/엔 (좌) · 미일 2년 금리차 (%p, 우)', [
+    line('달러/엔', '#c0392b', FX, 'y', true),
+    line('미일 2년 금리차', '#1a4fa0', GAP, 'y2'),
+  ]);
+  yenCharts[1] = mk(1, '달러/엔 (좌) · VIX (우)', [
+    line('달러/엔', '#c0392b', FX, 'y', true),
+    line('VIX', '#1a2b4a', VIX, 'y2', false, 1.3),
+  ]);
+  yenCharts[2] = mk(2, '엔 투기 순포지션 (계약, 좌) · 달러/엔 (우)', [
+    { type: 'bar', label: '투기 순포지션', data: use.map(d => NET.get(d) ?? null),
+      backgroundColor: use.map(d => (NET.get(d) ?? 0) >= 0 ? 'rgba(26,79,160,0.65)' : 'rgba(176,32,28,0.55)'),
+      borderWidth: 0, yAxisID: 'y', order: 2 },
+    line('달러/엔', '#c0392b', FX, 'y2', true),
+  ]);
+  // 금리차와 환율의 '관계 자체가 살아 있는가' — 1년 롤링 상관.
+  //   잔차(실제−적합)를 그리면 설명력이 낮을 때 잔차가 원계열을 그대로 닮는다.
+  //   실제로 최근 5년 R² 는 0.22 뿐이고 잔차와 환율의 상관이 0.89 라 같은 그림이 된다.
+  //   대신 관계의 강도를 시계열로 본다: 2021~23 은 +0.9 대였다가 2024년 이후 무너졌다.
+  const RW = 252;
+  const pair = [...FX.keys()].filter(d => GAP.has(d)).sort();
+  const roll = new Map();
+  if (pair.length > RW) {
+    const gx = pair.map(d => GAP.get(d)), fy = pair.map(d => FX.get(d));
+    let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+    for (let i = 0; i < pair.length; i++) {
+      sx += gx[i]; sy += fy[i]; sxx += gx[i] * gx[i]; syy += fy[i] * fy[i]; sxy += gx[i] * fy[i];
+      if (i >= RW) { const j = i - RW;
+        sx -= gx[j]; sy -= fy[j]; sxx -= gx[j] * gx[j]; syy -= fy[j] * fy[j]; sxy -= gx[j] * fy[j]; }
+      if (i >= RW - 1) {
+        const cov = sxy / RW - (sx / RW) * (sy / RW);
+        const vx = sxx / RW - (sx / RW) ** 2, vy = syy / RW - (sy / RW) ** 2;
+        const den = Math.sqrt(Math.max(vx, 0) * Math.max(vy, 0));
+        if (den > 1e-9) roll.set(pair[i], cov / den);
+      }
+    }
+  }
+  yenCharts[3] = new Chart(box.querySelector('#yc3'), {
+    plugins: [LINE_POP],
+    data: { labels: use, datasets: [
+      { type: 'line', label: '금리차 × 달러/엔 1년 상관',
+        data: use.map(d => roll.get(d) ?? null), borderColor: '#c98a1a',
+        backgroundColor: '#c98a1a', yAxisID: 'y', borderWidth: 2.4, pointRadius: 0,
+        pointHitRadius: 8, tension: .1, spanGaps: true, pop: true },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false },
+        title: { display: true, font: { size: 13 },
+          text: '금리차가 환율을 설명하는가 — 1년 롤링 상관' },
+        tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+          label: it => ` 상관: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: xT },
+        y: { min: -1, max: 1, ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+}
+
 const FED = { id: 'fed', name: '연준 재무제표', ids: ['us_fed'] };
 let fedData = null, fedCharts = [null, null, null, null, null, null];
 
@@ -13118,6 +13350,12 @@ document.getElementById('endSel').onchange = e => {
       if (item.id === 'us_fed') {     // 연준 → 전용 화면
         const b = document.createElement('button');
         b.id = 'fedBtn'; b.textContent = FED.name; b.onclick = enterFed;
+        nav.appendChild(b);
+        return;
+      }
+      if (item.id === 'mkt_yen') {    // 엔캐리 → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'yenBtn'; b.textContent = YEN.name; b.onclick = enterYen;
         nav.appendChild(b);
         return;
       }

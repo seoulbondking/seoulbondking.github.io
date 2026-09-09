@@ -1398,6 +1398,53 @@ indicators:
         LNS13008275: 평균 실업기간
         LNS13008276: 중위 실업기간
 
+  # ── 엔캐리 트레이드 ────────────────────────────────────────────
+  # IMF 'Anatomy of Sudden Yen Appreciations' 는 급격한 엔 절상을 세 동인으로 본다.
+  #   ① 미일 2년물 금리차 축소 (0.1%p 축소 → 첫 주 엔 0.4% 절상)
+  #   ② VIX 상승 (10% 상승 → 첫 주 0.2% 절상)
+  #   ③ 캐리 포지션 청산 (8% 감소 → 첫 주 0.6% 절상)
+  # 세 재료를 각각 다른 소스에서 받는다.
+  - id: mkt_yen
+    name: 엔화·변동성
+    source: fred
+    unit: 엔·%
+    freq: D
+    start_year: 2000
+    merge_always: true
+    series_first: ["달러/엔"]
+    params:
+      series:
+        DEXJPUS: 달러/엔
+        VIXCLS: VIX
+        DGS2: 미국 국채 2년
+        DGS10: 미국 국채 10년
+
+  # 일본 국채금리 — FRED 에 일본 2년물이 없어 재무성 CSV 를 직접 받는다.
+  - id: mkt_jgb
+    name: 일본 국채금리
+    source: mof
+    unit: '%'
+    freq: D
+    merge_always: true
+    params:
+      tenors:
+        "2Y": 일본 국채 2년
+        "5Y": 일본 국채 5년
+        "10Y": 일본 국채 10년
+
+  # CME 엔 선물의 투기(비상업) 순포지션 — 캐리 포지션의 대리변수. 주간(화요일 기준).
+  - id: mkt_cot_jpy
+    name: 엔 투기포지션 (CFTC)
+    source: cftc
+    unit: 계약
+    freq: W
+    start_year: 2006
+    merge_always: true
+    series_first: ["엔 투기 순포지션"]
+    params:
+      contracts:
+        "097741": 엔
+
   # PCE 수요·공급 분해 (SF 연준 Shapiro) — 물가 상승분이 수요 때문인지 공급 때문인지.
   #   품목별로 가격·수량의 '예상 밖 변화'가 같은 방향이면 수요, 반대면 공급,
   #   구분이 안 되면 모호. 셋을 더하면 PCE 인플레이션이 된다.

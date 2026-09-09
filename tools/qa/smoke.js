@@ -79,6 +79,7 @@ const chk = (name, elId) => {
     console.log('  연준 지급준비금              (데이터 없음 — python fetch.py us_fed)');
   }
   await ev('enterTaylor()'); chk('테일러 준칙', 'retailWrap');
+  await ev('enterYen()').catch(() => {}); chk('엔캐리', 'retailWrap');
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
   for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow', 'jolts', 'lmci']) {
     ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');

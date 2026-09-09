@@ -4905,13 +4905,146 @@ function renderKrEmp() {
 //   계절조정이면 전월 증감(모멘텀), 원계열이면 전년동월 증감(통계청 헤드라인)이 주 지표다.
 const KR_IND_CYC = ['제조업', '건설업', '도매및소매업', '운수및창고업', '숙박및음식점업'];
 const KR_IND_POL = ['보건업및사회복지서비스업', '공공행정국방및사회보장행정', '교육서비스업'];
+// ── 고용 종합 월별 분석 ───────────────────────────────────────────
+// 취업자만 보면 놓치는 것을 잡는다. 실업률이 내려도 참가율이 같이 내려갔으면
+// 구직 포기가 만든 착시고, 취업자가 늘어도 비경활이 함께 늘면 인구 효과다.
+function krMainAnalysis(d, M, prevN, useSA) {
+  const autoB = useSA ? 'mom' : 'yoy';
+  const basis = krAnaBasis || autoB;
+  const isM = basis === 'mom';
+  const lag = isM ? 1 : 12;
+  const pl = isM ? '전월 증감' : '전년동월 증감';
+  const sl = isM ? '전년동월 증감' : '전월 증감';
+  const dif = (m, k) => { const p = prevN(d, k); if (!p) return null;
+    const a = m.get(d), b = m.get(p); return a == null || b == null ? null : a - b; };
+  const D = n => dif(M[n], lag), D2 = n => dif(M[n], isM ? 12 : 1);
+  const L = n => M[n].get(d) ?? null;
+  const f = v => v == null ? '-' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString('ko-KR');
+  const p2 = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2);
+  const emp = D('emp'), une = D('unemp'), lf = D('lf'), nlf = D('nlf');
+  const dur = D('ur'), dpr = D('pr'), der = D('er');
+
+  const B = [[`취업자 ${pl} ${f(emp)}천명`, (emp || 0) > 0 ? '#2b7a3d' : '#c0392b'],
+             [`${sl} ${f(D2('emp'))}천명`, '#5a6b85'],
+             [useSA ? '계절조정' : '원계열', '#5a6b85']];
+  // 실업률이 내렸는데 참가율도 내렸으면 '개선'이 아니다
+  const illusion = dur != null && dpr != null && dur < 0 && dpr < 0;
+  if (illusion) B.push(['착시 주의 — 참가율 동반 하락', '#e8930c']);
+  else if (dur != null) B.push([dur > 0 ? `실업률 ${p2(dur)}%p 상승` : `실업률 ${p2(dur)}%p 하락`,
+                                dur > 0 ? '#c0392b' : '#2b7a3d']);
+  if (der != null) B.push([`고용률 ${p2(der)}%p`, der >= 0 ? '#2b7a3d' : '#c0392b']);
+
+  const lead = `<b>${dateLabel(d)}</b> 취업자 ${pl} <b>${f(emp)}천명</b>(${sl} ${f(D2('emp'))}천명), `
+    + `실업자 <b>${f(une)}천명</b>. 경제활동인구는 ${f(lf)}천명, 비경제활동인구는 ${f(nlf)}천명 움직였습니다. `
+    + `고용률 <b>${L('er') == null ? '-' : L('er').toFixed(1)}%</b>(${p2(der)}%p) · `
+    + `실업률 <b>${L('ur') == null ? '-' : L('ur').toFixed(1)}%</b>(${p2(dur)}%p) · `
+    + `참가율 <b>${L('pr') == null ? '-' : L('pr').toFixed(1)}%</b>(${p2(dpr)}%p).<br>`
+    + (illusion
+        ? '<b>실업률이 내렸지만 참가율도 함께 내렸습니다.</b> 구직을 포기해 실업자에서 빠진 사람이 '
+          + '실업률을 눌렀을 가능성이 큽니다. 고용 개선으로 읽기 어렵습니다.'
+        : dur != null && dur < 0 && dpr != null && dpr >= 0
+          ? '실업률이 내리는 동안 참가율은 유지되거나 올랐습니다. 노동시장 이탈이 아니라 '
+            + '<b>실제 취업</b>이 만든 개선으로 읽을 수 있습니다.'
+          : dur != null && dur > 0 && dpr != null && dpr > 0
+            ? '실업률이 올랐지만 참가율도 같이 올랐습니다. 구직자가 늘면 실업률은 오릅니다 — '
+              + '<b>노동시장 복귀</b>가 만든 상승일 수 있습니다.'
+            : '실업률과 참가율이 뚜렷한 조합을 보이지 않는 달입니다.')
+    + (isM && !useSA ? ' <b style="color:#c0392b">※ 원계열 전월 증감에는 계절성이 남아 있습니다.</b>' : '');
+
+  const body = '<div style="display:flex;gap:26px;flex-wrap:wrap">'
+    + '<div>' + anaRank('인구·고용 증감', `${pl}, 천명`,
+        [['취업자', emp], ['실업자', une], ['경제활동인구', lf], ['비경제활동인구', nlf],
+         ['15세이상인구', D('pop')]].filter(r => r[1] != null), '') + '</div>'
+    + '<div>' + anaRank('비율 변화', `${pl}, %p`,
+        [['고용률', der], ['실업률', dur], ['참가율', dpr]].filter(r => r[1] != null), '%p') + '</div>'
+    + '<div>' + anaRank('현재 수준', '%',
+        [['고용률', L('er')], ['실업률', L('ur')], ['참가율', L('pr')]]
+          .filter(r => r[1] != null).map(r => [r[0], r[1]]), '%') + '</div>'
+    + '</div>';
+  return anaShell(`${dateLabel(d)} 고용 종합 분해`, B,
+                  anaBasisBar(useSA ? '전월비' : '전년동월비') + lead, body, 'maClose');
+}
+
+// ── 연령별 월별 분석 ─────────────────────────────────────────────
+// 총괄 취업자 증감이 어느 연령에서 나왔는지 본다. 60세 이상이 끌고 가는 달과
+// 핵심연령(30~59)이 끌고 가는 달은 성격이 아주 다르다.
+const KR_AGE_YOUNG = ['15 - 29세'];
+const KR_AGE_CORE = ['30 - 39세', '40 - 49세', '50 - 59세'];
+const KR_AGE_OLD = ['60세이상'];
+function krAgeAnalysis(d, AGES, M, prevN, useSA) {
+  const autoB = useSA ? 'mom' : 'yoy';
+  const basis = krAnaBasis || autoB;
+  const isM = basis === 'mom';
+  const lag = isM ? 1 : 12;
+  const pl = isM ? '전월 증감' : '전년동월 증감';
+  const sl = isM ? '전년동월 증감' : '전월 증감';
+  const dif = (m, k) => { const p = prevN(d, k); if (!p || !m) return null;
+    const a = m.get(d), b = m.get(p); return a == null || b == null ? null : a - b; };
+  const f = v => v == null ? '-' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString('ko-KR');
+  const p2 = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2);
+  // 전체·15-64세·20-29세는 다른 구간과 겹치므로 합산에서 뺀다
+  const parts = AGES.filter(a => !['15세 이상 전체', '15 - 64세', '20 - 29세'].includes(a));
+  const rows = parts.map(a => [a, dif(M(a, '취업자'), lag)]).filter(r => r[1] != null);
+  const sum = ks => rows.filter(r => ks.includes(r[0])).reduce((a, r) => a + r[1], 0);
+  const yng = sum(KR_AGE_YOUNG), core = sum(KR_AGE_CORE), old = sum(KR_AGE_OLD);
+  const all = rows.reduce((a, r) => a + r[1], 0);
+  const tot = dif(M('15세 이상 전체', '취업자'), lag);
+  const totSec = dif(M('15세 이상 전체', '취업자'), isM ? 12 : 1);
+
+  const B = [[`전체 ${pl} ${f(tot)}천명`, (tot || 0) > 0 ? '#2b7a3d' : '#c0392b'],
+             [`${sl} ${f(totSec)}천명`, '#5a6b85'],
+             [useSA ? '계절조정' : '원계열', '#5a6b85']];
+  const big = Math.max(Math.abs(tot || 0), 50) * 0.3;
+  // 어느 묶음이 가장 크게 끌었는지로 판정한다. 60세 이상이 최대면
+  // 핵심연령이 같이 늘었더라도 '고령 주도'로 읽는 게 맞다 (인구 효과).
+  const oldLed = old > big && old >= core && old >= yng;
+  if (oldLed) B.push([core > 0 ? '60세 이상 주도' : '60세 이상 주도 (핵심연령 감소)', '#c0392b']);
+  else if (core > big && core >= old) B.push(['핵심연령(30~59) 주도', '#2b7a3d']);
+  if (yng < -big) B.push(['청년(15~29) 감소', '#c0392b']);
+
+  const lead = `<b>${dateLabel(d)}</b> 전체 취업자 ${pl} <b>${f(tot)}천명</b>(${sl} ${f(totSec)}천명). `
+    + `연령대로 갈라 보면 <b>청년(15~29) ${f(yng)}천명</b>, `
+    + `<b>핵심연령(30~59) ${f(core)}천명</b>, <b>60세 이상 ${f(old)}천명</b>입니다.<br>`
+    + (oldLed
+        ? (core > 0
+            ? '증가분이 <b>60세 이상에서 가장 크게</b> 나왔습니다. 핵심연령도 늘었지만 고령층이 더 큽니다 — '
+              + '인구 고령화와 재정 일자리가 상당 부분을 떠받치는 형태입니다.'
+            : '증가분이 <b>60세 이상에 몰려</b> 있고 핵심연령은 줄었습니다. 인구 고령화와 재정 일자리가 '
+              + '떠받치는 형태라, 총괄 숫자만으론 <b>노동시장의 힘을 과대평가</b>하기 쉽습니다.')
+        : core > big && core >= old
+          ? '<b>핵심연령에서 증가</b>가 나왔습니다. 인구 효과가 아닌 실제 고용 수요로 읽을 여지가 큽니다.'
+          : '어느 연령대가 끌고 간다고 보기 어려운 달입니다.')
+    + (yng < -big ? ' <b>청년층 감소</b>가 이어지는지도 같이 보셔야 합니다.' : '')
+    + (isM && !useSA ? ' <b style="color:#c0392b">※ 원계열 전월 증감에는 계절성이 남아 있습니다.</b>' : '');
+
+  const er = parts.map(a => [a, dif(M(a, '고용률'), lag)]).filter(r => r[1] != null);
+  const body = '<div style="display:flex;gap:26px;flex-wrap:wrap">'
+    + '<div>' + anaRank('연령별 취업자', `${pl}, 천명`,
+        rows.slice().sort((a, b) => b[1] - a[1]), '') + '</div>'
+    + '<div>' + anaRank('연령별 고용률', `${pl}, %p`,
+        er.slice().sort((a, b) => b[1] - a[1]), '%p') + '</div>'
+    + '<div>' + anaRank('연령대 묶음', '청년 / 핵심 / 고령',
+        [['청년 15~29', yng], ['핵심 30~59', core], ['60세 이상', old], ['구간 합', all]], '') + '</div>'
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-top:10px;line-height:1.8">'
+    + `※ 구간 합(${f(all)})과 전체(${f(tot)})의 차이는 ${f(all - (tot || 0))}천명입니다 — `
+    + (useSA ? '계절조정을 연령별·전체 각각 따로 하기 때문입니다(비가법성).' : '반올림 차이입니다.')
+    + '</div>';
+  return anaShell(`${dateLabel(d)} 연령별 취업자 ${pl} 분해`, B,
+                  anaBasisBar(useSA ? '전월비' : '전년동월비') + lead, body, 'aaClose');
+}
+
 function krIndAnalysis(d, names, short, mom, yoy, totRef, useSA) {
   const nk = n => n.replace(/^[*A-U]\s*/, '').replace(/\([^)]*\)\s*$/, '').replace(/[\s·,]/g, '');
-  const prim = useSA ? mom : yoy;                 // 주 지표
-  const primT = useSA ? totRef.mom(d) : totRef.yoy(d);
-  const secT = useSA ? totRef.yoy(d) : totRef.mom(d);
-  const pl = useSA ? '전월 증감' : '전년동월 증감';
-  const sl = useSA ? '전년동월 증감' : '전월 증감';
+  // 기준은 토글을 따르되, '자동'이면 계열에 맞춘다 (계절조정→전월비 / 원계열→전년동월비)
+  const autoB = useSA ? 'mom' : 'yoy';
+  const basis = krAnaBasis || autoB;
+  const isM = basis === 'mom';
+  const prim = isM ? mom : yoy;                  // 주 지표
+  const primT = isM ? totRef.mom(d) : totRef.yoy(d);
+  const secT = isM ? totRef.yoy(d) : totRef.mom(d);
+  const pl = isM ? '전월 증감' : '전년동월 증감';
+  const sl = isM ? '전년동월 증감' : '전월 증감';
   const rows = names.map(n => [short(n), prim(n, d), nk(n)])
     .filter(r => r[1] != null).sort((a, b) => b[1] - a[1]);
   const grp = keys => rows.filter(r => keys.includes(r[2])).reduce((a, r) => a + r[1], 0);
@@ -4921,6 +5054,7 @@ function krIndAnalysis(d, names, short, mom, yoy, totRef, useSA) {
   const mfg = rows.find(r => r[2] === '제조업'), con = rows.find(r => r[2] === '건설업');
   const f = v => v == null ? '-' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString('ko-KR');
   const B = [[`${pl} ${f(primT)}천명 (총괄)`, primT > 0 ? '#2b7a3d' : '#c0392b'],
+             [`${sl} ${f(secT)}천명`, '#5a6b85'],
              [useSA ? '계절조정' : '원계열', '#5a6b85']];
   const big = Math.max(Math.abs(primT || 0), 50) * 0.3;   // '주도'라 부를 최소 규모
   const polLed = pol > big && cyc < 0;
@@ -4945,7 +5079,8 @@ function krIndAnalysis(d, names, short, mom, yoy, totRef, useSA) {
             ? '<b>경기민감 부문이 줄어드는</b> 달입니다. 정책·공공도 받쳐 주지 못해 총괄이 눌립니다.'
             : '어느 한 부문이 끌고 간다고 보기 어려운 달입니다. 부문 간 상쇄가 커서 총괄만으론 방향을 읽기 어렵습니다.')
     + ` 대분류 ${rows.length}개 중 <b>${up}개</b>가 증가했습니다.`
-    + (useSA ? '' : ' ※ 원계열 전월 증감에는 계절성이 남아 있으니 모멘텀은 계절조정으로 보세요.');
+    + (isM && !useSA ? ' <b style="color:#c0392b">※ 원계열 전월 증감에는 계절성이 그대로 남아 있습니다</b> — 모멘텀은 계절조정으로 보세요.' : '')
+    + (!isM && useSA ? ' <span style="color:#8592a3">※ 통계청 헤드라인 전년동월 증감은 원계열 기준입니다.</span>' : '');
 
   const body = '<div style="display:flex;gap:26px;flex-wrap:wrap">'
     + '<div>' + anaRank('증가 상위 산업', `${pl}, 천명`, rows.slice(0, 8).map(r => [r[0], r[1]]), '') + '</div>'
@@ -4957,7 +5092,8 @@ function krIndAnalysis(d, names, short, mom, yoy, totRef, useSA) {
     + '※ 대분류 합은 총괄과 정확히 일치하지 않습니다'
     + (useSA ? '(계절조정 비가법성).' : '(반올림·미분류).')
     + ` 이번 달 차이는 ${f(all - primT)}천명입니다.</div>`;
-  return anaShell(`${dateLabel(d)} 산업별 취업자 ${pl} 분해`, B, lead, body, 'iaClose');
+  return anaShell(`${dateLabel(d)} 산업별 취업자 ${pl} 분해`, B,
+                  anaBasisBar(useSA ? '전월비' : '전년동월비') + lead, body, 'iaClose');
 }
 
 function renderKrEmpIndustry() {
@@ -5068,6 +5204,7 @@ function renderKrEmpIndustry() {
     if (sl) sl.onchange = () => { indAnaMonth = sl.value; renderKrEmp(); };
     const cx = box.querySelector('#iaClose');
     if (cx) cx.onclick = () => { indAnaMonth = null; renderKrEmp(); };
+    bindAnaBasis(box, renderKrEmp);
   }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
@@ -5109,6 +5246,7 @@ function renderKrEmpMain() {
   // 계열 스위치(krSA)를 따른다. 계절조정이 없으면 원계열로 내려가고 그 사실을 알린다.
   //   계절조정 → 전월 증감(모멘텀) · 원계열 → 전년동월 증감(통계청 헤드라인)
   const useSA = krSA === 'sa' && krEmpData.totSa;
+  const mainAnaCur = mainAnaMonth && cols.includes(mainAnaMonth) ? mainAnaMonth : null;
   const TOT = useSA ? 'totSa' : 'tot';
   const saMissing = krSA === 'sa' && !krEmpData.totSa;
   const emp = krMap(TOT, '계 · 취업자');
@@ -5167,7 +5305,9 @@ function renderKrEmpMain() {
         + '</div>').join('')
     + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [2, 3].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:260px"><canvas id="krE${i}"></canvas></div></div>`).join('')
-    + '</div>';
+    + '</div>'
+    + anaBar('maBtn', 'maSel', cols, mainAnaCur, '선택한 달의 취업·실업·참가율을 갈라 읽어 줍니다')
+    + '<!--MAINANA-->';
 
   const tbl = (title, rows, fmt) => {
     let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>`
@@ -5217,7 +5357,19 @@ function renderKrEmpMain() {
       + (u6raw ? ' 계절조정 계열이 없어 <b>원계열</b>로 표시합니다 — <b>python fetch.py kr_emp_supp_sa</b> 실행 필요.' : '')
       + '</div>';
   }
+  out = out.replace('<!--MAINANA-->', mainAnaCur
+    ? krMainAnalysis(mainAnaCur,
+        { emp, unemp, lf, nlf, pop, er: erAll, ur, pr }, prevN, useSA) : '');
   box.innerHTML = out;
+  {
+    const bt = box.querySelector('#maBtn'), sl = box.querySelector('#maSel');
+    if (bt) bt.onclick = () => {
+      mainAnaMonth = mainAnaCur ? null : (sl ? sl.value : cols[cols.length - 1]); renderKrEmp(); };
+    if (sl) sl.onchange = () => { mainAnaMonth = sl.value; renderKrEmp(); };
+    const cx = box.querySelector('#maClose');
+    if (cx) cx.onclick = () => { mainAnaMonth = null; renderKrEmp(); };
+    bindAnaBasis(box, renderKrEmp);
+  }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
     if (b.disabled) return; krSA = b.dataset.ks; renderKrEmp(); });
@@ -5347,6 +5499,8 @@ function renderKrEmpAge() {
   // 연령×지표마다 계절조정이 있으면 그걸, 없으면 원계열을 쓴다. 폴백된 연령은 라벨에 표시.
   const M = (age, met) => krAge(`${age} · ${met}`)[0];
   const isRaw = age => krAge(`${age} · 고용률`)[1];
+  const ageAnaCur = ageAnaMonth && cols.includes(ageAnaMonth) ? ageAnaMonth : null;
+  const ageUseSA = krSA === 'sa' && !!krEmpData.ageSa;
   const rawAges = AGES.filter(isRaw);
   let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
     + '<span style="font-size:12px;color:#555">계열: </span><div class="mode" id="krSaBtns">'
@@ -5368,7 +5522,9 @@ function renderKrEmpAge() {
     + [0, 1, 2].map(i => `<div style="flex:1;min-width:300px"><div class="cchart" style="height:250px"><canvas id="krA${i}"></canvas></div></div>`).join('')
     + '</div><div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
     + [3, 4].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:255px"><canvas id="krA${i}"></canvas></div></div>`).join('')
-    + '</div>';
+    + '</div>'
+    + anaBar('aaBtn', 'aaSel', cols, ageAnaCur, '선택한 달의 증감을 청년 / 핵심연령 / 60세 이상으로 갈라 읽어 줍니다')
+    + '<!--AGEANA-->';
   // 연령별 표. '취업자'는 수준 표 바로 뒤에 증감 표를 하나 더 붙인다.
   //   계절조정이면 전월 증감, 원계열이면 전년동월 증감이 기본 (혼동을 막으려 기준을 명시)
   const ageTbl = (title, valOf, fmt) => {
@@ -5410,7 +5566,18 @@ function renderKrEmpAge() {
       out += ageTbl('취업자 전년동월 증감 (천명)', diffOf(12), sign);
     }
   });
+  out = out.replace('<!--AGEANA-->', ageAnaCur
+    ? krAgeAnalysis(ageAnaCur, AGES, M, prevN, ageUseSA) : '');
   box.innerHTML = out;
+  {
+    const bt = box.querySelector('#aaBtn'), sl = box.querySelector('#aaSel');
+    if (bt) bt.onclick = () => {
+      ageAnaMonth = ageAnaCur ? null : (sl ? sl.value : cols[cols.length - 1]); renderKrEmp(); };
+    if (sl) sl.onchange = () => { ageAnaMonth = sl.value; renderKrEmp(); };
+    const cx = box.querySelector('#aaClose');
+    if (cx) cx.onclick = () => { ageAnaMonth = null; renderKrEmp(); };
+    bindAnaBasis(box, renderKrEmp);
+  }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('#krSaBtns button').forEach(b => b.onclick = () => {
     if (b.disabled) return; krSA = b.dataset.ks; renderKrEmp();
@@ -9170,6 +9337,24 @@ function renderUsNfpIndustry() {
 let retIdxType = null;   // 소매판매 지수 종류 (경상/불변/계절조정)
 let retAnaMonth = null;  // 소매판매 월별 분석 패널이 열린 달
 let cpiAnaMonth = null, indAnaMonth = null;   // CPI 기여도 · 산업별 고용 분석 패널
+let mainAnaMonth = null, ageAnaMonth = null;  // 고용 종합 · 연령별 분석 패널
+// 분석 패널의 증감 기준. null = 계열에 맞춰 자동(계절조정→전월비 / 원계열→전년동월비)
+let krAnaBasis = null;
+// 패널 안에 끼울 전월비/전년동월비 토글
+function anaBasisBar(autoLabel) {
+  const cur = krAnaBasis;
+  const btn = (v, t) => `<button class="mini-btn${cur === v ? ' on' : ''}" data-anab="${v}">${t}</button>`;
+  return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'
+    + '<b>기준</b>' + btn(null, `자동 (${autoLabel})`) + btn('mom', '전월비') + btn('yoy', '전년동월비')
+    + '<span style="color:#8592a3">같은 달을 두 기준으로 갈아 보며 비교할 수 있습니다</span></div>';
+}
+function bindAnaBasis(box, rerender) {
+  box.querySelectorAll('[data-anab]').forEach(b => b.onclick = () => {
+    const v = b.dataset.anab;
+    krAnaBasis = (v === 'null' || v === '') ? null : v;
+    rerender();
+  });
+}
 const RETAIL = { id: 'retail_all', name: '소매판매',
                  ids: ['kr_retail', 'kr_retail_type'] };
 // 카드사용액 — KOSIS 435(월간)를 기본 틀로 하고, 나우캐스트(주간)를 함께 본다.

@@ -20,9 +20,9 @@ from pathlib import Path
 
 import yaml
 
-from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos, reb, bls,
-                      freesis, bok, seibro, fred, infomax, acm, krx, ecos_xlsx,
-                      nowcast)
+from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos,
+                      reb, bls, freesis, bok, seibro, fred, infomax, acm, krx,
+                      ecos_xlsx, nowcast)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"

@@ -22,7 +22,7 @@ import yaml
 
 from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos,
                       reb, bls, freesis, bok, seibro, fred, infomax, acm, krx,
-                      ecos_xlsx, nowcast)
+                      ecos_xlsx, nowcast, clevelandfed)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -47,6 +47,7 @@ SOURCES = {
     "frbsf": frbsf.fetch,
     "mof": mof.fetch,
     "cftc": cftc.fetch,
+    "clevelandfed": clevelandfed.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -200,7 +201,13 @@ def main():
                 except (json.JSONDecodeError, OSError):
                     old = None
             # 아카이브가 설정된 시작연도보다 늦게 시작하면 (예: 2011 > 2000) 전체 재수집
-            incremental = old is not None and (archive_start_year(old) or 9999) <= target_start
+            #
+            # always_full: 매번 전 이력을 통째로 받아 아카이브를 갈아엎는다.
+            #   소스 파일 자체가 작아서 증분이 의미 없고, 계열 이름이 시간에 따라
+            #   바뀌는 경우(클리블랜드 나우캐스트의 '빈티지 · 2026-09 · …')에 필요하다.
+            #   병합하면 지나간 계열이 영원히 쌓인다.
+            incremental = (not ind.get("always_full")) and old is not None \
+                and (archive_start_year(old) or 9999) <= target_start
             ind["_start_year"] = (
                 this_year - ind.get("refetch_years", 2) if incremental else target_start
             )

@@ -67,6 +67,8 @@ const chk = (name, elId) => {
     ev(`fundMode='season'; fundSeasonUnit='${u}'; renderFundFlow();`);
     chk('자금흐름 > season/' + u, 'retailWrap');
   }
+  ev(`fundMode='intra'; renderFundFlow();`);
+  chk('자금흐름 > intra', 'retailWrap');
   ev(`fundMode='change';`);
   await ev('enterHdebt()');
   for (const t of ['month', 'quarter']) {
@@ -80,6 +82,19 @@ const chk = (name, elId) => {
   }
   await ev('enterTaylor()'); chk('테일러 준칙', 'retailWrap');
   await ev('enterYen()').catch(() => {}); chk('엔캐리', 'retailWrap');
+  if (w.__MACRO__ && w.__MACRO__.us_nowcast) {
+    await ev('enterNowcast()');
+    for (const b of ['전년동월비', '전월비']) {
+      ev(`nowcBasis='${b}'; renderNowcast();`); chk('나우캐스트 > ' + b, 'retailWrap');
+    }
+  } else { console.log('  물가 나우캐스트              (데이터 없음 — python fetch.py us_nowcast)'); }
+  if (w.__MACRO__ && w.__MACRO__.kr_swap) {
+    await ev('enterIrs()');
+    chk('기준금리·IRS 시나리오', 'retailWrap');
+    // 탭을 떠났다가 돌아와도 뼈대를 다시 세우는지 (retailWrap 을 다른 화면이 갈아엎는다)
+    ev(`document.getElementById('retailWrap').innerHTML=''; renderIrs();`);
+    chk('IRS 재진입', 'retailWrap');
+  } else { console.log('  IRS 시나리오                 (데이터 없음 — python fetch.py kr_swap)'); }
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
   for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow', 'jolts', 'lmci']) {
     ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');

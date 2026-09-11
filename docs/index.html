@@ -145,6 +145,107 @@
   .grpbar button:hover { border-color: #b7c1d4; }
   .grpbar button.catbtn { background: #eaf1fd; color: #1a4fa0; border-color: #cadcf6; font-weight: 600; }
   .grpbar button.catbtn.off { background: #fff; color: #98a3b6; border-color: #e0e5ec; font-weight: 500; }
+
+  /* ── 기준금리·IRS 시나리오 ────────────────────────────────────────
+     원본 도구는 독립 HTML 이라 button{} textarea{} table{} 같은 전역 선택자를
+     썼다. 그대로 들어오면 대시보드 전체가 물들어서, 모든 규칙을 #irs_root
+     아래로 내렸다. id 도 전부 'irs_' 접두어를 붙여 충돌을 피한다. */
+  #irs_root { --paper:#F2F4F1; --panel:#FBFCFA; --ink:#1D2A33; --ink-soft:#56636B;
+    --grid:#DCE2DA; --grid-strong:#B7C2B8; --path:#245C4F; --market:#A8741A;
+    --gain:#C0392B; --loss:#1F5FAD; --shade:rgba(36,92,79,.07); --focus:#245C4F;
+    --cd:#6B4C9A; --rcv:#8A3B12;
+    color:var(--ink); font-size:15px; line-height:1.55; font-variant-numeric:tabular-nums; }
+  #irs_root .lede { margin:0 0 14px; color:var(--ink-soft); max-width:80ch; font-size:13px; }
+  #irs_root h2 { font-size:15px; margin:0 0 6px; }
+  #irs_root .data { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px;
+    padding:14px 16px; background:var(--panel); border:1px solid var(--grid);
+    border-left:4px solid var(--path); border-radius:6px; margin-bottom:12px; }
+  #irs_root .data .hint { margin:0 0 8px; font-size:12.5px; color:var(--ink-soft); }
+  #irs_root .data textarea { height:76px; }
+  #irs_root .row { display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  #irs_root .status { font-size:12.5px; color:var(--path); }
+  #irs_root .status.err { color:var(--gain); }
+  #irs_root .controls { display:flex; flex-wrap:wrap; gap:10px 20px; align-items:flex-end;
+    padding:14px 16px; background:var(--panel); border:1px solid var(--grid); border-radius:6px; }
+  #irs_root .controls label { display:flex; flex-direction:column; font-size:12.5px;
+    color:var(--ink-soft); gap:3px; }
+  #irs_root .controls input[type=number], #irs_root .controls input[type=date],
+  #irs_root .controls select { width:108px; padding:6px 8px; border:1px solid var(--grid-strong);
+    border-radius:4px; font:inherit; font-size:14px; color:var(--ink); background:#fff; }
+  #irs_root .controls input[type=date] { width:140px; }
+  #irs_root .controls select#irs_rcvSel { width:210px; }
+  #irs_root .controls select#irs_tenorSel { width:190px; }
+  #irs_root .controls .check { flex-direction:row; align-items:center; gap:6px; color:var(--ink); }
+  #irs_root .paygrp { display:flex; gap:10px; align-items:flex-end; padding:6px 10px 8px;
+    border:1px solid var(--grid-strong); border-radius:6px; background:#fff; }
+  #irs_root .paynote { font-size:11.5px; color:var(--ink-soft); margin-top:2px; min-height:16px; }
+  #irs_root .btns { display:flex; gap:8px; flex-wrap:wrap; }
+  #irs_root button { font:inherit; font-size:13.5px; padding:7px 12px; border-radius:4px;
+    cursor:pointer; border:1px solid var(--path); background:#fff; color:var(--path); }
+  #irs_root button.primary { background:var(--path); color:#fff; }
+  #irs_root button:hover { background:var(--shade); }
+  #irs_root button.primary:hover { background:#1c4a3f; }
+  #irs_root .chart { margin-top:14px; background:var(--panel); border:1px solid var(--grid);
+    border-radius:6px; padding:8px 8px 4px; }
+  #irs_root .svgbox { overflow-x:auto; }
+  #irs_root svg { display:block; width:100%; height:auto; user-select:none; }
+  #irs_root .legend { display:flex; flex-wrap:wrap; gap:6px 18px; font-size:12.5px;
+    color:var(--ink-soft); padding:2px 10px 8px; }
+  #irs_root .legend i { display:inline-block; vertical-align:middle; margin-right:6px; }
+  #irs_root .legend label { display:inline-flex; align-items:center; cursor:pointer; }
+  #irs_root .legend input { margin:0 6px 0 0; accent-color:var(--path); }
+  #irs_root .pt { cursor:ns-resize; touch-action:none; }
+  #irs_root .pt.locked { cursor:default; }
+  #irs_root .rcvh { cursor:ew-resize; touch-action:none; }
+  #irs_root .keys { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:18px;
+    border-top:2px solid var(--ink); border-bottom:1px solid var(--grid-strong); }
+  #irs_root .key { padding:12px 14px; border-left:1px solid var(--grid); }
+  #irs_root .key:first-child { border-left:0; }
+  #irs_root .key .lab { font-size:12.5px; color:var(--ink-soft); }
+  #irs_root .key .val { font-size:23px; font-weight:700; line-height:1.25; }
+  #irs_root .key .sub { font-size:12.5px; }
+  #irs_root .key.horizon { background:rgba(138,59,18,.06); }
+  #irs_root .two { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);
+    gap:22px; margin-top:22px; }
+  #irs_root .pl { width:100%; border-collapse:collapse; }
+  #irs_root .pl td { padding:7px 0; border-bottom:1px solid var(--grid); }
+  #irs_root .pl td:last-child { text-align:right; font-weight:600; }
+  #irs_root .pl tr.total td { border-top:2px solid var(--ink); border-bottom:0; font-size:16px; }
+  #irs_root .note { font-size:12.5px; color:var(--ink-soft); margin:8px 0 0; max-width:100ch; }
+  #irs_root .tbl { overflow-x:auto; }
+  #irs_root .tbl.tall { max-height:560px; overflow-y:auto; }
+  #irs_root table.fx, #irs_root table.cf { width:100%; border-collapse:collapse;
+    font-size:13px; white-space:nowrap; }
+  #irs_root table.fx th, #irs_root table.cf th { font-weight:600; text-align:right;
+    color:var(--ink-soft); border-bottom:1px solid var(--grid-strong); padding:6px 8px;
+    vertical-align:bottom; line-height:1.3; background:var(--paper); }
+  #irs_root table.fx td, #irs_root table.cf td { text-align:right; padding:6px 8px;
+    border-bottom:1px solid var(--grid); }
+  #irs_root table.fx th:first-child, #irs_root table.fx td:first-child,
+  #irs_root table.fx th:nth-child(2), #irs_root table.fx td:nth-child(2) { text-align:left; }
+  #irs_root table.cf .l { text-align:left; }
+  #irs_root table.cf th .r { font-weight:400; color:var(--ink); }
+  #irs_root table.cf td.none { color:var(--grid-strong); }
+  #irs_root table.cf td.net { font-weight:700; }
+  #irs_root table.cf tr.y2 td, #irs_root table.fx tr.y2 td { background:rgba(138,59,18,.05); }
+  #irs_root table.cf tr.event td { background:none; color:var(--rcv); font-weight:600;
+    text-align:left; border-bottom:1px solid var(--rcv); padding-top:10px; white-space:normal; }
+  #irs_root table.cf tr.tot td { border-top:2px solid var(--ink); border-bottom:0; font-weight:700; }
+  #irs_root table.cf .grp { border-bottom:0; text-align:center; color:var(--ink);
+    font-weight:700; padding-bottom:0; background:var(--paper); }
+  #irs_root .cfwrap { margin-top:26px; }
+  #irs_root .gain { color:var(--gain); } #irs_root .loss { color:var(--loss); }
+  #irs_root .export { margin-top:24px; }
+  #irs_root textarea { width:100%; height:120px; font:12.5px/1.45 Consolas,"D2Coding",monospace;
+    border:1px solid var(--grid-strong); border-radius:4px; padding:8px; background:#fff;
+    color:var(--ink); resize:vertical; }
+  #irs_root .msg { font-size:12.5px; color:var(--path); margin-left:8px; }
+  @media (max-width:900px) {
+    #irs_root .data { grid-template-columns:1fr; }
+    #irs_root .keys { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    #irs_root .key:nth-child(3) { border-left:0; }
+    #irs_root .two { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
@@ -341,12 +442,29 @@ const PALETTE = ['#1a4fa0','#d9534f','#2e8b57','#e8930c','#7b52ab','#17879c',
                  '#b0486e','#5c6b7a','#8aa832','#c26b1d','#4666d1','#9e3fbf'];
 let catalog = [], current = null, chart = null;
 // 메뉴·비교에서 숨길 지표 (기본분류는 PPI 산업별이 내부적으로 사용하므로 수집은 유지, 메뉴만 숨김)
+// 미국 대그룹 버튼 순서. indicators.yaml 은 수집 편의로 묶여 있어 보는 순서와 다르다.
+// 버튼을 다 만든 **뒤에** DOM 에서 자리만 옮긴다 — 어떤 지표에서 어떤 버튼이 생기는지
+// (US_EMP 처럼 지표 10개가 버튼 하나로 묶이는 경우 포함)를 건드리지 않아서
+// 지표가 늘거나 yaml 순서가 바뀌어도 깨지지 않는다. 없는 버튼은 그냥 건너뛴다.
+const NAV_ORDER = ['usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn', 'usEmpBtn', 'fedBtn', 'yenBtn'];
+function applyNavOrder(nav) {
+  const btns = NAV_ORDER.map(id => document.getElementById(id)).filter(Boolean);
+  if (btns.length < 2) return;
+  const first = [...nav.children].find(el => NAV_ORDER.includes(el.id));
+  if (!first) return;
+  const mark = document.createComment('nav-order');   // 첫 버튼 자리를 잡아 둔다
+  first.before(mark);
+  let prev = mark;
+  btns.forEach(b => { prev.after(b); prev = b; });
+  mark.remove();
+}
 const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
                   'kr_yield', 'kr_policy_bei', 'mkt_oil_fx',
                   // 메뉴에서 내린 한국 지표 (고용 총괄 ~ 테일러 준칙 구간)
                   'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm',
-                  'kr_kospi', 'kr_esi', 'kr_swap', 'kr_usdkrw', 'kr_credit_spread',
+                  // kr_swap 은 숨기지 않는다 — 그 자리에 'IRS 시나리오' 버튼이 생긴다
+                  'kr_kospi', 'kr_esi', 'kr_usdkrw', 'kr_credit_spread',
                   'kr_wage', 'kr_wage_it', 'kr_wage_hourly',
                   'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion',
                   // 전용 탭에서만 쓰는 미국 보조 지표 — 대그룹 메뉴에는 안 띄운다
@@ -583,7 +701,7 @@ function refresh() {
   const isNg = view === 'ngdp', isFc = view === 'fcst', isFv = view === 'fair', isJlt = view === 'jolts';
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
   const isUCpi = view === 'uscpi', isFed = view === 'fed', isHd = view === 'hdebt';
-  const isYen = view === 'yen';
+  const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
@@ -605,7 +723,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -618,12 +736,13 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || (isCombo && tab === 'chart')) ? '' : 'none';
-  document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || (isCombo && tab === 'chart')) ? '' : 'none';
+  // IRS 시나리오는 기간 선택기를 안 쓴다 (커브 평가일이 기준이라 기간 개념이 없다)
+  document.querySelector('.toolbar').style.display = ((isCombo && tab === 'map') || isIrs) ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
   if (isYld) renderYield();
@@ -643,6 +762,8 @@ function refresh() {
   else if (isUCpi) renderUsCpi();
   else if (isFed) renderFed();
   else if (isYen) renderYen();
+  else if (isNowc) renderNowcast();
+  else if (isIrs) renderIrs();
   else if (isHd) renderHdebt();
   else if (isUPpi) renderUsPpi();
   else if (isUPce) renderUsPce();
@@ -1443,9 +1564,16 @@ function renderPpiMainIndustry(modeBtnsHtml) {
 // ── 자금흐름 (FREESIS: 펀드·투자일임·투자자예탁금) — 카테고리 히트맵 + 추이 ──
 const FUND = { id: 'kr_fund_flow', name: '자금흐름', ids: ['kr_fund_flow', 'kr_bank_flow', 'kr_repo_flow'] };
 let fundData = null, fundCharts = [null, null], fundMode = 'change', fundCollapsed = null;
-// 탭(전일 증감/잔액/계절성)별로 좌·우 차트 선택을 따로 보관
-let fundSel = { change: [null, null], balance: [null, null], season: [null, null] };
-let fundSeasonUnit = 'pct';   // 계절성 탭: 'pct' = 월중 증감률 · 'eok' = 월중 증감액
+// 탭(전일 증감/잔액/계절성/월중 패턴)별로 좌·우 차트 선택을 따로 보관
+let fundSel = { change: [null, null], balance: [null, null], season: [null, null],
+                intra: [null, null] };
+let fundSeasonUnit = 'eok';   // 계절성 탭: 'eok' = 월중 증감액(기본) · 'pct' = 월중 증감률
+// 탭 버튼은 세 군데(증감·잔액·계절성·월중)에서 똑같이 그린다. 한 곳에서 만든다.
+const FUND_MODES = [['change', '전일 증감'], ['balance', '잔액'],
+                    ['season', '계절성'], ['intra', '월중 패턴']];
+const fundModeBar = () => '<div class="mode" id="fundModeBtns">'
+  + FUND_MODES.map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
+  + '</div>';
 // 펀드플로우 대시보드와 동일한 섹터·계층 (레벨: 섹터0 > 유형1 > 소분류2 > 항목3)
 // leaves 가 있으면 합계 행(하위 잎 시리즈의 합), 없으면 실제 시리즈 행.
 const EQ_DOM = ['공모 국내 주식', '사모 국내 주식'];
@@ -1634,6 +1762,7 @@ function renderFundFlow() {
   if (selPair[1] === null) selPair[1] = new Set(['채권형']);      // 오른쪽 차트 기본
   if (fundCollapsed === null) fundCollapsed = new Set();
   if (fundMode === 'season') { renderFundSeason(box, bal, rows, selPair); return; }
+  if (fundMode === 'intra') { renderFundIntra(box, chg, rows, selPair, cols); return; }
   // 셀 강조: 배경 대신 굵은 글씨 + 진하기(증감 크기에 비례) — 초록=증가 · 빨강=감소
   let mx = 1e-6;
   if (fundMode === 'change') rows.forEach(r => cols.forEach(d => { const v = val(r, d); if (v != null) mx = Math.max(mx, Math.abs(v)); }));
@@ -1648,9 +1777,8 @@ function renderFundFlow() {
   };
 
   let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
-    + '<div class="mode" id="fundModeBtns">'
-    + [['change', '전일 증감'], ['balance', '잔액'], ['season', '계절성']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><span style="font-size:12px;color:#555">단위: <b>' + unit + '</b></span></div>'
+    + fundModeBar()
+    + '<span style="font-size:12px;color:#555">단위: <b>' + unit + '</b></span></div>'
     + fundAlertStrip()
     + '<div id="fundChips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;min-height:22px"></div>'
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
@@ -1822,10 +1950,9 @@ function renderFundSeason(box, bal, rows, selPair) {
 
   const span = years.length ? `${years[0]}~${years[years.length - 1]}` : '';
   let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
-    + '<div class="mode" id="fundModeBtns">'
-    + [['change', '전일 증감'], ['balance', '잔액'], ['season', '계절성']].map(([v, t]) => `<button data-fm="${v}" class="${fundMode === v ? 'active' : ''}">${t}</button>`).join('')
-    + '</div><div class="mode" id="fundSeasonUnitBtns">'
-    + [['pct', '증감률 %'], ['eok', '증감액 조원']].map(([v, t]) => `<button data-su="${v}" class="${fundSeasonUnit === v ? 'active' : ''}">${t}</button>`).join('')
+    + fundModeBar()
+    + '<div class="mode" id="fundSeasonUnitBtns">'
+    + [['eok', '증감액 조원'], ['pct', '증감률 %']].map(([v, t]) => `<button data-su="${v}" class="${fundSeasonUnit === v ? 'active' : ''}">${t}</button>`).join('')
     + `</div><span style="font-size:12px;color:#555">월중 변동 · <b>${span}</b> · 단위 <b>${unit}</b></span></div>`
     + fundAlertStrip()
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
@@ -1933,6 +2060,257 @@ function renderFundSeason(box, bal, rows, selPair) {
              grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
         y1: { position: 'right', min: 0, suggestedMax: years.length,
               ticks: { font: { size: 10 }, stepSize: 2 }, grid: { drawOnChartArea: false } } } },
+  });
+}
+
+// ── 자금흐름 · 월중 패턴 ───────────────────────────────────────────
+// 계절성이 '몇 월인가'를 봤다면 여기는 '그 달의 몇 번째 영업일인가'를 본다.
+// 기관 자금(건보공단 등)이 월중에 들어왔다가 다음 달 초에 빠져나간다면
+// 영업일 서수에 고정된 톱니 모양으로 찍혀야 한다.
+//
+// 서수는 달력 일자가 아니라 **영업일 순서**로 센다. 달마다 주말·공휴일 위치가
+// 달라서 '10일'이 어떤 달은 3영업일째, 어떤 달은 7영업일째다. 달력 일자로 세면
+// 그 차이가 평균에 섞여 패턴이 뭉개진다.
+//
+// 칸 수는 데이터에 실제로 나온 최대 영업일까지만 만든다. 이론상 한 달 영업일은
+// 많아야 23일(31일 달이 월요일 시작, 공휴일 0)이지만 한국은 공휴일이 있어
+// 보통 19~22일이다. 22·23번째 칸은 몇 년에 한 번뿐이라 평균이 표본 한두 달로
+// 만들어진다 — 그런 칸은 흐리게 칠하고 헤더에 표본 수를 적어 둔다.
+const INTRA_YEARS = 5;       // 왼쪽 차트: 같은 달을 몇 년치 평균 낼 것인가
+const INTRA_THIN = 0.34;     // 표본이 전체 달의 이 비율 미만이면 '얇은 칸'으로 표시
+const QEND_MONTHS = [3, 6, 9, 12];
+
+function renderFundIntra(box, chg, rows, selPair, cols) {
+  const SCALE = 1e4;                                     // 억원 → 조원
+  const numOpt = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  const fmt = v => v == null ? '-' : v.toLocaleString('ko-KR', numOpt) + '조';
+
+  // 영업일 서수는 **기간 선택기와 무관하게** 전체 날짜로 매긴다. 선택 구간이
+  // 달 중간에서 시작하면 그 달의 첫 날이 1영업일째로 둔갑해 경로가 통째로 틀어진다.
+  const fullByYm = new Map();
+  periodDates.forEach(d => { const k = d.slice(0, 7); (fullByYm.get(k) || fullByYm.set(k, []).get(k)).push(d); });
+  const ord = new Map();
+  fullByYm.forEach(ds => ds.forEach((d, i) => ord.set(d, i + 1)));
+
+  // 통계에 쓸 달 고르기 — 두 종류를 뺀다.
+  //  ① 앞뒤가 잘린 달: 선택 구간이 달 중간을 자른 경우. 반쪽 경로다.
+  //  ② 진행 중인 달: 아직 안 끝났으니 '월중 경로'가 미완성이다.
+  //     차트에는 점선으로 그려 올해 흐름은 보되 평균에서는 뺀다 (계절성 탭과 같은 규칙).
+  const inSel = new Set(cols);
+  const cut = ym => (fullByYm.get(ym) || []).some(d => !inSel.has(d));
+  const lastD = periodDates[periodDates.length - 1] || '';
+  const partialYm = (() => {
+    if (!lastD) return null;
+    const y = +lastD.slice(0, 4), mo = +lastD.slice(5, 7), dd = +lastD.slice(8, 10);
+    return new Date(y, mo, 0).getDate() - dd > 4 ? lastD.slice(0, 7) : null;   // 연휴 감안 4일 여유
+  })();
+  const selYms = [...new Set(cols.map(d => d.slice(0, 7)))].sort();
+  const yms = selYms.filter(ym => !cut(ym) && ym !== partialYm);
+  const byYm = new Map(yms.map(ym => [ym, fullByYm.get(ym)]));
+  const dropped = selYms.filter(ym => !yms.includes(ym));
+
+  // 왼쪽 차트가 비교할 세 가지 — 이번 달 / 같은 달 지난 5년 / (분기말이면) 분기말 평균.
+  // 기간 선택기를 타지 않는다: 같은 달은 1년에 한 번뿐이라 선택 구간을 따르면
+  // 표본이 한두 개로 쪼그라든다.
+  const allYms = [...fullByYm.keys()].sort();
+  const curYm = allYms[allYms.length - 1] || '';
+  const curMo = +curYm.slice(5);
+  const sameMo = allYms.filter(ym => +ym.slice(5) === curMo && ym < curYm).slice(-INTRA_YEARS);
+  const qFrom = sameMo.length ? sameMo[0] : '';    // 분기말 평균도 같은 5년 창에서
+  const qYms = QEND_MONTHS.includes(curMo)
+    ? allYms.filter(ym => QEND_MONTHS.includes(+ym.slice(5)) && ym >= qFrom && ym < curYm) : [];
+  const yr = ym => ym.slice(0, 4);
+
+  // 칸은 실제로 나온 최대 영업일까지만 (보통 22, 드물게 23).
+  //  - SLOTS: 전 기간 기준. 왼쪽 차트가 선택 구간 밖의 달(지난 5년)도 그리기 때문.
+  //  - maxOrd: 선택 구간 기준. 표와 오른쪽 차트는 선택 구간만 쓴다.
+  const SLOTS = Array.from(
+    { length: [...fullByYm.values()].reduce((m, ds) => Math.max(m, ds.length), 0) },
+    (_, i) => i + 1);
+  const maxOrd = yms.reduce((m, ym) => Math.max(m, byYm.get(ym).length), 0);
+  const TBL = SLOTS.slice(0, maxOrd);
+  // 칸마다 표본이 몇 달인가 — 뒤쪽 칸은 영업일이 그만큼 되는 달만 들어간다
+  const slotN = SLOTS.map(n => yms.filter(ym => byYm.get(ym).length >= n).length);
+  const thin = i => yms.length && slotN[i] < yms.length * INTRA_THIN;
+  const slotLab = n => String(n);
+
+  // 항목 한 줄의 그날 증감 (집계행이면 잎들의 합)
+  const chgRow = (r, d) => r.leaves
+    ? (() => { let s = 0, ok = false; r.leaves.forEach(k => { const x = chg(k, d); if (x != null) { s += x; ok = true; } }); return ok ? s : null; })()
+    : chg(r.name, d);
+
+  // 영업일 서수별 통계 — 평균 일간 증감, 증가한 달 수, 표본 달 수
+  const statOf = r => {
+    const acc = new Map(SLOTS.map(s => [s, []]));
+    yms.forEach(ym => byYm.get(ym).forEach(d => {
+      const s = ord.get(d); if (!acc.has(s)) return;
+      const v = chgRow(r, d); if (v != null) acc.get(s).push(v / SCALE);
+    }));
+    return SLOTS.map(s => {
+      const xs = acc.get(s); if (!xs.length) return null;
+      const up = xs.filter(v => v > 0).length;
+      return { avg: xs.reduce((a, b) => a + b, 0) / xs.length, up, down: xs.length - up, n: xs.length };
+    });
+  };
+  const rowStat = new Map(rows.map(r => [r.name, statOf(r)]));
+
+  // 색 진하기의 기준(mx)은 표본이 충분한 칸에서만 잡는다. 표본 한두 달짜리
+  // 뒤쪽 칸이 유난히 크면 그 칸이 최댓값을 차지해 나머지가 전부 옅어진다.
+  let mx = 1e-6;
+  rowStat.forEach(a => a.forEach((s, i) => { if (s && !thin(i)) mx = Math.max(mx, Math.abs(s.avg)); }));
+  const cellStyle = (v, i) => {
+    if (v == null || !v) return '';
+    if (thin(i)) return 'color:#aab2bd';            // 표본이 얇은 칸 — 평균으로 못 읽는다
+    const t = Math.min(1, Math.abs(v) / mx);
+    const w = t > 0.5 ? 800 : (t > 0.15 ? 700 : 600);
+    const col = v > 0 ? [17, 105, 62] : [176, 32, 28];
+    const light = v > 0 ? [72, 152, 116] : [200, 96, 90];
+    const mix = col.map((c, j) => Math.round(light[j] + (c - light[j]) * (0.4 + 0.6 * t)));
+    return `color:rgb(${mix.join(',')});font-weight:${w}`;
+  };
+
+  if (!yms.length) {
+    box.innerHTML = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+      + fundModeBar() + '</div>'
+      + '<div style="padding:24px;color:#888">선택한 기간에 <b>온전히 끝난 달</b>이 없습니다.'
+      + (dropped.length ? ` (${dropped.join(', ')} 은 달 중간이 잘렸거나 아직 진행 중입니다)` : '')
+      + '<br>월중 패턴은 달 단위로 평균을 내므로 기간을 몇 달 이상으로 넓혀 주세요.</div>';
+    box.querySelectorAll('#fundModeBtns button').forEach(b => b.onclick = () => { fundMode = b.dataset.fm; renderFundFlow(); });
+    if (fundCharts[0]) { fundCharts[0].destroy(); fundCharts[0] = null; }
+    if (fundCharts[1]) { fundCharts[1].destroy(); fundCharts[1] = null; }
+    return;
+  }
+  const span = `${yms[0]}~${yms[yms.length - 1]} · ${yms.length}개월`;
+  let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+    + fundModeBar()
+    + `<span style="font-size:12px;color:#555">영업일별 평균 일간 증감 · <b>${span}</b> · 단위 <b>조원</b></span></div>`
+    + fundAlertStrip()
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:330px"><div class="cchart" style="height:280px"><canvas id="fundChart${i}"></canvas></div></div>`).join('')
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">가로축은 달력 일자가 아니라 <b>그 달의 몇 번째 영업일</b>입니다'
+    + ' (1 = 첫 영업일, 전월 마지막 영업일 대비 증감). 한국은 공휴일 때문에 한 달 영업일이 보통 19~22일이라'
+    + ` 칸은 ${maxOrd}개까지만 있고, <span style="color:#aab2bd">회색 칸</span>은 그만큼 긴 달이 드물어`
+    + ' 표본이 얇습니다(헤더 괄호 = 표본 달 수).'
+    + ' <b>항목 이름을 클릭</b>하면 그 항목을 차트로 봅니다.'
+    + `<br><b>왼쪽 차트</b>는 <b>${curYm}</b>(주황)을 같은 ${curMo}월 지난 ${sameMo.length}년 평균(파랑)`
+    + (qYms.length ? ', 분기말 평균(보라 점선)' : '') + '과 겹쳐 봅니다.'
+    + ' 같은 달은 1년에 한 번뿐이라 이 평균들은 <b>기간 선택기와 무관하게</b> 전 기간에서 뽑습니다.'
+    + ' <b>표와 오른쪽 차트</b>만 선택 기간을 따릅니다'
+    + (dropped.length ? ` — <b>${dropped.join(', ')}</b> 은 달 중간이 잘렸거나 아직 진행 중이라 뺐습니다` : '')
+    + '.</div>'
+    + '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + TBL.map((n, i) => `<th${thin(i) ? ' style="color:#aab2bd"' : ''} title="표본 ${slotN[i]}개월">`
+        + slotLab(n) + (thin(i) ? `<br><span style="font-weight:400;font-size:10px">(${slotN[i]})</span>` : '')
+        + '</th>').join('') + '</tr></thead><tbody>';
+  let hideLv = null;
+  rows.forEach(r => {
+    if (hideLv != null) { if (r.lv > hideLv) return; hideLv = null; }
+    const collapsed = fundCollapsed.has(r.name);
+    const caret = r._kids
+      ? `<span class="fcaret" data-fcar="${r.name}" style="cursor:pointer;color:#8592a3;user-select:none">${collapsed ? '＋' : '－'}</span> ` : '';
+    const mark = selPair[0].has(r.name) ? `<b style="color:${PALETTE[0]}">◀</b> ` : '';
+    const cls = r.lv === 0 ? 'lv0 sec-head' : `lv${Math.min(r.lv, 3)}`;
+    out += `<tr class="${cls}"><td data-fname="${r.name}" style="padding-left:${8 + r.lv * 15}px;cursor:pointer">${caret}${mark}${r.name}</td>`
+      + rowStat.get(r.name).slice(0, maxOrd).map((s, i) => `<td style="${cellStyle(s && s.avg, i)}">${s ? s.avg.toLocaleString('ko-KR', numOpt) : ''}</td>`).join('')
+      + '</tr>';
+    if (collapsed && r._kids) hideLv = r.lv;
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('#fundModeBtns button').forEach(b => b.onclick = () => { fundMode = b.dataset.fm; renderFundFlow(); });
+  box.querySelectorAll('.fcaret').forEach(el => el.onclick = e => {
+    e.stopPropagation(); const n = el.dataset.fcar;
+    fundCollapsed.has(n) ? fundCollapsed.delete(n) : fundCollapsed.add(n); renderFundFlow();
+  });
+  box.querySelectorAll('[data-fname]').forEach(td => {
+    td.onclick = () => { selPair[0] = new Set([td.dataset.fname]); renderFundFlow(); };
+  });
+
+  const pick = [...selPair[0]][0] || 'MMF';
+  const target = rows.find(r => r.name === pick) || rows[0];
+  const st = rowStat.get(target.name) || [];
+  const stT = st.slice(0, maxOrd);          // 표·오른쪽 차트는 선택 구간 칸까지만
+
+  // ① 이번 달이 평년과 다른가 — 딱 세 가지만 겹쳐 놓고 비교한다.
+  //    ㉠ 이번 달 실제 경로  ㉡ 같은 달 지난 5년 평균  ㉢ 분기말 평균(이번 달이 분기말일 때)
+  //    ㉡·㉢은 **기간 선택기와 무관하게 전 기간에서** 뽑는다. 같은 달은 1년에 한 번뿐이라
+  //    선택 구간을 따르면 표본이 한두 개로 쪼그라든다 (그래서 '전체 평균 (1개월)'이 나왔다).
+  const pathOf = ym => {
+    const ds = fullByYm.get(ym) || [];
+    let acc = 0; const out = new Map();
+    ds.forEach(d => { const v = chgRow(target, d); if (v == null) return;
+      acc += v / SCALE; out.set(ord.get(d), acc); });
+    return SLOTS.map(s => out.has(s) ? out.get(s) : null);
+  };
+  const meanOf = list => SLOTS.map((_, i) => {
+    const xs = list.map(p => p[i]).filter(v => v != null);
+    return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+  });
+  const dsPaths = [];
+  // 5년치 개별 달 — 평균선의 재료. 분포(폭)를 보라고 옅게 깔아 둔다.
+  sameMo.forEach(ym => dsPaths.push({ label: ym, data: pathOf(ym),
+    borderColor: 'rgba(108,120,138,0.45)', borderWidth: 1, pointRadius: 0,
+    pointHitRadius: 6, tension: 0.15, spanGaps: false, order: 5 }));
+  if (sameMo.length) dsPaths.push({
+    label: `${curMo}월 평균 (${yr(sameMo[0])}~${yr(sameMo[sameMo.length - 1])}, ${sameMo.length}년)`,
+    data: meanOf(sameMo.map(pathOf)),
+    borderColor: PALETTE[0], backgroundColor: PALETTE[0], borderWidth: 3.4,
+    pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: false, pop: true, order: 1 });
+  if (qYms.length) dsPaths.push({
+    label: `분기말 평균 (3·6·9·12월, ${qYms.length}개월)`, data: meanOf(qYms.map(pathOf)),
+    borderColor: '#9467bd', backgroundColor: '#9467bd', borderWidth: 2, borderDash: [6, 3],
+    pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: false, order: 3 });
+  if (curYm) dsPaths.push({
+    label: `${curYm}${curYm === partialYm ? ' (진행 중)' : ''}`, data: pathOf(curYm),
+    borderColor: '#e6550d', backgroundColor: '#e6550d', borderWidth: 2.6,
+    borderDash: curYm === partialYm ? [4, 3] : undefined,
+    pointRadius: 2.5, pointHitRadius: 8, tension: 0.15, spanGaps: false, pop: true, order: 2 });
+
+  if (fundCharts[0]) fundCharts[0].destroy();
+  fundCharts[0] = new Chart(box.querySelector('#fundChart0'), {
+    type: 'line', plugins: [LINE_POP],
+    data: { labels: SLOTS.map(slotLab), datasets: dsPaths },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        // 회색 개별 연도(order 5)는 범례에서 뺀다 — 평균선 라벨만 남긴다
+        legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 8,
+          filter: it => (dsPaths[it.datasetIndex] || {}).order < 5 } },
+        title: { display: true, text: `${pick} · 월중 누적 경로 (조원, 회색=지난 ${curMo}월들)`, font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${fmt(it.parsed.y)}` } } },
+      scales: { x: { ticks: { font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
+        y: { ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+
+  // ② 영업일별 평균 일간 증감 + 증가한 달 수. 막대가 한쪽으로 쏠려 있고
+  //    선(증가한 달 수)이 같이 치우치면 '우연히 큰 달 하나'가 아니라 반복되는 패턴이다.
+  if (fundCharts[1]) fundCharts[1].destroy();
+  fundCharts[1] = new Chart(box.querySelector('#fundChart1'), {
+    type: 'bar',
+    data: { labels: TBL.map(slotLab), datasets: [
+      { type: 'line', label: '증가한 달 (개, 우축)', data: stT.map(s => s ? s.up : null),
+        borderColor: '#c98a1a', backgroundColor: '#c98a1a', borderWidth: 2,
+        pointRadius: 2.5, tension: 0.15, yAxisID: 'y1', order: 1, pop: true, spanGaps: false },
+      { type: 'bar', label: '평균 일간 증감 (조원)', data: stT.map(s => s ? s.avg : null),
+        // 표본이 얇은 뒤쪽 칸은 회색으로 — 막대 높이만 보고 패턴으로 읽지 않게
+        backgroundColor: stT.map((s, i) => !s ? '#ccc' : thin(i) ? 'rgba(170,178,189,0.6)'
+          : (s.avg > 0 ? 'rgba(17,105,62,0.75)' : 'rgba(176,32,28,0.75)')),
+        borderWidth: 0, yAxisID: 'y', order: 2 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: `${pick} · 영업일별 평균 일간 증감`, font: { size: 12 } },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex, callbacks: {
+          label: it => { const s = stT[it.dataIndex]; if (!s) return ' -';
+            return it.dataset.yAxisID === 'y1'
+              ? ` 증가 ${s.up} / 감소 ${s.down} (총 ${s.n}개월)` : ` 평균: ${fmt(s.avg)}`; } } } },
+      scales: { x: { ticks: { font: { size: 10 }, autoSkip: false, maxRotation: 0 } },
+        y: { position: 'left', ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+        y1: { position: 'right', min: 0, suggestedMax: yms.length,
+              ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } } } },
   });
 }
 
@@ -5943,7 +6321,7 @@ function gdpAddNet(ind) {
   return ind;
 }
 
-const US_CPI = { id: 'us_cpi_all', name: '미국 소비자물가',
+const US_CPI = { id: 'us_cpi_all', name: '미국 CPI',
                  ids: ['us_cpi', 'us_cpi_nsa'] };
 // 표시 순서·들여쓰기 (시트 순서 그대로). [이름, 레벨, 주요항목여부]
 const US_CPI_ROWS = [
@@ -6402,6 +6780,29 @@ function renderUsEmp() {
 // 당월 실업자로 나누면 값이 어긋난다 (2026-07 기준 23.63% vs 24.23%, 공표치는 23.6%).
 const NBER_REC = [['1990-07', '1991-03'], ['2001-03', '2001-11'],
                   ['2007-12', '2009-06'], ['2020-02', '2020-04']];
+// 가로축이 일별인데 의미 단위는 '달'일 때, 달이 바뀌는 자리에 세로 구분선을 긋는다.
+// 라벨 문자열(dateLabel)만으로는 달 경계를 알 수 없어 원본 날짜를 옵션으로 받는다.
+//   options.plugins.monthSep = { dates: ['2026-09-01', …] }
+const MONTH_SEP = {
+  id: 'monthSep',
+  beforeDatasetsDraw(c, _a, opts) {
+    const ds = (opts && opts.dates) || [], x = c.scales.x;
+    if (!x || ds.length < 2) return;
+    const ctx = c.ctx, top = c.chartArea.top, bot = c.chartArea.bottom;
+    ctx.save();
+    ctx.strokeStyle = (opts && opts.color) || 'rgba(0,0,0,0.16)';
+    ctx.lineWidth = 1;
+    ctx.font = '10px Helvetica'; ctx.fillStyle = '#8592a3'; ctx.textAlign = 'left';
+    for (let i = 1; i < ds.length; i++) {
+      if (ds[i].slice(0, 7) === ds[i - 1].slice(0, 7)) continue;
+      const a = x.getPixelForValue(i - 1), b = x.getPixelForValue(i);
+      const px = (a + b) / 2;                   // 두 점 사이에 긋는다 (점 위가 아니라)
+      ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bot); ctx.stroke();
+      if (!opts || opts.label !== false) ctx.fillText(ds[i].slice(2, 7), px + 3, top + 10);
+    }
+    ctx.restore();
+  },
+};
 const REC_SHADE = {
   id: 'recShade',
   beforeDatasetsDraw(c, _a, opts) {
@@ -7506,7 +7907,7 @@ let bevAll = 1;   // 베버리지 곡선 표본: 1 = 전 구간(시기 비교용
 //  YoY 는 원계열(WPU)을 쓴다 — BLS 공표 관례다.
 //  가중치는 시트 A열의 최종수요 상대중요도. 재화 30.16 + 서비스 67.18 = 97.34 이고
 //  나머지 2.66 은 '최종수요 건설'인데 시트가 받지 않아 기여도에 잔차로 남는다.
-const US_PPI = { id: 'usppi', name: '미국 생산자물가', ids: ['us_ppi', 'us_ppi_nsa'] };
+const US_PPI = { id: 'usppi', name: '미국 PPI', ids: ['us_ppi', 'us_ppi_nsa'] };
 let usPpiData = null, usPpiTab = 'chg', usPpiCharts = [null, null];
 //  [표시명, 들여쓰기, 가중치]
 const US_PPI_ROWS = [
@@ -8523,6 +8924,873 @@ function renderHdebt() {
 const YEN = { id: 'yen', name: '엔캐리', ids: ['mkt_yen', 'mkt_jgb', 'mkt_cot_jpy'] };
 const YEN_COEF = { gap: 0.4 / 0.1, vix: 0.2 / 10, pos: 0.6 / 8 };  // 1단위당 절상 %
 let yenData = null, yenCharts = [null, null, null, null], yenWin = 5;   // 변화 측정 기간(영업일)
+
+// ── 미국 물가 나우캐스트 (클리블랜드 연준) ─────────────────────────
+// BLS·BEA 공표 전에 그 달 물가를 매 영업일 추정한다. 값 자체보다 **매일 바뀐다는 것**
+// 이 핵심이라, 발표일까지의 빈티지 경로와 확정치와의 오차를 같이 본다.
+//
+// 나우캐스트는 '예측'이 아니라 '현재 추정'이다. 이미 나온 일별·주별 자료(유가,
+// 주간 휘발유가 등)를 그 달 물가로 환산하는 것이라, 달이 진행될수록 자동으로
+// 정확해진다. 그래서 경로가 발표일에 가까워질수록 확정치로 수렴하는 게 정상이고,
+// 수렴하지 않으면 그 달에 예외적인 일이 있었다는 뜻이다.
+const NOWC = { id: 'nowcast', name: '물가 나우캐스트', ids: ['us_nowcast'] };
+const NOWC_MEAS = ['CPI', '근원 CPI', 'PCE', '근원 PCE'];
+const NOWC_COL = { 'CPI': '#e03430', '근원 CPI': '#478ec7', 'PCE': '#e6870d', '근원 PCE': '#2ca02c' };
+let nowcData = null, nowcCharts = [null, null, null];
+let nowcBasis = '전년동월비', nowcMeas = '근원 CPI';
+
+async function enterNowcast() {
+  const got = await loadIndicator('us_nowcast').catch(() => null);
+  if (!got) { alert('나우캐스트 데이터가 없습니다. python fetch.py us_nowcast 실행 필요.'); return; }
+  nowcData = got;
+  current = { id: NOWC.id, name: NOWC.name, freq: 'M', unit: '%',
+              updated_at: got.updated_at, series: [] };
+  view = 'nowcast';
+  document.getElementById('title').textContent = NOWC.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + got.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'nowcBtn'));
+  // 가로축은 월별(대상 월) 계열 기준. 빈티지는 일별이라 여기에 섞지 않는다.
+  const ds = new Set();
+  got.series.filter(s => !s.name.startsWith('빈티지')).forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 60)];   // 기본 최근 5년
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderNowcast() {
+  const box = document.getElementById('retailWrap');
+  const S = {};
+  nowcData.series.forEach(s => S[s.name] = new Map(s.data.map(p => [p.d, p.v])));
+  const basis = nowcBasis;
+  const fmt = v => v == null ? '-' : v.toFixed(2) + '%';
+  const fmtP = v => v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + '%p';
+
+  const nowc = m => S[`${basis} · ${m} 나우캐스트`] || new Map();
+  const act = m => S[`${basis} · ${m} 실제`] || new Map();
+  // 빈티지는 대상 월마다 따로 저장돼 있다 (빈티지 · 기준 · 2026-09 · CPI)
+  const vint = (m, t) => S[`빈티지 · ${basis} · ${t} · ${m}`] || new Map();
+  const targets = [...new Set(nowcData.series
+    .filter(s => s.name.startsWith(`빈티지 · ${basis} · `))
+    .map(s => s.name.split(' · ')[2]))].sort();
+  if (!targets.length) { box.innerHTML = '<div style="padding:24px;color:#888">빈티지 계열이 없습니다.</div>'; return; }
+
+  // ── 빈티지를 하나의 긴 시계열로 잇는다.
+  // 한 시점에 두 대상 월이 동시에 열려 있다(이번 달 + 아직 발표 안 난 지난달).
+  // 그래서 규칙을 하나 정한다: **빈티지 날짜가 속한 달을 대상으로 한 나우캐스트**만 쓴다.
+  // = '그때그때 이번 달 물가를 얼마로 보고 있었나'. 달이 바뀌면 선이 끊기고 새로 시작한다.
+  const vAll = [...new Set(targets.flatMap(t => NOWC_MEAS.flatMap(m => [...vint(m, t).keys()])))].sort();
+  const vLine = m => vAll.map(d => vint(m, d.slice(0, 7)).get(d) ?? null);
+  // 확정치는 대상 월마다 값 하나 → 일별 축에서는 계단이 된다 (stepped)
+  const monthEnd = new Map();                    // 'YYYY-MM' → 월말 날짜 키
+  [...nowc(NOWC_MEAS[0]).keys()].forEach(d => monthEnd.set(d.slice(0, 7), d));
+  const vAct = m => vAll.map(d => { const e = monthEnd.get(d.slice(0, 7)); return e ? (act(m).get(e) ?? null) : null; });
+
+  // ── 요약 카드: 가장 최근 대상 월의 최신 나우캐스트와 직전 빈티지 대비 변화
+  const curT = targets[targets.length - 1];
+  const curEnd = monthEnd.get(curT) || '';
+  const cards = NOWC_MEAS.map(m => {
+    const v = vint(m, curT), ks = [...v.keys()].sort();
+    const cur = ks.length ? v.get(ks[ks.length - 1]) : null;
+    const prv = ks.length > 1 ? v.get(ks[ks.length - 2]) : null;
+    return { m, cur, chg: cur != null && prv != null ? cur - prv : null,
+             a: curEnd ? (act(m).get(curEnd) ?? null) : null };
+  });
+  const cardHtml = cards.map(c => `<div style="flex:1;min-width:150px;border:1px solid #e3e8ef;border-radius:6px;`
+    + `padding:8px 10px;${c.m === nowcMeas ? 'box-shadow:inset 0 0 0 1px ' + NOWC_COL[c.m] : ''}">`
+    + `<div style="font-size:11px;color:#8592a3">${c.m}</div>`
+    + `<div style="font-size:19px;font-weight:700;color:${NOWC_COL[c.m]}">${fmt(c.cur)}</div>`
+    + `<div style="font-size:11px;color:#555">전일 ${c.chg == null ? '-' : fmtP(c.chg)}`
+    + (c.a != null ? ` · <b>확정 ${fmt(c.a)}</b>` : ' · 미발표') + '</div></div>').join('');
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+    + '<div class="mode" id="nowcMeasBtns">'
+    + NOWC_MEAS.map(m => `<button data-nm="${m}" class="${nowcMeas === m ? 'active' : ''}">${m}</button>`).join('')
+    + '</div><div class="mode" id="nowcBasisBtns">'
+    + ['전년동월비', '전월비'].map(v => `<button data-nb="${v}" class="${basis === v ? 'active' : ''}">${v}</button>`).join('')
+    + `</div><span style="font-size:12px;color:#555">대상 월 <b>${curT}</b> · 최신 빈티지 `
+    + `<b>${vAll.length ? dateLabel(vAll[vAll.length - 1]) : '-'}</b></span></div>`
+    + `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${cardHtml}</div>`
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="nowcChart0"></canvas></div></div>'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="nowcChart1"></canvas></div></div>'
+    + '</div>'
+    + '<div class="cchart" style="height:230px;margin-bottom:12px"><canvas id="nowcChart2"></canvas></div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">오른쪽 <b>빈티지</b> 차트는 기간 선택기를 타지 않습니다'
+    + ` — 일별 빈티지는 최근 ${targets.length}개 대상 월만 보관합니다 (${targets[0]}~${curT}).`
+    + ' 선이 달마다 끊기는 건 대상 월이 바뀌어서입니다. 확정치는 그 달 값 하나라 계단으로 그려집니다.</div>';
+
+  // ── 정확도 표: 확정치가 있는 달만
+  const stat = NOWC_MEAS.map(m => {
+    const N = nowc(m), A = act(m);
+    const es = [...A.keys()].filter(d => inRange(d) && N.has(d)).map(d => N.get(d) - A.get(d));
+    if (!es.length) return { m, n: 0 };
+    const abs = es.map(Math.abs);
+    return { m, n: es.length,
+      bias: es.reduce((a, b) => a + b, 0) / es.length,
+      mae: abs.reduce((a, b) => a + b, 0) / abs.length,
+      max: Math.max(...abs),
+      hit: es.filter(e => Math.abs(e) <= 0.1).length / es.length * 100 };
+  });
+  out += '<table class="data vlines" style="max-width:640px"><thead><tr><th>측정치</th>'
+    + '<th>평균 오차</th><th>평균 절대오차</th><th>최대 오차</th><th>±0.1%p 이내</th><th>표본</th></tr></thead><tbody>'
+    + stat.map(s => `<tr><td style="color:${NOWC_COL[s.m]};font-weight:700">${s.m}</td>`
+      + (s.n ? `<td>${fmtP(s.bias)}</td><td>${s.mae.toFixed(2)}%p</td><td>${s.max.toFixed(2)}%p</td>`
+             + `<td>${s.hit.toFixed(0)}%</td><td>${s.n}개월</td>`
+             : '<td colspan="5" style="color:#888">확정치 없음</td>') + '</tr>').join('')
+    + '</tbody></table>'
+    + '<div style="font-size:12px;color:#8592a3;margin-top:6px">오차 = 최종 나우캐스트 − 확정치.'
+    + ' <b>평균 오차</b>가 0에서 멀면 한쪽으로 치우쳐 틀린다는 뜻(편의)이고,'
+    + ' <b>평균 절대오차</b>는 방향과 무관한 크기입니다. 둘을 같이 봐야 합니다 —'
+    + ' 위아래로 크게 틀려도 평균 오차는 0에 가깝게 나옵니다.</div>';
+  box.innerHTML = out;
+
+  box.querySelectorAll('#nowcBasisBtns button').forEach(b => b.onclick = () => { nowcBasis = b.dataset.nb; renderNowcast(); });
+  box.querySelectorAll('#nowcMeasBtns button').forEach(b => b.onclick = () => { nowcMeas = b.dataset.nm; renderNowcast(); });
+
+  // ① 최종 나우캐스트 vs 확정치 (월별 이력)
+  const cols = periodDates.filter(inRange);
+  const N = nowc(nowcMeas), A = act(nowcMeas);
+  if (nowcCharts[0]) nowcCharts[0].destroy();
+  nowcCharts[0] = new Chart(box.querySelector('#nowcChart0'), {
+    type: 'line', plugins: [LINE_POP],
+    data: { labels: cols.map(dateLabel), datasets: [
+      { label: '나우캐스트 (최종)', data: cols.map(d => N.get(d) ?? null),
+        borderColor: NOWC_COL[nowcMeas], backgroundColor: NOWC_COL[nowcMeas],
+        borderWidth: 2.2, pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: false, order: 2 },
+      { label: '확정치', data: cols.map(d => A.get(d) ?? null),
+        borderColor: '#333', backgroundColor: '#333', borderWidth: 1.6, borderDash: [5, 3],
+        pointRadius: 0, pointHitRadius: 8, tension: 0.15, spanGaps: false, pop: true, order: 1 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: `${nowcMeas} · 나우캐스트 vs 확정치 (${basis}, %)`, font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${fmt(it.parsed.y)}` } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+        y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+
+  // ② 빈티지 경로 (긴 시계열) — 매일의 '이번 달' 추정치와, 나중에 나온 확정치(계단)
+  if (nowcCharts[1]) nowcCharts[1].destroy();
+  nowcCharts[1] = new Chart(box.querySelector('#nowcChart1'), {
+    type: 'line', plugins: [LINE_POP, MONTH_SEP],
+    data: { labels: vAll.map(dateLabel), datasets: [
+      { label: '확정치 (계단)', data: vAct(nowcMeas),
+        borderColor: '#333', backgroundColor: '#333', borderWidth: 1.6, borderDash: [5, 3],
+        stepped: true, pointRadius: 0, pointHitRadius: 8, spanGaps: false, pop: true, order: 1 },
+      { label: '나우캐스트 (일별)', data: vLine(nowcMeas),
+        borderColor: NOWC_COL[nowcMeas], backgroundColor: NOWC_COL[nowcMeas],
+        borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.1, spanGaps: false, order: 2 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        monthSep: { dates: vAll, label: false },   // 라벨은 x축 눈금이 대신한다
+        title: { display: true, text: `${nowcMeas} · 일별 빈티지 vs 확정치 (${basis}, %)`, font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${fmt(it.parsed.y)}` } } },
+      // 가로축 눈금을 **달의 첫 영업일에만** 둔다. Chart.js 기본 격자선은 끈다.
+      // 기본 격자(autoSkip 위치)와 월 구분선은 위치가 다르다 — 둘 다 켜면 세로선이
+      // 두 벌로 겹쳐 '간격이 불규칙한' 것처럼 보인다.
+      scales: {
+        x: { grid: { display: false },
+          ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false,
+            callback: (_v, i) => (i === 0 || vAll[i].slice(0, 7) !== vAll[i - 1].slice(0, 7))
+              ? vAll[i].slice(2, 7) : '' } },
+        y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+
+  // ③ 오차 막대 — 위로 솟으면 나우캐스트가 물가를 과대평가한 달
+  const errs = cols.map(d => (N.has(d) && A.has(d)) ? N.get(d) - A.get(d) : null);
+  if (nowcCharts[2]) nowcCharts[2].destroy();
+  nowcCharts[2] = new Chart(box.querySelector('#nowcChart2'), {
+    type: 'bar',
+    data: { labels: cols.map(dateLabel), datasets: [
+      { label: '오차 (나우캐스트 − 확정치, %p)', data: errs,
+        backgroundColor: errs.map(e => e == null ? '#ccc'
+          : (e > 0 ? 'rgba(176,32,28,0.75)' : 'rgba(17,105,62,0.75)')), borderWidth: 0 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: `${nowcMeas} · 오차 (빨강=과대, 초록=과소)`, font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.parsed.y == null ? '-' : fmtP(it.parsed.y)}` } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+        y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+}
+
+// ── 기준금리·IRS 시나리오 ──────────────────────────────────────────
+// 기준금리 경로를 손으로 끌어 그리면 → CD91 경로가 따라오고 → 그 CD 로 IRS PAY 의
+// 현금흐름과 중도 RCV 청산 손익이 계산된다.
+//
+// 이 화면만 다른 화면과 구조가 다르다. 독립 HTML 도구를 옮겨온 것이라 Chart.js 를
+// 쓰지 않고 SVG 를 직접 그리고, 드래그·키보드로 값을 바꾼다. 그래서:
+//   · CSS 는 전부 #irs_root 아래로 스코프를 내렸다 (원본은 button{} 같은 전역 선택자를 썼다)
+//   · DOM id 는 전부 'irs_' 접두어. $() 가 접두어를 붙여 주므로 본문 코드는 원본과 같다
+//   · 상태(경로·커브·호가)는 모듈 변수에 남고, DOM 은 탭을 옮기면 지워지므로
+//     다시 들어올 때 boot() 가 이벤트를 새로 붙인다
+//
+// 시장 데이터는 Macrobox 것을 쓴다 — IRS 호가는 kr_swap, 첫 CD 확정치는
+// kr_yield_daily 의 CD(91일), 현재 기준금리는 kr_base_rate 의 최신 영업일 값.
+// 무이표 커브(분기 120행)만 프라이싱 시스템 값이라 붙여넣기로 받는다.
+const IRS = { id: 'irs', name: '기준금리·IRS 시나리오',
+              ids: ['kr_swap', 'kr_yield_daily', 'kr_base_rate'] };
+let irsData = null;
+
+const IRS_APP = (function () {
+  const DAY = 86400000, D = (y, m, d) => Date.UTC(y, m - 1, d), STEP = 0.25, CDSTEP = 0.05, MAXM = 120;
+  const MEET = new Set([1, 2, 4, 5, 7, 8, 10, 11]);
+  const STD_TENORS = [6, 9, 12, 18, 24, 36, 48, 60, 72, 84, 96, 108, 120];
+  const LS_CURVE = 'macrobox.irs.curve', LS_QUOTE = 'macrobox.irs.quotes';
+  const $ = id => document.getElementById('irs_' + id);
+  const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : 0; };
+  const iso = t => new Date(t).toISOString().slice(0, 10);
+  const fmtD = t => { const d = new Date(t);
+    return `${String(d.getUTCFullYear()).slice(2)}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')}`; };
+  const tenorLabel = m => m % 12 === 0 ? `${m / 12}Y` : `${m}M`;
+  const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+  const recall = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+
+  // 기본 커브 — 붙여넣기 전에도 화면이 돌아가게 하는 예시값 (2026-09-10 기준)
+  const DEFAULT_CURVE = "20260910,3.02987;20261211,3.10708;20270311,3.36268;20270611,3.49242;20270913,3.59748;20271213,3.6793;20280313,3.76112;20280612,3.80911;20280911,3.8571;20281211,3.88497;20290312,3.91283;20290611,3.9407;20290911,3.96887;20291211,3.9878;20300311,4.00652;20300611,4.02566;20300916,4.04584;20301211,4.05693;20310311,4.06854;20310611,4.0804;20310911,4.09227;20311211,4.10059;20320311,4.10891;20320611,4.11732;20320913,4.12591;20321213,4.13174;20330311,4.13739;20330613,4.14341;20330912,4.14925;20331212,4.15165;20340313,4.15405;20340612,4.15645;20340911,4.15885;20341211,4.16505;20350312,4.17125;20350611,4.17745;20350911,4.18372;20351211,4.18929;20360311,4.19485;20360611,4.20048;20360911,4.20611;20361211,4.20873;20370311,4.21133;20370611,4.21398;20370911,4.21663;20371211,4.22009;20380311,4.2235;20380611,4.22699;20380916,4.23068;20381213,4.22768;20390311,4.22468;20390613,4.22148;20390912,4.21838;20391212,4.21528;20400312,4.21218;20400611,4.20908;20400911,4.20595;20401211,4.20285;20410311,4.19978;20410611,4.19665;20410912,4.19348;20411211,4.18717;20420311,4.18085;20420611,4.17439;20420911,4.16794;20421211,4.16155;20430311,4.15524;20430611,4.14878;20430911,4.14232;20431211,4.13594;20440311,4.12955;20440613,4.12295;20440912,4.11657;20441212,4.11018;20450313,4.10379;20450612,4.09741;20450911,4.09102;20451211,4.08463;20460312,4.07825;20460611,4.07186;20460911,4.0654;20461211,4.05827;20470311,4.05122;20470611,4.04401;20470911,4.0368;20471211,4.02967;20480311,4.02254;20480611,4.01533;20480911,4.00812;20481211,4.00098;20490311,3.99393;20490611,3.98672;20490914,3.97928;20491213,3.97222;20500311,3.96533;20500613,3.95796;20500912,3.95083;20501212,3.9437;20510313,3.93656;20510612,3.92943;20510911,3.9223;20511211,3.91327;20520311,3.90424;20520611,3.89512;20520911,3.88599;20521211,3.87696;20530311,3.86803;20530611,3.85891;20530911,3.84978;20531211,3.84075;20540311,3.83182;20540611,3.82269;20540911,3.81357;20541211,3.80454;20550311,3.79561;20550611,3.78648;20550913,3.77716;20551213,3.76813;20560313,3.7591;20560612,3.75007";
+  const DEFAULT_ROWS = DEFAULT_CURVE.split(';').map(s => { const [d, z] = s.split(',');
+    return [D(+d.slice(0, 4), +d.slice(4, 6), +d.slice(6, 8)), +z]; });
+
+  let rowsNow = DEFAULT_ROWS, M = null, quotes = {}, cdQuote = null,
+      n = 8, path = [], adj = [], rcvQ = 4, rcvWant = 4, NM = 25,
+      SY = 2026, SMO = 9, YMIN = 2, YMAX = 5.5;
+  let pasteText = '', pasteQText = '', booted = false, svg = null;
+
+  // ---------- market ----------
+  function nextWeekday(t) { let x = t + DAY; while ([0, 6].includes(new Date(x).getUTCDay())) x += DAY; return x; }
+  function buildMarket(rows, spot) {
+    const T0 = rows[0][0]; if (spot == null) spot = nextWeekday(T0);
+    const K = Math.min(rows.length - 1, MAXM / 3);
+    const SCHED = [spot, ...rows.slice(1, K + 1).map(r => r[0])];
+    const TAU = SCHED.map((t, i) => i ? ((t - SCHED[i - 1]) / DAY) / 365 : 0);
+    const PP = SCHED.map((t, k) => Math.exp(-rows[k][1] / 100 * ((t - T0) / DAY) / 365));
+    const MKT = []; for (let k = 0; k < K; k++) MKT.push((PP[k] / PP[k + 1] - 1) / TAU[k + 1] * 100);
+    return { T0, spot, K, SCHED, TAU, PP, MKT };
+  }
+  function swapRate(a, b) { let s = 0; for (let i = a + 1; i <= b; i++) s += M.TAU[i] * M.PP[i];
+    return (M.PP[a] - M.PP[b]) / s * 100; }
+
+  // ---------- parsing ----------
+  function parseDate(s) {
+    s = s.trim(); let m;
+    if ((m = s.match(/^(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/))) return D(+m[1], +m[2], +m[3]);
+    if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return D(+m[1], +m[2], +m[3]);
+    if ((m = s.match(/^(\d{2})[-./](\d{1,2})[-./](\d{1,2})$/))) return D(2000 + (+m[1]), +m[2], +m[3]);
+    if (/^\d{5}(\.\d+)?$/.test(s)) { const v = Math.floor(+s); if (v > 30000 && v < 80000) return (v - 25569) * DAY; }
+    return null;
+  }
+  const splitCells = line => line.split(/\t|;|,(?=\s*\S)|\s{2,}/).map(c => c.trim()).filter(Boolean);
+  const isNum = c => /^-?\d+(\.\d+)?\s*%?$/.test(c);
+  function parsePaste(text) {
+    const rows = [];
+    for (const line of text.split(/\r?\n/)) {
+      const cells = splitCells(line); let di = -1, dt = null;
+      for (let i = 0; i < cells.length; i++) { const d = parseDate(cells[i]); if (d != null) { di = i; dt = d; break; } }
+      if (di < 0) continue;
+      const v = cells.slice(di + 1).find(isNum);
+      if (v != null) rows.push([dt, parseFloat(v)]);
+    }
+    return rows;
+  }
+  function parseTenor(c) {
+    let m;
+    if (/^CD/i.test(c)) return 'CD';
+    if ((m = c.match(/(\d{1,2}(?:\.\d+)?)\s*(Y|년)/i))) return Math.round(parseFloat(m[1]) * 12);
+    if ((m = c.match(/(\d{1,3})\s*(M|개월)/i))) return parseInt(m[1], 10);
+    return null;
+  }
+  function parseQuotes(text) {
+    const q = {}; let cd = null;
+    for (const line of text.split(/\r?\n/)) {
+      const cells = splitCells(line); let ti = -1, ten = null;
+      for (let i = 0; i < cells.length; i++) { if (isNum(cells[i])) continue;
+        const t = parseTenor(cells[i]); if (t != null) { ti = i; ten = t; break; } }
+      if (ti < 0) continue;
+      const v = cells.slice(ti + 1).find(isNum); if (v == null) continue;
+      const r = parseFloat(v); if (r < -5 || r > 30) continue;
+      if (ten === 'CD') cd = r; else if (ten >= 6) q[ten] = r;
+    }
+    return { q, cd };
+  }
+  function validateCurve(rows) {
+    if (rows.length < 3) return `일자와 무이표금리가 있는 행을 ${rows.length}개 찾았습니다. 평가일부터 분기 행을 복사해 주세요.`;
+    for (let k = 1; k < rows.length && k <= MAXM / 3; k++) {
+      const gap = Math.round((rows[k][0] - rows[k - 1][0]) / DAY);
+      if (gap < 80 || gap > 100) return `${iso(rows[k - 1][0])}와 ${iso(rows[k][0])} 사이가 ${gap}일입니다. 첫 행이 평가일이고 이후가 분기 간격인지 확인해 주세요.`;
+    }
+    for (const [d, z] of rows.slice(0, MAXM / 3 + 1)) if (z < -5 || z > 30) return `${iso(d)}의 무이표금리가 ${z}로 읽혔습니다. 일자 바로 오른쪽 열이 무이표금리인지 확인해 주세요.`;
+    return null;
+  }
+  const setStatus = (id, msg, err) => { const s = $(id); if (!s) return;
+    s.textContent = msg; s.classList.toggle('err', !!err); };
+
+  // ---------- Macrobox 시장데이터 → 호가 텍스트 ----------
+  // kr_swap 의 'IRS 2Y' 같은 이름에서 만기를 뽑고, 각 계열의 마지막 값을 쓴다.
+  // 계열마다 마지막 영업일이 다를 수 있어(호가 공백) 날짜를 맞추지 않고 각자 최신을 쓴다.
+  function marketQuoteText() {
+    if (!irsData || !irsData.swap) return null;
+    const last = s => { for (let i = s.data.length - 1; i >= 0; i--) if (s.data[i].v != null) return s.data[i]; return null; };
+    const lines = [];
+    const cd = irsData.cd && irsData.cd.series.find(s => baseName(s.name).startsWith('CD('));
+    const cdL = cd && last(cd);
+    if (cdL) lines.push(`CD91\t${cdL.v.toFixed(3)}`);
+    const got = [];
+    irsData.swap.series.forEach(s => {
+      const nm = baseName(s.name);
+      if (!/^IRS\s/i.test(nm)) return;
+      const m = parseTenor(nm.replace(/^IRS\s*/i, ''));
+      if (typeof m !== 'number' || m < 6) return;
+      const p = last(s); if (!p) return;
+      got.push([m, p.v, p.d]);
+    });
+    if (!got.length) return null;
+    got.sort((a, b) => a[0] - b[0]);
+    got.forEach(([m, v]) => lines.push(`${m < 12 ? String(m).padStart(2, '0') + 'M' : tenorLabel(m)}\t${v.toFixed(4)}`));
+    return { text: lines.join('\n'), asof: got[got.length - 1][2], n: got.length,
+             cd: cdL ? cdL.v : null, cdAsof: cdL ? cdL.d : null };
+  }
+  function marketBaseRate() {
+    const b = irsData && irsData.base && irsData.base.series[0];
+    if (!b) return null;
+    for (let i = b.data.length - 1; i >= 0; i--) if (b.data[i].v != null) return b.data[i];
+    return null;
+  }
+
+  // ---------- tenor / rcv selects ----------
+  function tenorList() {
+    const set = new Set([...STD_TENORS, ...Object.keys(quotes).map(Number)]);
+    return [...set].filter(m => m % 3 === 0 && m >= 6 && m <= MAXM).sort((a, b) => a - b);
+  }
+  function fillTenorSelect() {
+    const s = $('tenorSel'), cur = n * 3; s.innerHTML = '';
+    tenorList().forEach(m => {
+      const o = document.createElement('option'); o.value = m;
+      const ok = m / 3 <= M.K, q = quotes[m];
+      o.textContent = `${tenorLabel(m)}  ${q != null ? q.toFixed(4) + '%' : ok ? '커브 역산' : ''}${ok ? '' : ' (커브 부족)'}`;
+      o.disabled = !ok; s.appendChild(o);
+    });
+    if (cur / 3 <= M.K) s.value = cur;
+  }
+  function fillRcvSelect() {
+    const s = $('rcvSel'); s.innerHTML = '';
+    for (let q = 1; q < n; q++) { const o = document.createElement('option'); o.value = q;
+      o.textContent = `${q * 3}M 뒤 (${fmtD(M.SCHED[q])}), 잔여 ${tenorLabel((n - q) * 3)}`; s.appendChild(o); }
+    s.value = rcvQ;
+  }
+  function setPayRate() {
+    const m = n * 3, par = swapRate(0, n), q = quotes[m];
+    if (q != null) { $('fixed').value = q.toFixed(4);
+      $('paynote').textContent = `MID ${tenorLabel(m)}, 커브 역산 ${par.toFixed(4)}% (${((q - par) * 100 >= 0 ? '+' : '−') + Math.abs((q - par) * 100).toFixed(1)}bp)`; }
+    else { $('fixed').value = par.toFixed(4);
+      $('paynote').textContent = `MID 없음, 커브에서 역산한 ${tenorLabel(m)} 스왑금리`; }
+  }
+  function monthsSetup(keep) {
+    const d0 = new Date(M.T0), dn = new Date(M.SCHED[n]);
+    SY = d0.getUTCFullYear(); SMO = d0.getUTCMonth() + 1;
+    const newNM = (dn.getUTCFullYear() - SY) * 12 + (dn.getUTCMonth() + 1 - SMO) + 1;
+    if (keep && path.length) {
+      const last = path[path.length - 1];
+      path = Array.from({ length: newNM }, (_, m) => m < path.length ? path[m] : last);
+      adj = Array.from({ length: newNM }, (_, m) => m < adj.length ? adj[m] : 0);
+    } else {
+      path = Array(newNM).fill(Math.round(num('b0') / STEP) * STEP); adj = Array(newNM).fill(0);
+    }
+    NM = newNM;
+  }
+  function setTenor(m, keep) {
+    n = Math.max(2, Math.min(M.K, m / 3));
+    rcvQ = Math.max(1, Math.min(n - 1, rcvWant));
+    $('tenorSel').value = n * 3;
+    setPayRate(); monthsSetup(keep); fillRcvSelect(); setupChart(); render();
+  }
+  function syncCD() {
+    $('cd0').value = (cdQuote != null ? cdQuote : M.MKT[0]).toFixed(3);
+    $('spread').value = Math.round((num('cd0') - num('b0')) * 100);
+  }
+
+  // ---------- apply ----------
+  function applyCurve(rows, label) {
+    rowsNow = rows; M = buildMarket(rows, null);
+    $('spotDate').value = iso(M.spot);
+    if (n > M.K) n = Math.max(2, M.K);
+    syncCD(); fillTenorSelect(); setTenor(n * 3, false);
+    setStatus('status', `${label}: 평가일 ${iso(M.T0)}, 스팟 ${iso(M.spot)}, ${tenorLabel(M.K * 3)}까지. 커브 역산 CD ${M.MKT[0].toFixed(3)}%, 1Yx1Y ${M.K >= 8 ? swapRate(4, 8).toFixed(3) + '%' : '−'}`);
+  }
+  function applyQuotes(text, label) {
+    const r = parseQuotes(text), keys = Object.keys(r.q).map(Number).sort((a, b) => a - b);
+    if (!keys.length && r.cd == null) { setStatus('statusQ', '만기와 금리를 읽지 못했습니다. 06M, 1Y 같은 만기 열과 금리 열을 함께 복사해 주세요.', true); return false; }
+    quotes = r.q; cdQuote = r.cd;
+    syncCD(); fillTenorSelect(); setPayRate(); render();
+    setStatus('statusQ', `${label}: ${cdQuote != null ? 'CD ' + cdQuote.toFixed(3) + '%, ' : ''}IRS ${keys.length}개 (${keys.length ? tenorLabel(keys[0]) + '~' + tenorLabel(keys[keys.length - 1]) : '없음'})`);
+    return true;
+  }
+  function applyPasteCurve() {
+    const text = $('paste').value; pasteText = text;
+    if (!text.trim()) { setStatus('status', '붙여넣은 데이터가 없습니다.', true); return; }
+    const rows = parsePaste(text), err = validateCurve(rows);
+    if (err) { setStatus('status', err, true); return; }
+    store(LS_CURVE, text);                       // 다음에 들어올 때 다시 안 넣어도 되게
+    applyCurve(rows, `${rows.length}행을 적용했습니다`);
+  }
+  function applyPasteQuotes() {
+    const text = $('pasteQ').value; pasteQText = text;
+    if (!text.trim()) { setStatus('statusQ', '붙여넣은 데이터가 없습니다.', true); return; }
+    if (applyQuotes(text, '스왑금리(MID)를 적용했습니다')) store(LS_QUOTE, text);
+  }
+
+  // ---------- scenario model ----------
+  const ym = m => ({ y: SY + Math.floor((SMO - 1 + m) / 12), mo: (SMO - 1 + m) % 12 + 1 });
+  const mDate = m => { const { y, mo } = ym(m); return D(y, mo, 15); };
+  const cdDate = m => { const { y, mo } = ym(m); return D(y, mo, 1); };
+  function baseOn(t) {
+    const d = new Date(t); let idx = (d.getUTCFullYear() - SY) * 12 + (d.getUTCMonth() + 1 - SMO);
+    if (d.getUTCDate() < 15) idx -= 1;
+    return path[Math.max(0, Math.min(NM - 1, idx))];
+  }
+  function avg91(t) { let s = 0; for (let k = 0; k < 91; k++) s += baseOn(t + k * DAY); return s / 91; }
+  const autoCD = t => avg91(t) + num('spread') / 100;
+  function adjAt(t) {
+    let pt = M.T0, pv = 0; if (t <= pt) return 0;
+    for (let m = 1; m < NM; m++) { const ct = cdDate(m); if (t <= ct) return pv + (adj[m] - pv) * (t - pt) / (ct - pt); pt = ct; pv = adj[m]; }
+    return pv;
+  }
+  const cdAt = t => autoCD(t) + adjAt(t);
+
+  function compute() {
+    const q = rcvQ, C = num('fixed'), N = num('notional') * 10000, tp = num('tp') / 100, TAU = M.TAU, S = M.SCHED;
+    const fix = [num('cd0')]; for (let k = 1; k < n; k++) fix.push(cdAt(S[k]));
+    let fv = 0;
+    for (let i = 1; i <= q; i++) { if (i > 1) fv *= 1 + fix[i - 1] / 100 * TAU[i]; fv += N * (fix[i - 1] - C) / 100 * TAU[i]; }
+    let df = 1, ann = 0, flt = 0;
+    for (let i = q + 1; i <= n; i++) { const f = fix[i - 1] + (i - 1 > q ? tp : 0); df /= 1 + f / 100 * TAU[i]; ann += TAU[i] * df; flt += TAU[i] * df * f; }
+    const R = flt / ann, unwind = N * (R - C) / 100 * ann;
+    const cf = []; let cum = 0;
+    for (let i = 1; i <= n; i++) {
+      const t = TAU[i], f = fix[i - 1];
+      const payFix = -N * C / 100 * t, payFlt = N * f / 100 * t;
+      const rcvFix = i > q ? N * R / 100 * t : null, rcvFlt = i > q ? -N * f / 100 * t : null;
+      const net = payFix + payFlt + (rcvFix || 0) + (rcvFlt || 0); cum += net;
+      cf.push({ i, start: S[i - 1], end: S[i], days: Math.round(t * 365), f, payFix, payFlt, rcvFix, rcvFlt, net, cum });
+    }
+    return { q, C, N, fix, fv, R, ann, unwind, total: fv + unwind, beR: C - fv / (N / 100 * ann), Rmkt: swapRate(q, n), cf };
+  }
+
+  // ---------- chart ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  const L = 58, Rm = 22, T = 40, B = 64, HH = 470, H = HH - T - B;
+  let VW = 1000, W = VW - L - Rm;
+  const el = (tag, a, parent) => { const e = document.createElementNS(NS, tag);
+    for (const k in a) e.setAttribute(k, a[k]); (parent || svg).appendChild(e); return e; };
+  const setA = (e, a) => { for (const k in a) e.setAttribute(k, a[k]); };
+  const clamp = v => Math.max(YMIN, Math.min(YMAX, v));
+  const snap = v => clamp(Math.round(v / STEP) * STEP);
+  let xT, xM, yV, cx, cy, t0, t1, G = {};
+
+  function setRange() {
+    const sp = num('spread') / 100, b0 = num('b0'), mk = M.MKT.slice(0, n);
+    const lo = Math.min(b0, ...mk.map(v => v - sp)), hi = Math.max(b0, ...mk);
+    YMIN = Math.floor((lo - 0.75) / STEP) * STEP; YMAX = Math.ceil((hi + 1.0) / STEP) * STEP;
+    if (YMAX - YMIN < 3) YMAX = YMIN + 3;
+  }
+  const mktPoints = sp => { const a = []; for (let k = 1; k < n; k++) a.push({ t: M.SCHED[k] + 45.5 * DAY, v: M.MKT[k] - sp }); return a; };
+  const svgPt = e => { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+    return p.matrixTransform(svg.getScreenCTM().inverse()); };
+  const yToV = y => YMAX - (y - T) / H * (YMAX - YMIN);
+  function dragY(elm, onVal, onStep, tipFn) {
+    let drag = false;
+    elm.addEventListener('pointerdown', e => { drag = true; elm.setPointerCapture(e.pointerId); tipFn(); e.preventDefault(); });
+    elm.addEventListener('pointermove', e => { if (drag) onVal(yToV(svgPt(e).y)); });
+    const end = () => { drag = false; hideTip(); };
+    elm.addEventListener('pointerup', end); elm.addEventListener('pointercancel', end);
+    elm.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp') { onStep(1); e.preventDefault(); }
+      if (e.key === 'ArrowDown') { onStep(-1); e.preventDefault(); }
+    });
+    elm.addEventListener('focus', tipFn); elm.addEventListener('blur', hideTip);
+  }
+
+  function setupChart() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    VW = Math.max(1000, L + Rm + (NM - 1) * 40); W = VW - L - Rm;
+    svg.setAttribute('viewBox', `0 0 ${VW} ${HH}`);
+    svg.style.width = VW > 1000 ? VW + 'px' : '100%';
+    setRange(); path = path.map(v => clamp(v));
+    const S = M.SCHED; t0 = mDate(0); t1 = mDate(NM - 1);
+    xT = t => L + (t - t0) / (t1 - t0) * W; xM = m => xT(mDate(m)); yV = v => T + (YMAX - v) / (YMAX - YMIN) * H;
+    cx = t => Math.max(L, Math.min(L + W, xT(t))); cy = v => Math.max(T, Math.min(T + H, yV(v)));
+
+    G.shade = el('rect', { y: T, height: H, fill: 'rgba(138,59,18,.06)' });
+    const steps = Math.round((YMAX - YMIN) / STEP);
+    for (let i = 0; i <= steps; i++) {
+      const v = YMIN + i * STEP, major = Math.abs(v - Math.round(v)) < 1e-9, half = Math.abs(v * 2 - Math.round(v * 2)) < 1e-9;
+      el('line', { x1: L, x2: L + W, y1: yV(v), y2: yV(v), stroke: major ? 'var(--grid-strong)' : 'var(--grid)', 'stroke-width': major ? 1.2 : 1 });
+      if (half) { const tx = el('text', { x: L - 8, y: yV(v) + 4, 'text-anchor': 'end', 'font-size': 12, fill: 'var(--ink-soft)' }); tx.textContent = v.toFixed(2) + '%'; }
+    }
+    for (let k = 1; k < n; k++) el('line', { x1: cx(S[k]), x2: cx(S[k]), y1: T, y2: T + H, stroke: 'var(--grid-strong)', 'stroke-dasharray': '3 4', 'stroke-width': 1 });
+    [[1, '3M'], [2, '6M'], [3, '9M']].filter(([k]) => k < n).forEach(([k, lab]) => {
+      const tx = el('text', { x: cx(S[k]) + 4, y: T + 13, 'font-size': 12, fill: 'var(--ink-soft)' }); tx.textContent = lab + ' 뒤 CD';
+    });
+    for (let m = 0; m < NM; m++) {
+      const { y, mo } = ym(m), x = xM(m);
+      el('line', { x1: x, x2: x, y1: T + H, y2: T + H + 5, stroke: 'var(--grid-strong)' });
+      const tx = el('text', { x, y: T + H + 19, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--ink)' }); tx.textContent = mo;
+      if (MEET.has(mo)) el('rect', { x: x - 3, y: T + H + 25, width: 6, height: 6, fill: 'var(--ink)' });
+      if (mo === 1 || m === 0) { const ty = el('text', { x, y: T + H + 48, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--ink-soft)' }); ty.textContent = y + '년'; }
+    }
+    const arr = len => Array.from({ length: len });
+    G.gImp = el('g', {}); G.gMktCD = el('g', {}); G.gCD = el('g', {});
+    G.mktLine = el('polyline', { fill: 'none', stroke: 'var(--market)', 'stroke-width': 1.5, 'stroke-dasharray': '2 4' }, G.gImp);
+    G.mktDots = arr(n - 1).map(() => el('circle', { r: 4.5, fill: 'var(--panel)', stroke: 'var(--market)', 'stroke-width': 2 }, G.gImp));
+    G.mktCDSeg = arr(n - 1).map(() => el('line', { stroke: 'var(--market)', 'stroke-width': 2, 'stroke-dasharray': '7 5' }, G.gMktCD));
+    G.cdLine = el('polyline', { fill: 'none', stroke: 'var(--cd)', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, G.gCD);
+    G.fixDot = arr(n - 1).map(() => el('circle', { r: 4, fill: 'var(--cd)', stroke: 'var(--panel)', 'stroke-width': 1.5 }, G.gCD));
+    G.line = el('polyline', { fill: 'none', stroke: 'var(--path)', 'stroke-width': 2.5, 'stroke-linejoin': 'round' });
+    G.cdPts = [];
+    for (let m = 1; m < NM; m++) {
+      const { y, mo } = ym(m);
+      const p = el('polygon', { class: 'pt', fill: 'var(--panel)', stroke: 'var(--cd)', 'stroke-width': 2.2, tabindex: 0, 'aria-label': `${y}년 ${mo}월 1일 CD` }, G.gCD);
+      G.cdPts[m] = p;
+      const tip = () => showCDTip(m);
+      dragY(p, v => setCD(m, v), dir => { adj[m] = Math.round((adj[m] + dir * CDSTEP) / CDSTEP) * CDSTEP; render(); tip(); }, tip);
+    }
+    G.pts = [];
+    for (let m = 0; m < NM; m++) {
+      const { y, mo } = ym(m);
+      const c = el('circle', { r: m ? 7 : 6, class: 'pt' + (m ? '' : ' locked'), fill: m ? 'var(--panel)' : 'var(--path)', stroke: 'var(--path)', 'stroke-width': 2.5,
+        tabindex: m ? 0 : -1, 'aria-label': `${y}년 ${mo}월 기준금리` });
+      G.pts.push(c);
+      if (m) dragY(c, v => setMonth(m, v), dir => setMonth(m, path[m] + dir * STEP), () => showBaseTip(m));
+    }
+    G.rcvLine = el('line', { y1: T, y2: T + H, stroke: 'var(--rcv)', 'stroke-width': 2 });
+    G.rcvH = el('g', { class: 'rcvh', tabindex: 0, 'aria-label': 'RCV 시점, 좌우 방향키로 이동' });
+    G.rcvBg = el('rect', { y: 6, height: 24, rx: 4, fill: 'var(--rcv)' }, G.rcvH);
+    G.rcvTx = el('text', { y: 23, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 700, fill: '#fff' }, G.rcvH);
+    let dragR = false;
+    G.rcvH.addEventListener('pointerdown', e => { dragR = true; G.rcvH.setPointerCapture(e.pointerId); e.preventDefault(); });
+    G.rcvH.addEventListener('pointermove', e => {
+      if (!dragR) return;
+      const x = svgPt(e).x; let best = 1, bd = 1e9;
+      for (let q = 1; q < n; q++) { const d = Math.abs(cx(M.SCHED[q]) - x); if (d < bd) { bd = d; best = q; } }
+      setRcv(best);
+    });
+    const endR = () => { dragR = false; };
+    G.rcvH.addEventListener('pointerup', endR); G.rcvH.addEventListener('pointercancel', endR);
+    G.rcvH.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') { setRcv(rcvQ - 1); e.preventDefault(); }
+      if (e.key === 'ArrowRight') { setRcv(rcvQ + 1); e.preventDefault(); }
+    });
+    G.gLab = el('g', {});
+    G.fixLab = arr(n - 1).map(() => el('text', { 'text-anchor': 'start', 'font-size': 11.5, 'font-weight': 700, fill: 'var(--cd)', stroke: 'var(--panel)', 'stroke-width': 3.5, 'paint-order': 'stroke', 'stroke-linejoin': 'round' }, G.gLab));
+    G.tip = el('g', { visibility: 'hidden' });
+    G.tipBg = el('rect', { rx: 3, fill: 'var(--ink)' }, G.tip); G.tipTx = el('text', { fill: '#fff', 'font-size': 13, 'font-weight': 600 }, G.tip);
+    applyToggles();
+  }
+  function placeTip(x0, y0, text) {
+    G.tipTx.textContent = text;
+    const bb = G.tipTx.getBBox(), x = Math.min(x0 + 12, L + W - bb.width - 10), yy = Math.max(y0 - 16, T + 20);
+    setA(G.tipTx, { x: x + 6, y: yy }); setA(G.tipBg, { x, y: yy - 15, width: bb.width + 12, height: 21 });
+    G.tip.setAttribute('visibility', 'visible'); svg.appendChild(G.tip);
+  }
+  const hideTip = () => { if (G.tip) G.tip.setAttribute('visibility', 'hidden'); };
+  function showBaseTip(m) { const { y, mo } = ym(m); placeTip(xM(m), yV(path[m]), `${y}년 ${mo}월 기준금리 ${path[m].toFixed(2)}%`); }
+  function showCDTip(m) {
+    const { y, mo } = ym(m), t = cdDate(m), a = autoCD(t), bpv = Math.round(adj[m] * 100);
+    placeTip(xT(t), yV(a + adj[m]), `${y}년 ${mo}월 1일 CD ${(a + adj[m]).toFixed(3)}% (연동 ${a.toFixed(3)}% ${bpv >= 0 ? '+' : '−'}${Math.abs(bpv)}bp)`);
+  }
+  const diamond = (x, y, s) => `${x},${y - s} ${x + s},${y} ${x},${y + s} ${x - s},${y}`;
+
+  function drawChart(r) {
+    const S = M.SCHED;
+    G.line.setAttribute('points', path.map((v, m) => `${xM(m)},${yV(v)}`).join(' '));
+    G.pts.forEach((c, m) => setA(c, { cx: xM(m), cy: yV(path[m]) }));
+    const pts = [], tEnd = Math.min(t1, S[n]), stepD = (NM > 40 ? 6 : 3) * DAY;
+    for (let t = t0; t <= tEnd; t += stepD) pts.push(`${xT(t)},${cy(cdAt(t))}`);
+    pts.push(`${xT(tEnd)},${cy(cdAt(tEnd))}`);
+    G.cdLine.setAttribute('points', pts.join(' '));
+    for (let m = 1; m < NM; m++) { const t = cdDate(m); G.cdPts[m].setAttribute('points', diamond(xT(t), cy(cdAt(t)), 6.5)); }
+    for (let k = 1; k < n; k++) {
+      const x = cx(S[k]), y = cy(r.fix[k]);
+      setA(G.fixDot[k - 1], { cx: x, cy: y }); setA(G.fixLab[k - 1], { x: x + 6, y: y - 8 }); G.fixLab[k - 1].textContent = r.fix[k].toFixed(2);
+    }
+    const mp = mktPoints(num('spread') / 100);
+    G.mktLine.setAttribute('points', mp.map(p => `${xT(p.t)},${cy(p.v)}`).join(' '));
+    mp.forEach((p, i) => setA(G.mktDots[i], { cx: xT(p.t), cy: cy(p.v) }));
+    for (let k = 1; k < n; k++) { const y = cy(M.MKT[k]); setA(G.mktCDSeg[k - 1], { x1: cx(S[k]) + 2, x2: cx(S[k + 1]) - 2, y1: y, y2: y }); }
+    const xr = cx(S[rcvQ]);
+    setA(G.shade, { x: xr, width: cx(S[n]) - xr }); setA(G.rcvLine, { x1: xr, x2: xr });
+    G.rcvTx.textContent = `RCV ${fmtD(S[rcvQ])}`;
+    const w = 112, bx = Math.max(L, Math.min(L + W - w, xr - w / 2));
+    setA(G.rcvBg, { x: bx, width: w }); setA(G.rcvTx, { x: bx + w / 2 });
+  }
+  function applyToggles() { [['showCD', 'gCD'], ['showCD', 'gLab'], ['showMktCD', 'gMktCD'], ['showImp', 'gImp']].forEach(([id, g]) => { if (G[g]) G[g].setAttribute('visibility', $(id).checked ? 'visible' : 'hidden'); }); }
+  function setMonth(m, val) {
+    val = snap(val); const d = val - path[m]; if (!d) return;
+    if ($('prop').checked) { for (let j = m; j < NM; j++) path[j] = snap(path[j] + d); } else path[m] = val;
+    render(); showBaseTip(m);
+  }
+  function setCD(m, val) {
+    const a = autoCD(cdDate(m)), v = Math.round((val - a) / CDSTEP) * CDSTEP;
+    if (Math.abs(v - adj[m]) < 1e-9) return; adj[m] = v; render(); showCDTip(m);
+  }
+  function setRcv(q) { q = Math.max(1, Math.min(n - 1, q)); rcvWant = q; if (q === rcvQ) return; rcvQ = q; $('rcvSel').value = q; render(); }
+
+  // ---------- output ----------
+  const man = v => { const r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r).toLocaleString('ko-KR'); };
+  const manW = v => man(v) + '만원';
+  const cls = v => Math.round(v) > 0 ? 'gain' : Math.round(v) < 0 ? 'loss' : '';
+  const bp = v => { const r = v * 100; return (r >= 0.05 ? '+' : r <= -0.05 ? '−' : '') + Math.abs(r).toFixed(1) + 'bp'; };
+
+  function render() {
+    // 차트 뼈대가 아직 없거나(DOM 이 갈아엎힌 직후) 화면에서 떨어져 있으면 그리지 않는다
+    if (!svg || !svg.isConnected || !G.line) return;
+    const r = compute(), S = M.SCHED, MKT = M.MKT, q = r.q, ten = tenorLabel(n * 3), rem = tenorLabel((n - q) * 3);
+    drawChart(r);
+    const preSum = r.cf.filter(c => c.i <= q).reduce((a, c) => a + c.net, 0);
+    const postSum = r.cf.filter(c => c.i > q).reduce((a, c) => a + c.net, 0);
+    const finSum = preSum + postSum, dR = r.R - r.Rmkt;
+    const vcls = v => cls(v) ? ' ' + cls(v) : '';
+    $('keys').innerHTML =
+      `<div class="key horizon"><div class="lab">RCV 금리 (${fmtD(S[q])}, 잔여 ${rem})</div><div class="val">${r.R.toFixed(3)}%</div>` +
+        `<div class="sub ${dR > 0 ? 'gain' : dR < 0 ? 'loss' : ''}">오늘 선도스왑 ${r.Rmkt.toFixed(3)}% 대비 ${bp(dR)}</div></div>` +
+      `<div class="key"><div class="lab">RCV 전 PAY 누적 순현금 (${q}개 구간)</div><div class="val${vcls(preSum)}">${manW(preSum)}</div>` +
+        `<div class="sub" style="color:var(--ink-soft)">${fmtD(S[0])} ~ ${fmtD(S[q])} 지급분</div></div>` +
+      `<div class="key"><div class="lab">RCV 이후 순현금 (${n - q}개 구간)</div><div class="val${vcls(postSum)}">${manW(postSum)}</div>` +
+        `<div class="sub" style="color:var(--ink-soft)">(${r.R.toFixed(3)}% − ${r.C.toFixed(3)}%) × ${rem} 확정</div></div>` +
+      `<div class="key"><div class="lab">최종 순현금 (${fmtD(S[n])} 만기)</div><div class="val${vcls(finSum)}">${manW(finSum)}</div>` +
+        `<div class="sub" style="color:var(--ink-soft)">할인 전 합, RCV 시점 가치 ${manW(r.total)}</div></div>`;
+
+    const lockedSum = r.cf.filter(c => c.i > q).reduce((a, c) => a + c.net, 0);
+    $('pl').innerHTML =
+      `<tr><td>${ten} PAY ${r.C.toFixed(4)}%, 캐리 ${q}개 구간 (RCV 시점까지 재투자)</td><td class="${cls(r.fv)}">${manW(r.fv)}</td></tr>` +
+      `<tr><td>RCV 청산 가치 (${fmtD(S[q])} 시점)</td><td class="${cls(r.unwind)}">${manW(r.unwind)}</td></tr>` +
+      `<tr><td style="color:var(--ink-soft);padding-left:12px">잔여 ${n - q}개 구간 확정 순현금 합계</td><td class="${cls(lockedSum)}" style="font-weight:400">${manW(lockedSum)}</td></tr>` +
+      `<tr class="total"><td>합계 (${fmtD(S[q])} 시점 가치)</td><td class="${cls(r.total)}">${manW(r.total)}</td></tr>`;
+    $('plnote').textContent = `이 캐리라면 잔여 ${rem} RCV 금리가 ${r.beR.toFixed(3)}% 이상이어야 손익이 0 이상입니다. RCV 금리 1bp당 약 ${Math.round(r.N / 100 * r.ann / 100).toLocaleString('ko-KR')}만원입니다.`;
+
+    let t = '<tr><th>구간</th><th>확정일</th><th>시나리오 CD</th><th>연동분</th><th>조정분</th><th>시장 선도</th><th>차이</th></tr>';
+    for (let k = 0; k < n; k++) {
+      const a = k ? autoCD(S[k]) : null, ad = k ? adjAt(S[k]) : null, df = r.fix[k] - MKT[k];
+      t += `<tr class="${k >= q ? 'y2' : ''}"><td>${k + 1}</td><td>${fmtD(S[k])}</td><td>${r.fix[k].toFixed(3)}%${k ? '' : ' 확정'}</td><td>${k ? a.toFixed(3) + '%' : '−'}</td><td>${k ? (ad >= -0.0005 ? '+' : '−') + Math.abs(ad * 100).toFixed(1) + 'bp' : '−'}</td><td>${MKT[k].toFixed(3)}%</td><td class="${k === 0 ? '' : df > 0.00005 ? 'gain' : df < -0.00005 ? 'loss' : ''}">${k ? bp(df) : '−'}</td></tr>`;
+    }
+    $('fx').innerHTML = t;
+
+    let c = `<tr><th rowspan="2" class="l">구간</th><th rowspan="2" class="l">기간 (지급일 = 종료일)</th><th rowspan="2">일수</th><th rowspan="2">CD 확정치</th>` +
+      `<th class="grp" colspan="2">${ten} PAY 스왑</th><th class="grp" colspan="2">잔여 ${rem} RCV 스왑 (${fmtD(S[q])} 체결)</th><th rowspan="2">순현금</th><th rowspan="2">누적 순현금</th></tr>` +
+      `<tr><th>고정 지급<br><span class="r">${r.C.toFixed(4)}%</span></th><th>변동 수취<br><span class="r">CD</span></th>` +
+      `<th>고정 수취<br><span class="r">${r.R.toFixed(4)}%</span></th><th>변동 지급<br><span class="r">CD</span></th></tr>`;
+    const tot = { pf: 0, pl: 0, rf: 0, rl: 0, net: 0 };
+    r.cf.forEach(x => {
+      if (x.i === q + 1) c += `<tr class="event"><td colspan="10">${fmtD(S[q])} RCV 체결: 잔여 ${rem}를 ${r.R.toFixed(4)}%에 RCV. 이후 CD 수취와 지급이 상쇄되어 순현금은 (${r.R.toFixed(4)}% − ${r.C.toFixed(4)}%) × 일수/365로 확정됩니다.</td></tr>`;
+      tot.pf += x.payFix; tot.pl += x.payFlt; tot.rf += x.rcvFix || 0; tot.rl += x.rcvFlt || 0; tot.net += x.net;
+      c += `<tr class="${x.i > q ? 'y2' : ''}"><td class="l">${x.i}</td><td class="l">${fmtD(x.start)} ~ ${fmtD(x.end)}</td><td>${x.days}</td><td>${x.f.toFixed(3)}%</td>` +
+        `<td>${man(x.payFix)}</td><td>${man(x.payFlt)}</td>` +
+        (x.rcvFix == null ? `<td class="none">−</td><td class="none">−</td>` : `<td>${man(x.rcvFix)}</td><td>${man(x.rcvFlt)}</td>`) +
+        `<td class="net ${cls(x.net)}">${man(x.net)}</td><td class="${cls(x.cum)}">${man(x.cum)}</td></tr>`;
+    });
+    c += `<tr class="tot"><td colspan="4" class="l">합계 (할인 전 단순합)</td><td>${man(tot.pf)}</td><td>${man(tot.pl)}</td><td>${man(tot.rf)}</td><td>${man(tot.rl)}</td><td class="${cls(tot.net)}">${man(tot.net)}</td><td></td></tr>`;
+    $('cf').innerHTML = c;
+    $('cfnote').textContent = `고정 이자 = 명목금액 × 고정금리 × 일수/365, 변동 이자 = 명목금액 × CD 확정치 × 일수/365입니다. RCV 이후 구간의 CD는 시나리오 기대치이며 실제 확정치와 달라도 순현금에는 영향이 없습니다. 위 손익 합계(${manW(r.total)})는 캐리를 RCV 시점까지 재투자하고 잔여 순현금을 RCV 시점으로 할인한 값이라 단순합(${manW(tot.net)})과 조금 다릅니다.`;
+
+    let tsv = '월\t기준금리(%)\t월초 CD(%)\tCD 조정(bp)\n' + path.map((v, m) => `${ym(m).y}-${String(ym(m).mo).padStart(2, '0')}\t${v.toFixed(2)}\t${m ? cdAt(cdDate(m)).toFixed(3) : ''}\t${m ? Math.round(adj[m] * 100) : ''}`).join('\n');
+    tsv += `\n\n구간\t시작일\t종료일\t일수\tCD 확정치(%)\t시장 선도(%)\tPAY 고정 지급\tPAY 변동 수취\tRCV 고정 수취\tRCV 변동 지급\t순현금\t누적 순현금\n`;
+    tsv += r.cf.map(x => [x.i, iso(x.start), iso(x.end), x.days, x.f.toFixed(5), MKT[x.i - 1].toFixed(5), Math.round(x.payFix), Math.round(x.payFlt), x.rcvFix == null ? '' : Math.round(x.rcvFix), x.rcvFlt == null ? '' : Math.round(x.rcvFlt), Math.round(x.net), Math.round(x.cum)].join('\t')).join('\n');
+    tsv += `\n\nPAY 만기\t${ten}\nPAY 고정금리(%)\t${r.C.toFixed(4)}\nRCV 시점\t${iso(S[q])}\nRCV 금리(%)\t${r.R.toFixed(5)}\n캐리(만원)\t${Math.round(r.fv)}\nRCV 청산 가치(만원)\t${Math.round(r.unwind)}\n합계(만원)\t${Math.round(r.total)}`;
+    $('tsv').value = tsv;
+  }
+
+  // ---------- 마크업 ----------
+  const HTML = `
+<div id="irs_root">
+  <p class="lede">초록 원은 기준금리로, 25bp씩 움직이고 그 달 15일부터 적용됩니다. 보라 마름모는 매월 1일의 CD91로, 기준금리 연동값에서 5bp씩 따로 조정해 연말 효과나 인상 선반영을 넣을 수 있습니다. 차트 위쪽 RCV 표시를 좌우로 끌면 청산 시점이 분기 단위로 바뀝니다. 선택한 표식은 방향키로도 움직입니다.</p>
+  <section class="data">
+    <div>
+      <h2>커브 raw 입력</h2>
+      <p class="hint">일자와 무이표금리 열을 포함해 복사한 뒤 붙여넣고 Enter. 선도금리, 할인계수, 제목 행은 같이 들어가도 됩니다. 첫 행은 평가일이고, PAY 만기까지의 분기 행이 필요합니다(120행 전체 권장). 한 번 적용하면 이 브라우저에 기억됩니다.</p>
+      <textarea id="irs_paste" spellcheck="false" placeholder="일자&#9;무이표금리&#9;선도금리&#9;할인계수&#10;2026-09-10&#9;3.02987&#9;3.11829&#9;1&#10;..."></textarea>
+      <div class="row"><button id="irs_btnApply" class="primary" type="button">커브 적용</button><span id="irs_status" class="status" role="status" aria-live="polite"></span></div>
+    </div>
+    <div>
+      <h2>스왑금리(MID)</h2>
+      <p class="hint">Macrobox 의 <b>kr_swap · kr_yield_daily</b> 최신값을 자동으로 채웁니다. 직접 붙여넣어 덮어쓸 수도 있습니다 — 만기와 금리 두 열을 복사해 붙여넣고 Enter.</p>
+      <textarea id="irs_pasteQ" spellcheck="false" placeholder="만기&#9;금리&#10;CD91&#9;3.120&#10;06M&#9;3.3775&#10;01Y&#9;3.6125&#10;..."></textarea>
+      <div class="row"><button id="irs_btnApplyQ" class="primary" type="button">스왑금리 적용</button><button id="irs_btnMktQ" type="button">Macrobox 최신값</button><span id="irs_statusQ" class="status" role="status" aria-live="polite"></span></div>
+    </div>
+  </section>
+  <div class="controls">
+    <div class="paygrp">
+      <label>PAY 만기<select id="irs_tenorSel"></select></label>
+      <label>PAY 고정금리(%)<input id="irs_fixed" type="number" step="0.0005" value="3.8700"><span class="paynote" id="irs_paynote"></span></label>
+    </div>
+    <label>현재 기준금리(%)<input id="irs_b0" type="number" step="0.25" value="3.00"></label>
+    <label>명목금액(억)<input id="irs_notional" type="number" step="10" value="100"></label>
+    <label>스팟일<input id="irs_spotDate" type="date"></label>
+    <label>첫 CD 확정치(%)<input id="irs_cd0" type="number" step="0.001" value="3.120"></label>
+    <label>CD − 기준금리(bp)<input id="irs_spread" type="number" step="1" value="12"></label>
+    <label>RCV 이후 텀프리미엄(bp)<input id="irs_tp" type="number" step="1" value="0"></label>
+    <label>RCV 시점<select id="irs_rcvSel"></select></label>
+    <label class="check"><input id="irs_prop" type="checkbox" checked>기준금리는 뒤 달도 함께 이동</label>
+    <div class="btns">
+      <button id="irs_btnHold" type="button">동결로 초기화</button>
+      <button id="irs_btnMkt" type="button">시장 내재 경로에 맞추기</button>
+      <button id="irs_btnCdReset" type="button">CD 조정 지우기</button>
+    </div>
+  </div>
+  <div class="chart">
+    <div class="svgbox"><svg id="irs_svg" viewBox="0 0 1000 470" role="img" aria-label="월별 기준금리와 CD 경로 차트"></svg></div>
+    <div class="legend">
+      <span><i style="width:22px;height:0;border-top:2.5px solid var(--path)"></i>기준금리 (25bp)</span>
+      <label><input type="checkbox" id="irs_showCD" checked><i style="width:22px;height:0;border-top:2.5px solid var(--cd)"></i>CD91 (5bp 조정)</label>
+      <label><input type="checkbox" id="irs_showMktCD" checked><i style="width:22px;height:0;border-top:2px dashed var(--market)"></i>시장 선도 CD</label>
+      <label><input type="checkbox" id="irs_showImp"><i style="width:9px;height:9px;border:2px solid var(--market);border-radius:50%"></i>시장 내재 평균 기준금리</label>
+      <span><i style="width:8px;height:8px;background:var(--ink)"></i>통상 금통위 개최월</span>
+    </div>
+  </div>
+  <div class="keys" id="irs_keys"></div>
+  <div class="two">
+    <div>
+      <h2>RCV 시점 손익</h2>
+      <table class="pl" id="irs_pl"></table>
+      <p class="note" id="irs_plnote"></p>
+    </div>
+    <div>
+      <h2>구간별 CD 확정치</h2>
+      <div class="tbl tall"><table class="fx" id="irs_fx"></table></div>
+    </div>
+  </div>
+  <div class="cfwrap">
+    <h2>현금흐름 상세 <span style="font-weight:400;color:var(--ink-soft);font-size:13px">(만원, 지급은 −, 수취는 +, 각 구간 종료일에 지급)</span></h2>
+    <div class="tbl"><table class="cf" id="irs_cf"></table></div>
+    <p class="note" id="irs_cfnote"></p>
+  </div>
+  <div class="export">
+    <h2>엑셀로 옮기기</h2>
+    <textarea id="irs_tsv" readonly></textarea>
+    <div style="margin-top:8px"><button id="irs_btnCopy" type="button">복사하기</button><span class="msg" id="irs_copymsg"></span></div>
+  </div>
+</div>`;
+
+  // ---------- boot (DOM 이 새로 그려질 때마다) ----------
+  function boot() {
+    svg = $('svg');
+    $('paste').value = pasteText;
+    $('pasteQ').value = pasteQText;
+    $('paste').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); applyPasteCurve(); } });
+    $('pasteQ').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); applyPasteQuotes(); } });
+    $('btnApply').addEventListener('click', applyPasteCurve);
+    $('btnApplyQ').addEventListener('click', applyPasteQuotes);
+    $('btnMktQ').addEventListener('click', () => fillQuotes(true));
+    $('tenorSel').addEventListener('change', () => setTenor(+$('tenorSel').value, true));
+    ['showCD', 'showMktCD', 'showImp'].forEach(id => $(id).addEventListener('change', applyToggles));
+    $('rcvSel').addEventListener('change', () => setRcv(+$('rcvSel').value));
+    $('b0').addEventListener('change', () => {
+      const nb = Math.round(num('b0') / STEP) * STEP, d = nb - path[0];
+      $('b0').value = nb.toFixed(2);
+      path = path.map(v => Math.round((v + d) / STEP) * STEP);
+      $('spread').value = Math.round((num('cd0') - nb) * 100);
+      setupChart(); render();
+    });
+    $('fixed').addEventListener('input', () => { $('paynote').textContent = '직접 입력한 금리'; render(); });
+    $('spotDate').addEventListener('change', () => {
+      const v = $('spotDate').value; if (!v) return;
+      const [y, mo, d] = v.split('-').map(Number);
+      M = buildMarket(rowsNow, D(y, mo, d)); syncCD(); setPayRate(); fillRcvSelect(); setupChart(); render();
+      setStatus('status', `스팟일을 ${v}로 바꿨습니다: 커브 역산 CD ${M.MKT[0].toFixed(3)}%, ${tenorLabel(n * 3)} ${swapRate(0, n).toFixed(4)}%`);
+    });
+    ['notional', 'cd0', 'spread', 'tp'].forEach(id => $(id).addEventListener('input', render));
+    $('btnHold').addEventListener('click', () => { path = Array(NM).fill(snap(num('b0'))); adj = Array(NM).fill(0); render(); });
+    $('btnCdReset').addEventListener('click', () => { adj = Array(NM).fill(0); render(); });
+    $('btnMkt').addEventListener('click', () => {
+      const b0 = snap(num('b0')), sp = num('spread') / 100;
+      const anchors = [{ t: M.SCHED[0], v: b0 }, ...mktPoints(sp)];
+      path = path.map((_, m) => {
+        if (!m) return b0;
+        const t = mDate(m); let v = anchors[anchors.length - 1].v;
+        for (let i = 1; i < anchors.length; i++) { if (t <= anchors[i].t) { const a = anchors[i - 1], b = anchors[i]; v = a.v + (b.v - a.v) * (t - a.t) / (b.t - a.t); break; } }
+        return snap(v);
+      });
+      adj = Array(NM).fill(0); render();
+    });
+    $('btnCopy').addEventListener('click', () => {
+      const ta = $('tsv'); ta.select();
+      const sel = () => $('copymsg').textContent = '텍스트를 선택했습니다. Ctrl+C로 복사하세요.';
+      if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => $('copymsg').textContent = '복사했습니다. 엑셀에 붙여넣으세요.', sel);
+      else sel();
+    });
+
+    if (!booted) {
+      // 첫 진입: 저장해 둔 커브 → 없으면 기본 커브
+      const saved = recall(LS_CURVE);
+      let rows = DEFAULT_ROWS, label = '기본 커브 (예시값 — 실제 커브를 붙여넣으세요)';
+      if (saved) {
+        const rs = parsePaste(saved);
+        if (!validateCurve(rs)) { rows = rs; pasteText = saved; label = `저장된 커브 ${rs.length}행`; }
+      }
+      // 순서가 중요하다. 기준금리는 경로 초기값이라 커브를 적용하기 **전에** 넣어야
+      // 하고, 호가는 차트 뼈대가 선 **뒤에** 넣어야 한다 (applyQuotes 가 render 를 부른다).
+      M = buildMarket(rows, null);
+      $('paste').value = pasteText;
+      applyBaseRate();
+      applyCurve(rows, label);
+      fillQuotes(false);
+      booted = true;
+    } else {
+      M = buildMarket(rowsNow, null);
+      fillTenorSelect(); fillRcvSelect();
+      $('spotDate').value = iso(M.spot);
+      $('tenorSel').value = n * 3;
+      setupChart(); render();
+    }
+  }
+
+  // 기준금리는 경로의 출발점이라 따로 둔다 — 커브를 세우기 전에 한 번만 넣는다.
+  let baseAsof = null;
+  function applyBaseRate() {
+    const b = marketBaseRate(); if (!b) return null;
+    $('b0').value = (Math.round(b.v / STEP) * STEP).toFixed(2);
+    baseAsof = b; return b;
+  }
+  // IRS 호가와 첫 CD 확정치를 Macrobox 최신값으로 (기준금리는 건드리지 않는다 —
+  // 이미 그려 놓은 경로가 통째로 밀리기 때문)
+  function fillQuotes(loud) {
+    const mq = marketQuoteText();
+    if (!mq) { if (loud) setStatus('statusQ', 'kr_swap 에서 IRS 호가를 찾지 못했습니다. python fetch.py kr_swap 실행이 필요합니다.', true); return; }
+    pasteQText = mq.text; $('pasteQ').value = mq.text;
+    applyQuotes(mq.text, `Macrobox 최신값 (IRS ${dateLabel(mq.asof)}`
+      + `${mq.cdAsof ? `, CD ${dateLabel(mq.cdAsof)}` : ''}`
+      + `${baseAsof ? `, 기준금리 ${baseAsof.v.toFixed(2)}%` : ''})`);
+  }
+
+  return { HTML, boot, render: () => render() };
+})();
+
+async function enterIrs() {
+  const got = await Promise.all(IRS.ids.map(id => loadIndicator(id).catch(() => null)));
+  irsData = { swap: got[0], cd: got[1], base: got[2] };
+  current = { id: IRS.id, name: IRS.name, freq: 'D', unit: '%',
+              updated_at: (got[0] || {}).updated_at || '-', series: [] };
+  view = 'irs';
+  document.getElementById('title').textContent = IRS.name;
+  document.getElementById('updatedAt').textContent =
+    '데이터 갱신: ' + ((got[0] || {}).updated_at || '-');
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'irsBtn'));
+  periodDates = [];        // 이 화면은 기간 선택기를 쓰지 않는다 (툴바를 숨긴다)
+  refresh();
+}
+
+function renderIrs() {
+  const box = document.getElementById('retailWrap');
+  // 다른 화면이 retailWrap 을 갈아엎으므로, 뼈대가 사라졌을 때만 다시 세우고
+  // 이벤트를 새로 붙인다. 시나리오 상태(경로·커브·호가)는 모듈 안에 남아 있다.
+  if (!box.querySelector('#irs_root')) { box.innerHTML = IRS_APP.HTML; IRS_APP.boot(); }
+  else IRS_APP.render();
+}
 
 async function enterYen() {
   const got = await Promise.all(YEN.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -13359,6 +14627,18 @@ document.getElementById('endSel').onchange = e => {
         nav.appendChild(b);
         return;
       }
+      if (item.id === 'us_nowcast') {  // 물가 나우캐스트 → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'nowcBtn'; b.textContent = NOWC.name; b.onclick = enterNowcast;
+        nav.appendChild(b);
+        return;
+      }
+      if (item.id === 'kr_swap') {     // 기준금리·IRS 시나리오 → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'irsBtn'; b.textContent = IRS.name; b.onclick = enterIrs;
+        nav.appendChild(b);
+        return;
+      }
       if (RETAIL.ids.includes(item.id)) {   // 소매판매 2종 → "소매판매" 하나로
         if (!retInserted && navOn('retail')) {
           const b = document.createElement('button');
@@ -13439,6 +14719,7 @@ document.getElementById('endSel').onchange = e => {
       const usHdr2 = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
       if (usHdr2) nav.insertBefore(ngBtn, usHdr2); else nav.appendChild(ngBtn);
     }
+    applyNavOrder(nav);
     // 지표 비교 메뉴 (구분선 + 버튼)
     const hr = document.createElement('div');
     hr.style.cssText = 'border-top:1px solid #e0e4ea;margin:10px 0';

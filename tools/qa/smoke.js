@@ -30,12 +30,17 @@ w.eval(main.replace(/function loadScript\([^)]*\)\s*\{/,
 const ev = c => w.__ev(c);
 
 let fail = 0;
+// innerHTML 길이만 재는 검사다. 차트는 canvas 안에 그려져 길이에 안 잡히므로,
+// 짧게 나온 화면이 '깨진 것'인지 '캔버스뿐인 것'인지 구분되게 canvas 수를 같이 찍는다.
 const chk = (name, elId) => {
   const el = w.document.getElementById(elId);
   const n = el ? el.innerHTML.length : 0;
+  const cv = el ? el.querySelectorAll('canvas').length : 0;
   const ok = n > 2000;
   if (!ok) fail++;
-  console.log('  ' + name.padEnd(26) + String(n).padStart(7) + (ok ? '  OK' : '  ⚠ 비었거나 짧음'));
+  console.log('  ' + name.padEnd(26) + String(n).padStart(7)
+    + (cv ? ` +canvas${cv}` : '        ')
+    + (ok ? '  OK' : '  ⚠ 비었거나 짧음'));
 };
 
 (async () => {
@@ -88,6 +93,18 @@ const chk = (name, elId) => {
       ev(`nowcBasis='${b}'; renderNowcast();`); chk('나우캐스트 > ' + b, 'retailWrap');
     }
   } else { console.log('  물가 나우캐스트              (데이터 없음 — python fetch.py us_nowcast)'); }
+  if (w.__MACRO__ && w.__MACRO__.us_auction) {
+    await ev('enterAuction()');
+    for (const t of ['cal', 'chart']) {
+      ev(`aucTab='${t}'; aucMon=null; renderAuction();`);
+      chk('국채 입찰 > ' + t, 'retailWrap');
+    }
+    for (const wsz of ['12', "'5y'"]) {          // 비교 창 토글
+      ev(`aucTab='cal'; aucWin=${wsz}; renderAuction();`);
+      chk('국채 입찰 > win' + wsz.replace(/'/g, ''), 'retailWrap');
+    }
+    ev('aucWin=6;');
+  } else { console.log('  국채 입찰                    (데이터 없음 — python fetch.py us_auction)'); }
   if (w.__MACRO__ && w.__MACRO__.kr_swap) {
     await ev('enterIrs()');
     chk('기준금리·IRS 시나리오', 'retailWrap');

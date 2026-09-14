@@ -1483,6 +1483,36 @@ indicators:
       files: [year, month]      # quarter 는 확정치 계열이 없어 뺐다
       vintage_months: 12        # 일별 빈티지 경로를 남길 최근 대상 월 수
 
+  # 미 국채 입찰 (TreasuryDirect Auction Query) — 응찰률·낙찰금리·간접비중.
+  #   이표물만 받는다 (Bill 은 건수가 3배인데 금리 이야기에는 덜 쓰인다).
+  #   always_full: '입찰 예정'은 입찰이 끝나면 목록에서 사라진다. 병합하면 지나간
+  #   예정이 영원히 남는다.
+  - id: us_auction
+    name: 미국 국채 입찰
+    source: treasurydirect
+    unit: 배·%·십억달러
+    freq: D
+    start_year: 2010
+    always_full: true
+    series_first: ["입찰 예정"]
+
+  # QRA(분기 리펀딩) 실적 — 유통국채 잔액(월말)과 TGA 잔고(일별).
+  #   순발행은 유통잔액의 분기 변화로, Bill 비중은 Bills ÷ 유통잔액으로 화면에서 본다.
+  #   QRA 가 발표하는 '추정치'(다음 분기 순발행 전망·TGA 가정)는 보도자료 본문이라
+  #   API 가 없다. 여기 들어오는 건 전부 실적이다.
+  #
+  # ※ 전용 화면을 아직 안 만들어서 잠시 꺼 뒀다. 수집기(fetchers/fiscaldata.py)와
+  #   fetch.py 등록은 그대로 있으니, 아래 주석만 풀면 바로 다시 돈다.
+  #   되살릴 때: 주석 해제 → python fetch.py us_qra
+  # - id: us_qra
+  #   name: 미국 국채 수급 (QRA)
+  #   source: fiscaldata
+  #   unit: 십억달러·%
+  #   freq: M
+  #   start_year: 2010
+  #   merge_always: true
+  #   series_first: ["Bill 비중"]
+
   # 미국 정책금리 (월) — 수요·공급 분해 차트의 보조축용. 1969년부터 이어 붙인다.
   #   연준의 '목표'가 시대마다 달라 한 계열로는 1969년까지 못 간다.
   #     2008-12~   DFEDTARU/L  목표 '범위'(상·하단)

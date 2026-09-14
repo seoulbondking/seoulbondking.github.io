@@ -446,7 +446,8 @@ let catalog = [], current = null, chart = null;
 // 버튼을 다 만든 **뒤에** DOM 에서 자리만 옮긴다 — 어떤 지표에서 어떤 버튼이 생기는지
 // (US_EMP 처럼 지표 10개가 버튼 하나로 묶이는 경우 포함)를 건드리지 않아서
 // 지표가 늘거나 yaml 순서가 바뀌어도 깨지지 않는다. 없는 버튼은 그냥 건너뛴다.
-const NAV_ORDER = ['usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn', 'usEmpBtn', 'fedBtn', 'yenBtn'];
+const NAV_ORDER = ['usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn', 'usEmpBtn',
+                   'fedBtn', 'aucBtn', 'yenBtn'];
 function applyNavOrder(nav) {
   const btns = NAV_ORDER.map(id => document.getElementById(id)).filter(Boolean);
   if (btns.length < 2) return;
@@ -702,6 +703,7 @@ function refresh() {
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
   const isUCpi = view === 'uscpi', isFed = view === 'fed', isHd = view === 'hdebt';
   const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
+  const isAuc = view === 'auction';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
@@ -723,7 +725,7 @@ function refresh() {
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -736,11 +738,11 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
   // IRS 시나리오는 기간 선택기를 안 쓴다 (커브 평가일이 기준이라 기간 개념이 없다)
   document.querySelector('.toolbar').style.display = ((isCombo && tab === 'map') || isIrs) ? 'none' : '';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
@@ -764,6 +766,7 @@ function refresh() {
   else if (isYen) renderYen();
   else if (isNowc) renderNowcast();
   else if (isIrs) renderIrs();
+  else if (isAuc) renderAuction();
   else if (isHd) renderHdebt();
   else if (isUPpi) renderUsPpi();
   else if (isUPce) renderUsPce();
@@ -6803,6 +6806,27 @@ const MONTH_SEP = {
     ctx.restore();
   },
 };
+// 세로축 방향 띠 — '정상 범위'를 배경으로 깔 때. (End-User Take 60~90% 등)
+//   options.plugins.yBand = { from: 60, to: 90, color, label }
+const Y_BAND = {
+  id: 'yBand',
+  beforeDatasetsDraw(c, _a, opts) {
+    if (!opts || opts.from == null || opts.to == null) return;
+    const y = c.scales.y; if (!y) return;
+    const a = y.getPixelForValue(opts.to), b = y.getPixelForValue(opts.from);
+    const { left, right, top, bottom } = c.chartArea;
+    const y0 = Math.max(top, Math.min(a, b)), y1 = Math.min(bottom, Math.max(a, b));
+    if (y1 <= y0) return;
+    const ctx = c.ctx; ctx.save();
+    ctx.fillStyle = opts.color || 'rgba(120,160,120,0.10)';
+    ctx.fillRect(left, y0, right - left, y1 - y0);
+    if (opts.label) {
+      ctx.font = '10px Helvetica'; ctx.fillStyle = '#8592a3'; ctx.textAlign = 'right';
+      ctx.fillText(opts.label, right - 4, y0 + 11);
+    }
+    ctx.restore();
+  },
+};
 const REC_SHADE = {
   id: 'recShade',
   beforeDatasetsDraw(c, _a, opts) {
@@ -9118,6 +9142,373 @@ function renderNowcast() {
         tooltip: { callbacks: { label: it => ` ${it.parsed.y == null ? '-' : fmtP(it.parsed.y)}` } } },
       scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
         y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+}
+
+// ── 미국 국채 입찰 ─────────────────────────────────────────────────
+// 수집기가 '입찰 결과'·'입찰 예정' 두 계열에 점마다 만기·CUSIP·응찰률 같은 필드를
+// 달아 둔다 (일반 지표 화면은 d·v 만 보므로 무시된다). 이 화면만 그 필드를 읽는다.
+//
+// 강약 판정은 **같은 만기의 직전 회차들과 비교**한다. 응찰률 2.6 이 높은지 낮은지는
+// 만기마다 기준이 달라서(2년물은 2.6 이 평범, 30년물은 2.6 이면 괜찮은 편) 절대값으로
+// 볼 수 없다. 테일(낙찰금리 − WI)이 정석이지만 WI 호가가 API 에 없어 못 만든다.
+const AUC = { id: 'auction', name: '미국 국채 입찰', ids: ['us_auction'] };
+let aucData = null, aucTab = 'cal', aucMon = null, aucCharts = [];
+// 비교 창 — 이 값 하나가 차트의 이동평균과 달력·표의 '평소 대비' 색을 같이 정한다.
+// 6 은 처음에 근거 없이 고른 값이었다. 업계에 단일 표준은 없고(Loomis Sayles 의
+// 트레이더 해설도 '과거 입찰과 비교하라'고만 한다), 주요 이표물이 대체로 월 1회라
+// 6회 ≈ 6개월이라는 게 사후 변론이다. 그래서 코드에 묻지 않고 토글로 뺐다.
+let aucWin = 6;                                   // 6 | 12 | '5y'
+// 추이차트 옆 표의 필터 — 묶음(단기·장기)별로 만기를 여러 개 골라 켜고 끈다.
+// 비어 있으면 전부. 정렬은 날짜순(기본)과 만기순 둘.
+let aucTsel = {}, aucTsort = 'date';
+const aucWinLabel = () => aucWin === '5y' ? '5년' : `${aucWin}회`;
+// 차트 탭 배치: 행 = 만기 묶음, 열 = 지표. 만기를 섞지 않는 이유는 수준이 달라서다
+// (2년물 응찰률 2.6 과 30년물 2.6 은 다른 이야기다).
+const AUC_GROUPS = [['단기 · 2·3·5년', ['2Y', '3Y', '5Y']],
+                    ['장기 · 10·20·30년', ['10Y', '20Y', '30Y']]];
+// [키, 이름, 단위, 이동평균으로 그릴 것인가, y축 정상범위 띠]
+// 낙찰금리만 원계열이다 — 금리는 수준 자체가 의미라 평활하면 오히려 왜곡된다.
+// 응찰률·간접비중·EUT 는 회차마다 톱니처럼 튀어 원계열로는 추세가 안 보인다.
+// End-User Take = 직접 + 간접. 최종 투자자가 가져간 몫이고 나머지가 딜러 몫이다.
+// 통상 60~90% 범위이며 그 아래면 수요 부족 신호로 본다 (Loomis Sayles).
+const AUC_METRICS = [
+  ['btc', '응찰률', '배', true, null],
+  ['hy', '낙찰금리', '%', false, null],
+  ['ind', '간접비중', '%', true, null],
+  ['eut', 'End-User Take', '%', true, { from: 60, to: 90, label: '통상 60~90%' }],
+];
+// 만기별 색 — 한 차트에 세 개가 겹치고 달력에는 여섯 개가 다 나온다. 명도 차이로
+// 구분하면(같은 계열 파랑 3종) 겹친 선을 못 가른다. 색상환에서 멀리 떨어뜨렸다.
+// 빨강-초록 조합은 피했다 (색각 이상에서 가장 흔히 붙어 보이는 짝이다).
+const AUC_COL = { '2Y': '#1f9e8f', '3Y': '#2c6fbb', '5Y': '#7b4fa0', '7Y': '#8a8f98',
+                  '10Y': '#c0392b', '20Y': '#d98324', '30Y': '#37474f' };
+const aucCol = t => AUC_COL[t] || '#8592a3';
+const aucOrd = t => { const n = parseInt(t, 10); return isFinite(n) ? n : 99; };
+// '5년' 창의 시작일 — 그 입찰일에서 5년 전
+const aucCut = d => { const x = new Date(d); x.setFullYear(x.getFullYear() - 5);
+  return x.toISOString().slice(0, 10); };
+// 당회 점선을 옅게 — 평균선(실선)이 주인공이고 점선은 분산만 보여주면 된다
+const aucFade = (hex, a) => { const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+
+async function enterAuction() {
+  const got = await loadIndicator('us_auction').catch(() => null);
+  if (!got) { alert('입찰 데이터가 없습니다. python fetch.py us_auction 실행 필요.'); return; }
+  aucData = got;
+  current = { id: AUC.id, name: AUC.name, freq: 'D', unit: '배·%·십억달러',
+              updated_at: got.updated_at, series: [] };
+  view = 'auction';
+  document.getElementById('title').textContent = AUC.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + got.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'aucBtn'));
+  // 가로축은 결과가 있는 입찰일. 차트 탭에서만 쓴다 (달력·표는 월 이동 버튼으로 본다)
+  const res = (got.series.find(s => baseName(s.name) === '입찰 결과') || { data: [] }).data;
+  periodDates = [...new Set(res.map(r => r.d))].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 260)];   // 기본 최근 3년가량
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  aucMon = null;
+  refresh();
+}
+
+function renderAuction() {
+  const box = document.getElementById('retailWrap');
+  const pick = n => (aucData.series.find(s => baseName(s.name) === n) || { data: [] }).data;
+  const res = pick('입찰 결과'), plan = pick('입찰 예정');
+  if (!res.length && !plan.length) {
+    box.innerHTML = '<div style="padding:24px;color:#888">입찰 데이터가 없습니다. <b>python fetch.py us_auction</b> 실행 필요.</div>';
+    return;
+  }
+  const bn = v => v == null ? '-' : v.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + 'B';
+  const pc = v => v == null ? '-' : v.toFixed(1) + '%';
+
+  // 예정과 결과를 한 줄기로 잇는다. 오늘 입찰한 건은 양쪽에 다 있을 수 있어
+  // (예정 목록이 장중에 바로 안 빠진다) CUSIP+입찰일로 묶고 결과 쪽을 남긴다.
+  const all = [];
+  const seen = new Map();
+  res.concat(plan).forEach(r => {
+    const k = (r.cusip || r.t) + '|' + r.d, old = seen.get(k);
+    if (old == null) { seen.set(k, all.length); all.push(r); }
+    else if (r.btc != null && all[old].btc == null) all[old] = r;   // 결과가 예정을 덮는다
+  });
+  all.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : aucOrd(a.t) - aucOrd(b.t));
+  const done = r => r.btc != null;         // 결과가 들어왔는가
+  // End-User Take = 직접 + 간접. 원본에 없는 파생값이라 여기서 붙인다 (재수집 불필요).
+  all.forEach(r => { if (r.ind != null && r.dir != null) r.eut = +(r.ind + r.dir).toFixed(2); });
+
+  // 같은 만기의 '평소'. 창은 aucWin 토글이 정한다 (6회 · 12회 · 5년).
+  const prevAvg = (row, key) => {
+    let hist = res.filter(r => r.t === row.t && r.d < row.d && r[key] != null);
+    hist = aucWin === '5y' ? hist.filter(r => r.d >= aucCut(row.d)) : hist.slice(-aucWin);
+    return hist.length >= 3
+      ? hist.reduce((a, r) => a + r[key], 0) / hist.length : null;
+  };
+  // 평균 대비 차이를 색으로. 응찰률·간접비중은 높을수록 강한 입찰이다.
+  const devStyle = (v, avg, scale) => {
+    if (v == null || avg == null) return '';
+    const t = Math.min(1, Math.abs(v - avg) / scale);
+    if (t < 0.15) return '';
+    const c = v > avg ? [17, 105, 62] : [176, 32, 28];
+    return `color:rgb(${c.join(',')});font-weight:${t > 0.5 ? 800 : 700}`;
+  };
+  const devTip = (v, avg) => v == null || avg == null ? ''
+    : ` title="직전 ${aucWinLabel()} 평균 ${avg.toFixed(2)} 대비 ${(v - avg >= 0 ? '+' : '') + (v - avg).toFixed(2)}"`;
+
+  let out = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+    + '<div class="mode" id="aucTabBtns">'
+    + [['cal', '달력'], ['chart', '추이 차트']].map(([v, t]) =>
+        `<button data-at="${v}" class="${aucTab === v ? 'active' : ''}">${t}</button>`).join('')
+    + '</div><div class="mode" id="aucWinBtns">'
+    + [[6, '6회'], [12, '12회'], ['5y', '5년']].map(([v, t]) =>
+        `<button data-aws="${v}" class="${String(aucWin) === String(v) ? 'active' : ''}">${t}</button>`).join('')
+    + '</div>'
+    + '<span style="font-size:12px;color:#555">명목 이표물만 (Bill·TIPS·FRN 제외) · 발행액 <b>십억달러</b>'
+    + ` · 비교 창 <b>${aucWinLabel()}</b> (차트 이동평균과 '평소 대비' 색에 같이 적용)</span></div>`;
+
+  if (aucTab === 'chart') out += aucChartShell(res, prevAvg, devStyle);
+  else out += aucCalendar(all, done, bn, pc, prevAvg, devStyle, devTip);
+  box.innerHTML = out;
+
+  box.querySelectorAll('#aucTabBtns button').forEach(b => b.onclick = () => { aucTab = b.dataset.at; renderAuction(); });
+  box.querySelectorAll('#aucWinBtns button').forEach(b => b.onclick = () => {
+    const v = b.dataset.aws; aucWin = v === '5y' ? '5y' : +v; renderAuction();
+  });
+  // 표 필터 — 만기는 여러 개 켤 수 있고, 다시 누르면 꺼진다 (전부 끄면 전체)
+  box.querySelectorAll('[data-atsel]').forEach(b => b.onclick = () => {
+    const gi = b.dataset.agi, t = b.dataset.atsel;
+    const s = aucTsel[gi] || (aucTsel[gi] = new Set());
+    s.has(t) ? s.delete(t) : s.add(t);
+    renderAuction();
+  });
+  box.querySelectorAll('[data-asort]').forEach(b => b.onclick = () => {
+    aucTsort = aucTsort === 'date' ? 'term' : 'date'; renderAuction();
+  });
+  box.querySelectorAll('[data-amon]').forEach(b => b.onclick = () => { aucMon = b.dataset.amon; renderAuction(); });
+  if (aucTab === 'chart') aucDrawCharts(res);
+}
+
+// ── 달력 — 한 달을 주 단위로 깔고 입찰이 있는 날에 칩을 얹는다
+function aucCalendar(rows, done, bn, pc, prevAvg, devStyle, devTip) {
+  if (!rows.length) return '<div style="padding:24px;color:#888">목록이 비어 있습니다.</div>';
+  const today = new Date().toISOString().slice(0, 10);
+  const months = [...new Set(rows.map(r => r.d.slice(0, 7)))].sort();
+  // 기본은 이번 달 — 지난 며칠 결과와 앞으로의 일정이 한 화면에 같이 보인다
+  const cur = today.slice(0, 7);
+  const def = months.includes(cur) ? cur : months[months.length - 1];
+  const ym = aucMon || def;
+  const i = months.indexOf(ym), prev = i > 0 ? months[i - 1] : null, next = i >= 0 && i < months.length - 1 ? months[i + 1] : null;
+
+  // 오늘 이후로 아직 결과가 안 나온 건들 — 달력 헤더에 요약하고 바로 갈 수 있게 한다
+  const future = rows.filter(r => r.d >= today && !done(r));
+  const fwd = [...new Set(future.map(r => r.d.slice(0, 7)))].sort();
+  const nFwd = future.length, nEst = future.filter(r => r.est).length;
+
+  const mrows = rows.filter(r => r.d.slice(0, 7) === ym);
+  const byDay = new Map();
+  mrows.forEach(r => { const k = r.d; (byDay.get(k) || byDay.set(k, []).get(k)).push(r); });
+  const [Y, Mo] = ym.split('-').map(Number);
+  const first = new Date(Y, Mo - 1, 1), lead = first.getDay(), days = new Date(Y, Mo, 0).getDate();
+  const cells = [];
+  for (let k = 0; k < lead; k++) cells.push(null);
+  for (let d = 1; d <= days; d++) cells.push(`${ym}-${String(d).padStart(2, '0')}`);
+  while (cells.length % 7) cells.push(null);
+
+  // 결과가 나온 건은 흰 바탕에 숫자까지, 아직 안 나온 건은 점선 테두리로 '예정' 티를 낸다.
+  // 칩이 좁아 다 못 담는 항목(응찰액·직접·딜러·CUSIP)은 마우스 툴팁으로 돌린다.
+  const full = r => {
+    const L = [`${r.t}${r.re ? ' 재발행' : ''} · ${dateLabel(r.d)}`,
+               `발행 ${r.v == null ? '미정' : bn(r.v) + (r.est ? ' (추정 — 직전 회차 규모 이월)' : '')}`
+               + ` · 발행일 ${r.iss ? dateLabel(r.iss) : '-'} · 상환 ${r.mat ? dateLabel(r.mat) : '-'}`];
+    if (r.est) L.push('재무부 잠정 일정표에 날짜만 있고 규모는 미발표입니다.');
+    if (done(r)) {
+      const a = prevAvg(r, 'btc');
+      L.push(`응찰 ${bn(r.tend)} · 응찰률 ${r.btc.toFixed(2)}`
+        + (a == null ? '' : ` (직전 ${aucWinLabel()} 평균 ${a.toFixed(2)})`));
+      L.push(`낙찰금리 ${r.hy == null ? '-' : r.hy.toFixed(3) + '%'}`);
+      L.push(`간접 ${pc(r.ind)} · 직접 ${pc(r.dir)} · EUT ${pc(r.eut)} · 딜러 ${pc(r.pd)}`);
+    }
+    if (r.cusip) L.push('CUSIP ' + r.cusip);
+    return L.join('\n').replace(/"/g, '&quot;');
+  };
+  // '평' 은 같은 만기 직전 비교창(6회·12회·5년)의 평균이다. 토글을 바꾸면 같이 바뀐다.
+  const par = a => a == null ? '' : `<span style="color:#8592a3;font-weight:400"> 평 ${a}</span>`;
+  const chip = r => {
+    const ok = done(r);
+    const aB = ok ? prevAvg(r, 'btc') : null, aI = ok ? prevAvg(r, 'ind') : null;
+    return `<div title="${full(r)}" style="margin:2px 0;padding:2px 5px;border-radius:4px;`
+      + (ok ? 'background:#fff;' : 'background:transparent;border:1px dashed #c7d0dc;')
+      + `border-left:3px solid ${aucCol(r.t)};font-size:11.5px;line-height:1.35">`
+      + `<b style="color:${aucCol(r.t)}">${r.t}</b>${r.re ? '<span style="color:#8592a3"> 재발행</span>' : ''}`
+      + `<div style="color:#333">`
+      + (r.v == null ? '<span style="color:#8592a3">발행액 미정</span>'
+         : r.est ? `<span style="color:#8592a3;font-style:italic">~${bn(r.v)} 추정</span>` : bn(r.v))
+      + (ok ? ` · <span style="${devStyle(r.btc, aB, 0.25)}">응찰 ${r.btc.toFixed(2)}</span>`
+              + par(aB == null ? null : aB.toFixed(2)) : '')
+      + '</div>'
+      + (ok && r.hy != null
+        ? `<div style="color:#667">${r.hy.toFixed(3)}% · <span style="${devStyle(r.ind, aI, 6)}">간접 ${pc(r.ind)}</span>`
+          + par(aI == null ? null : aI.toFixed(1) + '%') + '</div>'
+        : '')
+      + '</div>';
+  };
+  const head = ['일', '월', '화', '수', '목', '금', '토'];
+  let out = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+    + `<button data-amon="${prev || ''}" ${prev ? '' : 'disabled'} style="padding:3px 10px">◀</button>`
+    + `<b style="font-size:15px">${Y}년 ${Mo}월</b>`
+    + `<button data-amon="${next || ''}" ${next ? '' : 'disabled'} style="padding:3px 10px">▶</button>`
+    + (ym !== def ? `<button data-amon="${def}" style="padding:3px 10px">이번 달</button>` : '')
+    // 예정이 있는 달로 바로 간다. 이번 달만 보고 '바뀐 게 없다'고 판단하기 쉬워서다
+    + (fwd.length ? '<span style="font-size:12px;color:#8592a3;margin-left:4px">예정 →</span>'
+        + fwd.map(m => `<button data-amon="${m}" style="padding:3px 8px;font-size:12px;`
+          + `${m === ym ? 'background:#eef4ff;border-color:#9ab6e8' : ''}">${+m.slice(5)}월</button>`).join('') : '')
+    + `<span style="font-size:12px;color:#8592a3">`
+    + `이 달: 결과 ${mrows.filter(done).length}건 · 예정 ${mrows.filter(r => !done(r)).length}건`
+    + (nFwd ? ` · <b>앞으로 ${nFwd}건</b>(${fwd[0]}~${fwd[fwd.length - 1]}`
+        + (nEst ? `, 이 중 ${nEst}건은 규모 추정` : '') + ')' : '')
+    + ` · 점선 칩은 아직 결과가 안 나온 건입니다 · <b>'평'은 같은 만기 직전 ${aucWinLabel()} 평균</b>이고 색은 그 대비입니다 (초록=강함)`
+    + ' · 칩에 마우스를 올리면 응찰액·직접·딜러·CUSIP 까지 나옵니다'
+    + ' · <span style="font-style:italic">기울임 "~추정"</span>은 재무부 <b>잠정 일정표</b>에 날짜만 있고 규모는 미발표라 직전 동일만기 규모를 이월한 값입니다'
+    + '</span></div>'
+    + '<table class="data" style="table-layout:fixed;width:100%"><thead><tr>'
+    + head.map((h, j) => `<th style="text-align:center;color:${j === 0 ? '#b02a1c' : j === 6 ? '#1a4fa0' : '#555'}">${h}</th>`).join('')
+    + '</tr></thead><tbody>';
+  for (let k = 0; k < cells.length; k += 7) {
+    out += '<tr>' + cells.slice(k, k + 7).map(d => {
+      if (!d) return '<td style="background:#fafbfc"></td>';
+      const list = byDay.get(d) || [];
+      const isToday = d === today;
+      return `<td style="vertical-align:top;height:92px;padding:4px;`
+        + `${isToday ? 'background:#fff8e6;box-shadow:inset 0 0 0 2px #c98a1a' : list.length ? 'background:#f7f9fb' : ''}">`
+        + `<div style="font-size:11px;color:#8592a3;margin-bottom:2px">${+d.slice(8)}</div>`
+        + list.sort((a, b) => aucOrd(a.t) - aucOrd(b.t)).map(chip).join('') + '</td>';
+    }).join('') + '</tr>';
+  }
+  return out + '</tbody></table>';
+}
+
+// 차트는 한 줄에 둘. 넷을 넣으면 폭이 좁아 선이 뭉치고 눈금 숫자가 안 읽힌다.
+// 차트마다 오른쪽에 최근 회차 표를 붙인다 — 차트에 숫자를 얹으면 선을 가리고,
+// 축만 보고는 값을 못 읽는다. 표가 그 역할을 대신한다.
+function aucChartShell(res, prevAvg, devStyle) {
+  const rows = res.filter(r => inRange(r.d));
+  const mini = (gTerms, gi, key, dec, scale) => {
+    const sel = aucTsel[gi] || new Set();
+    const use = sel.size ? gTerms.filter(t => sel.has(t)) : gTerms;
+    let rs = rows.filter(r => use.includes(r.t) && r[key] != null);
+    // 날짜순은 최신부터. 만기순은 만기로 묶고 그 안에서 최신부터.
+    rs = aucTsort === 'date'
+      ? rs.sort((a, b) => a.d < b.d ? 1 : -1)
+      : rs.sort((a, b) => aucOrd(a.t) - aucOrd(b.t) || (a.d < b.d ? 1 : -1));
+    rs = rs.slice(0, 12);
+    if (!rs.length) return '<div style="color:#8592a3;font-size:12px;padding:8px">고른 만기에 표본이 없습니다</div>';
+    return '<table class="data" style="font-size:11.5px;width:100%"><thead><tr>'
+      + '<th>날짜</th><th>만기</th><th>실제</th><th>평균</th></tr></thead><tbody>'
+      + rs.map(r => {
+        const a = prevAvg(r, key);
+        return `<tr><td style="white-space:nowrap">${dateLabel(r.d)}</td>`
+          + `<td style="color:${aucCol(r.t)};font-weight:700">${r.t}</td>`
+          + `<td style="${devStyle(r[key], a, scale)}">${r[key].toFixed(dec)}</td>`
+          + `<td style="color:#8592a3">${a == null ? '-' : a.toFixed(dec)}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  };
+  let out = '';
+  AUC_GROUPS.forEach(([gName, gTerms], gi) => {
+    out += `<div style="font-size:13px;color:#333;font-weight:700;margin:${gi ? 20 : 2}px 0 6px;`
+      + `border-left:4px solid #9aa7b8;padding-left:8px">${gName}</div>`
+      + '<div style="display:flex;gap:16px;flex-wrap:wrap">'
+      + AUC_METRICS.map(([key, mName, unit, smooth], mi) => {
+        const dec = key === 'btc' ? 2 : key === 'hy' ? 3 : 1;
+        const scale = key === 'btc' ? 0.25 : key === 'hy' ? 0.15 : 6;
+        return '<div style="flex:1 1 48%;min-width:520px;display:flex;gap:8px;align-items:flex-start">'
+          + '<div style="flex:1 1 320px;min-width:260px"><div class="cchart" style="height:300px">'
+          + `<canvas id="aucChart${gi * AUC_METRICS.length + mi}"></canvas></div></div>`
+          + '<div style="flex:0 0 190px">'
+          + `<div class="mode" style="margin-bottom:3px;flex-wrap:wrap;gap:2px">`
+          + `<button data-asort="1" class="active" style="font-size:11px;padding:2px 6px">`
+          + `${aucTsort === 'date' ? '날짜순' : '만기순'}</button>`
+          + gTerms.map(t => `<button data-atsel="${t}" data-agi="${gi}" `
+              + `class="${(aucTsel[gi] || new Set()).has(t) ? 'active' : ''}" `
+              + `style="font-size:11px;padding:2px 6px;color:${aucCol(t)}">${t}</button>`).join('')
+          + '</div>'
+          + mini(gTerms, gi, key, dec, scale) + '</div></div>';
+      }).join('')
+      + '</div>';
+  });
+  return out
+    + '<div style="font-size:12px;color:#8592a3;margin-top:12px">기간 선택기를 따릅니다.'
+    + ` <b>실선 = ${aucWinLabel()} 이동평균, 점선 = 당회 실제값</b>입니다. 회차마다 톱니처럼 튀어 원계열만으로는 추세가 안 보이고,`
+    + ' 평균만 보면 이번 회차가 얼마나 벗어났는지 안 보여 둘을 겹쳤습니다.'
+    + ' <b>오른쪽 표</b>는 최근 9회의 실제치와 그 시점의 직전 평균입니다 (실제치 색 = 평균 대비).'
+    + '<br><b>낙찰금리만 실선 하나</b>입니다 — 금리는 수준 자체가 의미라 평활하면 왜곡됩니다.'
+    + '<br><b>End-User Take = 직접 + 간접</b>, 즉 최종 투자자가 가져간 몫입니다. 나머지가 딜러 몫이고, 딜러는 재고를 원치 않아'
+    + ' 며칠에 걸쳐 시장에 풀어냅니다. 음영은 통상 범위(60~90%)로, 아래로 벗어나면 수요 부족 신호로 읽습니다.'
+    + '<br>만기를 단기·장기로 나눈 이유는 수준이 달라서입니다. 2년물 응찰률 2.6 과 30년물 2.6 은 다른 이야기라 한 그림에 겹치면 둘 다 안 보입니다.'
+    + '<br>응찰액·직접·딜러·CUSIP 은 <b>달력 탭에서 칩에 마우스를 올리면</b> 나옵니다 (표 탭을 없애며 그리로 옮겼습니다).</div>';
+}
+
+function aucDrawCharts(res) {
+  const rows = res.filter(r => inRange(r.d));
+  // 가로축은 모든 차트가 공유한다 (같은 시점을 위아래로 견줘 보게)
+  const dates = [...new Set(rows.map(r => r.d))].sort();
+  const di = new Map(dates.map((d, i) => [d, i]));
+  aucCharts.forEach(c => c && c.destroy());
+  aucCharts = [];
+
+  AUC_GROUPS.forEach(([gName, gTerms], gi) => {
+    AUC_METRICS.forEach(([key, mName, unit, smooth, band], mi) => {
+      const idx = gi * AUC_METRICS.length + mi;
+      const cv = document.getElementById('aucChart' + idx);
+      if (!cv) return;
+      const dec = key === 'btc' ? 2 : key === 'hy' ? 3 : 1;
+      const ds = [];
+      gTerms.forEach(t => {
+        const pts = rows.filter(r => r.t === t && r[key] != null).sort((a, b) => a.d < b.d ? -1 : 1);
+        if (!pts.length) return;
+        const line = Array(dates.length).fill(null), dot = Array(dates.length).fill(null);
+        pts.forEach((r, k) => {
+          dot[di.get(r.d)] = r[key];
+          // 창은 회차 수(6·12) 또는 달력 5년. 5년은 만기마다 회차 수가 달라져도
+          // 같은 기간을 보게 한다 — 발행 주기가 바뀐 구간을 견줄 때 이게 맞다.
+          let w;
+          if (aucWin === '5y') { const cut = aucCut(r.d);
+            w = pts.slice(0, k + 1).filter(x => x.d >= cut).map(x => x[key]); }
+          else w = pts.slice(Math.max(0, k - aucWin + 1), k + 1).map(x => x[key]);
+          line[di.get(r.d)] = w.reduce((a, b) => a + b, 0) / w.length;
+        });
+        // 당회 점선을 먼저 넣고(order 2) 평균 실선을 위에(order 1). Chart.js 는
+        // order 가 작을수록 위에 그린다 — 평균선이 점선에 가리면 안 된다.
+        if (smooth) ds.push({ label: t + ' 당회', data: dot, _raw: true,
+          borderColor: aucFade(aucCol(t), 0.45), backgroundColor: aucFade(aucCol(t), 0.45),
+          borderWidth: 1, borderDash: [2, 3], pointRadius: 1.6, pointHitRadius: 8,
+          tension: 0, spanGaps: true, order: 2 });
+        ds.push({ label: t, data: smooth ? line : dot,
+          borderColor: aucCol(t), backgroundColor: aucCol(t),
+          borderWidth: 2.6, pointRadius: 0, pointHitRadius: 8, tension: 0.2,
+          spanGaps: true, pop: true, order: 1 });
+      });
+      aucCharts[idx] = new Chart(cv, {
+        type: 'line', plugins: band ? [LINE_POP, Y_BAND] : [LINE_POP],
+        data: { labels: dates.map(dateLabel), datasets: ds },
+        options: { responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+          plugins: {
+            // 점선(당회)은 범례에서 뺀다 — 만기 셋이 여섯 칸으로 늘어나 읽기 나쁘다
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12,
+              filter: (it, d) => !d.datasets[it.datasetIndex]._raw } },
+            yBand: band || undefined,
+            title: { display: true, font: { size: 13 },
+              text: `${mName} (${unit})` + (smooth ? ` · 실선 ${aucWinLabel()} 평균 · 점선 당회` : '') },
+            tooltip: { callbacks: { label: it =>
+              ` ${it.dataset.label}: ${it.parsed.y.toFixed(dec)}` } } },
+          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+            y: { ticks: { font: { size: 11 } },
+              grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+      });
+    });
   });
 }
 
@@ -14630,6 +15021,12 @@ document.getElementById('endSel').onchange = e => {
       if (item.id === 'us_nowcast') {  // 물가 나우캐스트 → 전용 화면
         const b = document.createElement('button');
         b.id = 'nowcBtn'; b.textContent = NOWC.name; b.onclick = enterNowcast;
+        nav.appendChild(b);
+        return;
+      }
+      if (item.id === 'us_auction') {  // 국채 입찰 → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'aucBtn'; b.textContent = AUC.name; b.onclick = enterAuction;
         nav.appendChild(b);
         return;
       }

@@ -8163,6 +8163,11 @@ const US_PCE = { id: 'uspce', name: '미국 PCE',
 let usPceData = null, usPceDiff = null, usPceSd = null, usPceRate = null,
     usPceTab = 'price', usPceCharts = [null, null, null, null];
 let usSdTab = 'core';   // 수요·공급 분해: 근원 / 헤드라인
+// 탭마다 다른 기본 시작 시점. 수요·공급 분해는 1969년부터 있어서 공통 기본 기간으로
+// 열면 가로축이 50년으로 늘어나 최근 국면이 안 보인다. 코로나 직전부터 잡는다.
+// **첫 진입 때만** 옮긴다 — 사용자가 기간을 고친 뒤 탭을 오가면 그 선택을 존중한다.
+const USPCE_DEF_START = { sd: '2019-01' };
+let usPceSeen = {};
 // 확산도 표시 기준 — 기사·리포트가 쓰는 건 '품목수'다(지출가중은 훨씬 높게 나온다).
 let usPceDiffBase = '품목수', usPceDiffTh = 3;
 // 접힌 그룹 (영문 원문 이름 기준). null 이면 첫 진입 — 세부(lv2 이상)를 접어 시작한다.
@@ -8221,12 +8226,19 @@ async function enterUsPce() {
   current = { id: US_PCE.id, name: US_PCE.name, freq: 'M', unit: '지수·조달러',
               updated_at: usPceData.updated_at, series: [] };
   view = 'uspce';
+  usPceSeen = {};                 // 화면을 새로 열면 '첫 진입' 판정도 다시 시작한다
   document.getElementById('title').textContent = US_PCE.name;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + usPceData.updated_at;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'usPceBtn'));
   if (!document.getElementById('usPceTabs').dataset.bound) {
     document.getElementById('usPceTabs').addEventListener('click', e => {
-      if (!e.target.dataset.uc2) return; usPceTab = e.target.dataset.uc2; refresh();
+      if (!e.target.dataset.uc2) return;
+      usPceTab = e.target.dataset.uc2;
+      if (USPCE_DEF_START[usPceTab] && !usPceSeen[usPceTab]) {
+        setPeriodStart(USPCE_DEF_START[usPceTab]);
+      }
+      usPceSeen[usPceTab] = 1;
+      refresh();
     });
     document.getElementById('usPceTabs').dataset.bound = '1';
   }
@@ -9170,9 +9182,9 @@ let aucData = null, aucTab = 'cal', aucMon = null, aucCharts = [];
 // 트레이더 해설도 '과거 입찰과 비교하라'고만 한다), 주요 이표물이 대체로 월 1회라
 // 6회 ≈ 6개월이라는 게 사후 변론이다. 그래서 코드에 묻지 않고 토글로 뺐다.
 let aucWin = 6;                                   // 6 | 12 | '5y'
-// 추이차트 옆 표의 필터 — 묶음(단기·장기)별로 만기를 여러 개 골라 켜고 끈다.
-// 비어 있으면 전부. 정렬은 날짜순(기본)과 만기순 둘.
-let aucTsel = {}, aucTsort = 'date';
+// 추이차트의 만기 필터 — 묶음(행)별로 여러 개 골라 켜고 끈다. 비어 있으면 전부.
+// 그 줄의 차트와 표에 함께 걸린다.
+let aucTsel = {};
 const aucWinLabel = () => aucWin === '5y' ? '5년' : `${aucWin}회`;
 // 차트 탭 배치: 행 = 만기 묶음, 열 = 지표. 만기를 섞지 않는 이유는 수준이 달라서다
 // (2년물 응찰률 2.6 과 30년물 2.6 은 다른 이야기다).
@@ -9301,9 +9313,6 @@ function renderAuction() {
     s.has(t) ? s.delete(t) : s.add(t);
     renderAuction();
   });
-  box.querySelectorAll('[data-asort]').forEach(b => b.onclick = () => {
-    aucTsort = aucTsort === 'date' ? 'term' : 'date'; renderAuction();
-  });
   box.querySelectorAll('[data-amon]').forEach(b => b.onclick = () => { aucMon = b.dataset.amon; renderAuction(); });
   if (aucTab === 'chart') aucDrawCharts(res);
 }
@@ -9423,12 +9432,9 @@ function aucChartShell(res, prevAvg, devStyle) {
   const mini = (gTerms, gi, key, dec, scale) => {
     const sel = aucTsel[gi] || new Set();
     const use = sel.size ? gTerms.filter(t => sel.has(t)) : gTerms;
-    let rs = rows.filter(r => use.includes(r.t) && r[key] != null);
-    // 날짜순은 최신부터. 만기순은 만기로 묶고 그 안에서 최신부터.
-    rs = aucTsort === 'date'
-      ? rs.sort((a, b) => a.d < b.d ? 1 : -1)
-      : rs.sort((a, b) => aucOrd(a.t) - aucOrd(b.t) || (a.d < b.d ? 1 : -1));
-    rs = rs.slice(0, 12);
+    // 항상 최신 날짜순. 만기로 묶어 보고 싶으면 위 만기 버튼으로 걸러내면 된다.
+    const rs = rows.filter(r => use.includes(r.t) && r[key] != null)
+                   .sort((a, b) => a.d < b.d ? 1 : -1).slice(0, 12);
     if (!rs.length) return '<div style="color:#8592a3;font-size:12px;padding:8px">고른 만기에 표본이 없습니다</div>';
     return '<table class="data" style="font-size:11.5px;width:100%"><thead><tr>'
       + '<th>날짜</th><th>만기</th><th>실제</th><th>평균</th></tr></thead><tbody>'
@@ -9442,8 +9448,21 @@ function aucChartShell(res, prevAvg, devStyle) {
   };
   let out = '';
   AUC_GROUPS.forEach(([gName, gTerms], gi) => {
-    out += `<div style="font-size:13px;color:#333;font-weight:700;margin:${gi ? 20 : 2}px 0 6px;`
+    const sel = aucTsel[gi] || new Set();
+    // 만기 버튼은 묶음(행) 하나에 한 벌만 둔다. 차트 4개와 표 4개에 동시에 걸리는
+    // 설정이라, 표마다 같은 버튼을 네 번 그리면 '이 표만 바뀌나?' 하고 헷갈린다.
+    out += `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:${gi ? 22 : 2}px 0 8px">`
+      + `<div style="font-size:13px;color:#333;font-weight:700;`
       + `border-left:4px solid #9aa7b8;padding-left:8px">${gName}</div>`
+      + '<div class="mode">'
+      + gTerms.map(t => `<button data-atsel="${t}" data-agi="${gi}" `
+          + `class="${sel.has(t) ? 'active' : ''}" `
+          + `style="color:${sel.has(t) ? aucCol(t) : '#8592a3'};font-weight:700">${t}</button>`).join('')
+      + '</div>'
+      + '<span style="font-size:12px;color:#8592a3">'
+      + (sel.size ? `${[...sel].sort((a, b) => aucOrd(a) - aucOrd(b)).join('·')} 만 표시 (다시 누르면 해제)`
+                  : '만기를 누르면 그것만 봅니다 (여러 개 가능)')
+      + '</span></div>'
       + '<div style="display:flex;gap:16px;flex-wrap:wrap">'
       + AUC_METRICS.map(([key, mName, unit, smooth], mi) => {
         const dec = key === 'btc' ? 2 : key === 'hy' ? 3 : 1;
@@ -9452,13 +9471,7 @@ function aucChartShell(res, prevAvg, devStyle) {
           + '<div style="flex:1 1 320px;min-width:260px"><div class="cchart" style="height:300px">'
           + `<canvas id="aucChart${gi * AUC_METRICS.length + mi}"></canvas></div></div>`
           + '<div style="flex:0 0 190px">'
-          + `<div class="mode" style="margin-bottom:3px;flex-wrap:wrap;gap:2px">`
-          + `<button data-asort="1" class="active" style="font-size:11px;padding:2px 6px">`
-          + `${aucTsort === 'date' ? '날짜순' : '만기순'}</button>`
-          + gTerms.map(t => `<button data-atsel="${t}" data-agi="${gi}" `
-              + `class="${(aucTsel[gi] || new Set()).has(t) ? 'active' : ''}" `
-              + `style="font-size:11px;padding:2px 6px;color:${aucCol(t)}">${t}</button>`).join('')
-          + '</div>'
+          + `<div style="font-size:11px;color:#8592a3;margin-bottom:3px">${mName} 최근 회차</div>`
           + mini(gTerms, gi, key, dec, scale) + '</div></div>';
       }).join('')
       + '</div>';
@@ -9467,7 +9480,9 @@ function aucChartShell(res, prevAvg, devStyle) {
     + '<div style="font-size:12px;color:#8592a3;margin-top:12px">기간 선택기를 따릅니다.'
     + ` <b>실선 = ${aucWinLabel()} 이동평균, 점선 = 당회 실제값</b>입니다. 회차마다 톱니처럼 튀어 원계열만으로는 추세가 안 보이고,`
     + ' 평균만 보면 이번 회차가 얼마나 벗어났는지 안 보여 둘을 겹쳤습니다.'
-    + ' <b>오른쪽 표</b>는 최근 9회의 실제치와 그 시점의 직전 평균입니다 (실제치 색 = 평균 대비).'
+    + ' <b>오른쪽 표</b>는 최근 12회의 실제치와 그 시점의 직전 평균입니다 (실제치 색 = 평균 대비).'
+    + '<br>묶음 제목 옆 <b>만기 버튼</b>을 누르면 그 만기만 남습니다 — 여러 개 동시에 켜지고, 다시 누르면 해제됩니다.'
+    + ' 그 줄의 <b>차트 4개와 표 4개에 함께</b> 걸립니다.'
     + '<br><b>낙찰금리만 실선 하나</b>입니다 — 금리는 수준 자체가 의미라 평활하면 왜곡됩니다.'
     + '<br><b>End-User Take = 직접 + 간접</b>, 즉 최종 투자자가 가져간 몫입니다. 나머지가 딜러 몫이고, 딜러는 재고를 원치 않아'
     + ' 며칠에 걸쳐 시장에 풀어냅니다. 음영은 통상 범위(60~90%)로, 아래로 벗어나면 수요 부족 신호로 읽습니다.'
@@ -9484,13 +9499,17 @@ function aucDrawCharts(res) {
   aucCharts = [];
 
   AUC_GROUPS.forEach(([gName, gTerms], gi) => {
+    // 고른 만기만 그린다 (아무것도 안 고르면 전부). 선이 줄면 y축도 그만큼
+    // 좁혀져서, 겹쳐 볼 때는 안 보이던 폭이 드러난다.
+    const sel = aucTsel[gi] || new Set();
+    const useTerms = sel.size ? gTerms.filter(t => sel.has(t)) : gTerms;
     AUC_METRICS.forEach(([key, mName, unit, smooth, band], mi) => {
       const idx = gi * AUC_METRICS.length + mi;
       const cv = document.getElementById('aucChart' + idx);
       if (!cv) return;
       const dec = key === 'btc' ? 2 : key === 'hy' ? 3 : 1;
       const ds = [];
-      gTerms.forEach(t => {
+      useTerms.forEach(t => {
         const pts = rows.filter(r => r.t === t && r[key] != null).sort((a, b) => a.d < b.d ? -1 : 1);
         if (!pts.length) return;
         const line = Array(dates.length).fill(null), dot = Array(dates.length).fill(null);

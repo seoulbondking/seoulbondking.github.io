@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Macrobox</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -377,8 +376,6 @@
       </span>
       <button id="restoreBtn" style="display:none;padding:6px 14px;font-size:13px;
         border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px"></button>
-      <button id="exportBtn" style="margin-left:auto;padding:6px 14px;font-size:13px;
-        border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px">엑셀 다운로드</button>
     </div>
     <div id="compareBar" style="display:none;margin-bottom:12px;gap:8px;flex-wrap:wrap;align-items:center">
       <select id="cmpInd" style="padding:6px;font-size:13px;border:1px solid #c8d0dc;border-radius:4px"></select>
@@ -469,7 +466,8 @@ function applyNavOrder(nav) {
 }
 const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
-                  'kr_yield', 'kr_policy_bei', 'mkt_oil_fx',
+                  // kr_yield 는 숨기지 않는다 — 그 자리에 '금리 흐름' 버튼이 생긴다
+                  'kr_policy_bei', 'mkt_oil_fx',
                   // 메뉴에서 내린 한국 지표 (고용 총괄 ~ 테일러 준칙 구간)
                   'kr_emp_total_sa', 'kr_emp_occupation', 'kr_emp_inactive_sa', 'kr_acm',
                   // kr_swap 은 숨기지 않는다 — 그 자리에 'IRS 시나리오' 버튼이 생긴다
@@ -732,7 +730,8 @@ function refresh() {
   document.getElementById('usEmpTabs').style.display = isUsE ? '' : 'none';
   document.getElementById('krEmpTabs').style.display = isKrE ? '' : 'none';
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
-  document.getElementById('yieldTabs').style.display = isYld ? '' : 'none';
+  // '금리 흐름'·'채권 계산' 은 한 화면뿐이라 탭 막대를 감춘다
+  document.getElementById('yieldTabs').style.display = (isYld && yldMode === 'full') ? '' : 'none';
   document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
@@ -749,12 +748,15 @@ function refresh() {
     (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
+  // 금리 흐름·채권 계산은 차트뿐이라 표 좌우 스크롤 버튼이 할 일이 없다 ('금리 분해'는 원자료 표가 있어 남긴다)
+  const isYldTbl = isYld && yldMode === 'full';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
-  // IRS 시나리오는 기간 선택기를 안 쓴다 (커브 평가일이 기준이라 기간 개념이 없다).
+  // IRS 시나리오·채권 계산은 기간 선택기를 안 쓴다 (평가일 두 개가 기준이라 기간 개념이 없다).
   // 툴바 자체는 남겨서 제목이 계속 보이게 하고, 선택기만 감춘다.
-  document.getElementById('periodBox').style.display = isIrs ? 'none' : 'inline-flex';
+  const noPeriod = isIrs || (isYld && yldMode === 'calc');
+  document.getElementById('periodBox').style.display = noPeriod ? 'none' : 'inline-flex';
   document.getElementById('aucBar').style.display = isAuc ? 'inline-flex' : 'none';
   document.querySelectorAll('#aptTabs button').forEach(b => b.classList.toggle('active', b.dataset.at === comboTab));
   updateRestoreBtn();
@@ -1614,9 +1616,12 @@ const FUND_ROWS = [
   { name: '일임 국내 주식', lv: 2 }, { name: '일임 해외 주식', lv: 2 },
   { name: '증권', lv: 0, leaves: ['고객예탁금', '고객RP', 'CMA'] },
   { name: '고객예탁금', lv: 1 }, { name: '고객RP', lv: 1 }, { name: 'CMA', lv: 1 },
-  { name: '은행', lv: 0, leaves: ['실세총예금', '금전신탁'] },
+  // CD 순발행잔액은 예금이 아니라 시장성 조달이지만, 은행이 끌어오는 자금이라
+  // 섹션 합계에 넣었다 (합계가 CD 만큼 커진다 — 예금만 보려면 leaves 에서 빼면 된다).
+  { name: '은행', lv: 0, leaves: ['실세총예금', 'CD 순발행잔액', '금전신탁'] },
   { name: '실세총예금', lv: 1 },
   { name: '실세요구불', lv: 2 }, { name: '저축성', lv: 2 },
+  { name: 'CD 순발행잔액', lv: 1 },
   { name: '금전신탁', lv: 1 },
 ];
 const fundDlab = d => d.slice(2).replace(/-/g, '.');   // 2026-07-23 → 26.07.23
@@ -2334,21 +2339,112 @@ const YIELD = { id: 'yield', name: '금리 분해',
                       'kr_swap', 'kr_usdkrw', 'kr_credit_spread',
                       'kr_kospi'] };
 let yldData = null, yldTab = 'decomp', yldCharts = [null, null, null, null];
-let yldSel = null, yldCurveDates = null;
+let yldSel = null;
+// 커브를 그릴 날짜 4칸. 고정 길이이고 빈 칸은 null 이다 (칸 번호 = 선 모양 번호라
+// 중간이 비어도 나머지 칸의 선 모양이 밀리지 않는다).
+let yldCurveDates = null;
+let yldToday = true;                // 날짜1 을 '가장 최근 영업일'에 자동으로 붙인다
+// 일드커브 탭에서 함께 그릴 발행주체. 커브 격자가 kr_yield 에 이미 다 들어와 있다
+// (금리stack 시트 · 국고 13만기, 은행채·회사채 12만기, 통안 8만기).
+// [키(계열명 접두어), 표시명, 색]. 국고는 스프레드의 기준이라 항상 필요하다.
+// 발행주체 목록은 금리stack 에 들어온 그룹에서 그때그때 뽑는다. 시트에 그룹이 늘면
+// 자동으로 따라오고, 여기 고정 목록을 고치러 올 일이 없다.
+//   · 은행채AA+ 는 제외 (호가가 얇아 커브가 튄다)
+//   · 국고·통안은 스프레드의 기준물이라 스프레드 차트에서 자기 자신은 빠진다
+const ISSUER_DROP = g =>
+  (g.includes('은행채') && g.includes('AA+'))        // 호가가 얇아 커브가 튄다
+  || /^(CD|CP)\b/.test(g);                           // 단일 만기(3월)뿐이라 커브가 안 된다
+const NO_SPREAD = ['국고채권', '통안증권'];
+const ISSUER_PIN = ['국고채권', '통안증권'];          // 맨 앞에 고정할 순서
+const ISSUER_COLORS = ['#1a4fa0', '#1f9e8f', '#7b4fa0', '#d98324', '#c0392b',
+                       '#2b7a3d', '#b5179e', '#7f6000', '#0b6e99', '#8d3b2f'];
+// '{그룹} {만기}' 에서 만기를 떼고, 표시용으로 이름을 줄인다.
+const issuerShort = g => {
+  if (g === '국고채권') return '국채';
+  if (g === '통안증권') return '통안';
+  let n = g
+    .replace(/^금융채\s+/, '')          // 금융채 산금채 → 산금채, 금융채 은행채 AAA → 은행채 AAA
+    .replace('기타금융채', '캐피탈')
+    .replace('공사/공단채', '공사채')
+    .replace('(공모/무보증)', '')
+    .replace(/-\s*$/, '−')              // 회사채AA- → 회사채AA−
+    .replace(/\s+/g, ' ').trim();
+  // 공사채·산금채·은행채 등은 전부 AAA 라 등급 표기가 군더더기다.
+  // 회사채는 AA−·A− 로 등급이 갈리므로 건드리지 않는다.
+  if (!n.startsWith('회사채')) n = n.replace(/\s*AAA$/, '').trim();
+  return n;
+};
+// 스프레드 기준물 표시명 — 위 규칙을 한 곳에서만 정하려고 파생시킨다
+const GOV_NM = issuerShort('국고채권');
+let CURVE_ISSUERS = [];
+function rebuildIssuers() {
+  const ind = yldData && yldData['kr_yield'];
+  if (!ind) return;
+  const seen = [];
+  ind.series.forEach(s => {
+    const n = baseName(s.name);
+    const t = TENORS.find(x => n.endsWith(' ' + x));
+    const g = t ? n.slice(0, n.length - t.length - 1) : n;
+    if (!ISSUER_DROP(g) && !seen.includes(g)) seen.push(g);
+  });
+  seen.sort((a, b) => {
+    const ia = ISSUER_PIN.indexOf(a), ib = ISSUER_PIN.indexOf(b);
+    if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    return 0;                                   // 나머지는 시트 순서를 그대로 둔다
+  });
+  CURVE_ISSUERS = seen.map((g, i) => [g, issuerShort(g), ISSUER_COLORS[i % ISSUER_COLORS.length]]);
+  // 목록이 바뀌어 사라진 선택지는 되돌린다
+  if (yldIssuers) yldIssuers = yldIssuers.filter(k => seen.includes(k));
+  if (!yldIssuers || !yldIssuers.length) yldIssuers = [seen[0]];
+  if (!seen.includes(yldRollKey)) yldRollKey = seen[0];
+  if (yldSpSlots) yldSpSlots.forEach(s => { if (!seen.includes(s.k)) s.k = seen[0]; });
+}
+let yldIssuers = null;              // 선택된 발행주체 키 (null 이면 국고만)
+const CURVE_DASH = [[], [6, 3], [2, 3], [9, 3, 2, 3]];
+// 날짜 4칸 색. 발행주체가 하나일 때는 색까지 날짜에 쓴다 (발행주체가 하나뿐이라
+// 색을 거기 쓸 이유가 없다). 발행주체가 둘 이상이면 색은 발행주체 몫으로 돌아가고
+// 날짜는 선 모양만으로 갈린다. 어느 쪽이든 선 모양은 늘 날짜를 따른다.
+const CURVE_DATE_COLORS = ['#1a4fa0', '#d1495b', '#1f9e5a', '#e08b00'];
+
+// 차트1 가로축 만기 구간 (기본 1년~10년). 짧은 쪽 CD·CP 와 30년을 빼면 중간이 펴진다.
+let yldTenLo = '1년', yldTenHi = '10년';
+// 차트3 스프레드 추이: 칸 3개 × (발행주체, 만기) · 기간은 따로 잡는다
+let yldSpSlots = null, yldSpStart = null, yldSpEnd = null;
+// 요약표: 기준 만기와 Z스코어 관측창(영업일)
+let yldSumTenor = '3년', yldSumWin = 250;
+const Z_WINS = [[250, '1년'], [500, '2년'], [750, '3년']];
+// 차트4 롤다운: 종류와 클릭된 만기(년). 날짜는 위 날짜2 → 날짜1 을 쓴다.
+let yldRollKey = '국고채권', yldRollT = null;
+// 롤다운 분해 보기: 'simple' = 롤다운/국고/스프레드 3줄, 'grid' = 2×2
+let yldRollView = 'simple';
 const TENORS = ['3월', '6월', '9월', '1년', '1.5년', '2년', '2.5년', '3년', '4년', '5년', '7년', '10년', '30년'];
 const TENOR_Y = { '3월': 0.25, '6월': 0.5, '9월': 0.75, '1년': 1, '1.5년': 1.5, '2년': 2, '2.5년': 2.5,
                   '3년': 3, '4년': 4, '5년': 5, '7년': 7, '10년': 10, '30년': 30 };
 
-async function enterYield() {
+// '금리 흐름'·'채권 계산' 은 '금리 분해' 뷰의 한 탭씩만 떼어 쓴다. 데이터와 날짜 4칸
+// 상태를 그대로 공유하고, 탭 막대만 감춘 채 yldTab 을 고정한다.
+// 세 진입점이 같은 상태를 쓰므로 뷰를 바꿀 때마다 yldMode 를 반드시 다시 세팅한다.
+let yldMode = 'full';                        // 'full' | 'curve' | 'calc'
+const YLD_MODES = {
+  full: { tab: 'decomp', name: null, btn: 'yieldBtn' },
+  curve: { tab: 'curve', name: '금리 흐름', btn: 'krCurveBtn' },
+  calc: { tab: 'calc', name: '채권 계산', btn: 'bondCalcBtn' },
+};
+const KR_CURVE_NAME = YLD_MODES.curve.name, BOND_CALC_NAME = YLD_MODES.calc.name;
+
+async function enterYield(mode = 'full') {
   const got = await Promise.all(YIELD.ids.map(id => loadIndicator(id).catch(() => null)));
   yldData = {}; YIELD.ids.forEach((id, i) => yldData[id] = got[i]);
   if (!yldData['kr_yield']) { alert('금리 데이터가 없습니다. python fetch.py kr_yield kr_policy_bei 실행 필요.'); return; }
-  current = { id: YIELD.id, name: YIELD.name, freq: 'D', unit: '%',
+  yldMode = YLD_MODES[mode] ? mode : 'full';
+  const M = YLD_MODES[yldMode];
+  const title = M.name || YIELD.name;
+  current = { id: YIELD.id, name: title, freq: 'D', unit: '%',
               updated_at: yldData['kr_yield'].updated_at, series: [] };
-  view = 'yield'; yldTab = 'decomp';
-  document.getElementById('title').textContent = YIELD.name;
+  view = 'yield'; yldTab = M.tab;
+  document.getElementById('title').textContent = title;
   document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
-  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'yieldBtn'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === M.btn));
   if (!document.getElementById('yieldTabs').dataset.bound) {
     document.getElementById('yieldTabs').addEventListener('click', e => {
       if (!e.target.dataset.yt) return; yldTab = e.target.dataset.yt; refresh();
@@ -2376,6 +2472,7 @@ const yldLab = d => d.slice(2).replace(/-/g, '.');
 
 function renderYield() {
   document.querySelectorAll('#yieldTabs button').forEach(b => b.classList.toggle('active', b.dataset.yt === yldTab));
+  if (yldTab === 'calc') { renderBondCalc(); return; }
   if (yldTab === 'curve') { renderYieldCurve(); return; }
   if (yldTab === 'model') { renderCurveModel(); return; }
   if (yldTab === 'acm') { renderAcm(); return; }
@@ -2484,50 +2581,572 @@ function renderYieldDecomp() {
     y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 9 }, maxTicksLimit: 6 } } } });
 }
 
+// 일드커브·채권계산이 함께 쓰는 준비물. 날짜 칸 초기화까지 여기서 끝낸다.
+// (두 화면이 같은 날짜 4칸을 공유하므로 어느 쪽으로 들어와도 같은 상태가 된다)
+function yldCtx() {
+  rebuildIssuers();      // 발행주체 목록을 데이터에서 먼저 뽑는다 (기본값이 여기 의존)
+  // 달력은 기간 설정과 무관하게 엑셀에 있는 전 구간을 고른다 (기간 설정은 시계열용).
+  const ALL = periodDates;
+  const has = new Set(ALL);
+  const last = ALL[ALL.length - 1];
+  const ago = n => ALL[Math.max(0, ALL.length - 1 - n)];
+  // 달력에서 휴장일을 고를 수 있으므로 직전 영업일로 당긴다. 그보다 이른 날이 없으면 첫 영업일.
+  const snap = d => {
+    if (!d) return null;
+    if (has.has(d)) return d;
+    let lo = 0, hi = ALL.length - 1, r = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (ALL[m] <= d) { r = m; lo = m + 1; } else hi = m - 1; }
+    return r >= 0 ? ALL[r] : ALL[0];
+  };
+  // 기본값 1개월·3개월·1년 전. 이력이 짧으면 같은 날로 겹치므로 중복 칸은 비운다.
+  if (yldCurveDates === null) yldCurveDates =
+    [last, ago(20), ago(60), ago(250)].map((d, i, a) => a.indexOf(d) === i ? d : null);
+  yldCurveDates.length = CURVE_DASH.length;                    // 항상 4칸 고정
+  if (yldToday) yldCurveDates[0] = last;                       // '오늘' 은 매 렌더마다 최신일로 다시 붙인다
+  if (yldIssuers === null) yldIssuers = ['국고채권'];
+  // on:false 면 그 칸은 안 그린다. 고른 발행주체·만기는 그대로 두므로 다시 켜면 복구된다.
+  // 기본 3칸은 국고·통안이 아닌 (= 스프레드가 나오는) 앞쪽 발행주체로 채운다.
+  if (yldSpSlots === null) {
+    const cand = CURVE_ISSUERS.map(x => x[0]).filter(k => !NO_SPREAD.includes(k));
+    yldSpSlots = [0, 1, 2].map(i => ({ k: cand[i] || cand[0] || CURVE_ISSUERS[0][0], t: '3년', on: true }));
+  }
+  if (yldSpStart === null) yldSpStart = ago(250);   // 기본 1년
+  if (yldSpEnd === null) yldSpEnd = last;
+  const at = (key, tenor, d) => d == null ? null : (yMap('kr_yield', `${key} ${tenor}`).get(d) ?? null);
+  const G = (tenor, d) => at('국고채권', tenor, d);
+  const issuerOf = k => CURVE_ISSUERS.find(x => x[0] === k) || [k, k, '#8592a3'];
+  // 격자 사이 만기의 금리 — 직선보간. 격자 밖은 양 끝값으로 평평하게 둔다.
+  const yAt = (key, d, T) => {
+    const pts = TENORS.map(t => [TENOR_Y[t], at(key, t, d)]).filter(p => p[1] != null);
+    if (!pts.length || d == null) return null;
+    if (T <= pts[0][0]) return pts[0][1];
+    if (T >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
+    for (let i = 1; i < pts.length; i++) {
+      if (T <= pts[i][0]) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        return y0 + (y1 - y0) * (T - x0) / (x1 - x0);
+      }
+    }
+    return null;
+  };
+  const tenOpts = sel => TENORS.map(t => `<option value="${t}"${t === sel ? ' selected' : ''}>${t}</option>`).join('');
+  const issOpts = sel => CURVE_ISSUERS.map(([k, nm]) =>
+    `<option value="${k}"${k === sel ? ' selected' : ''}>${nm}</option>`).join('');
+  const cell = inner => `<div style="flex:1 1 46%;min-width:380px">${inner}</div>`;
+  const ctrl = inner => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;`
+    + `font-size:11px;color:#8592a3;margin-bottom:4px;min-height:24px">${inner}</div>`;
+  // WTD·MTD·QTD·YTD 기준점 = '그 기간이 시작되기 직전 영업일'.
+  // 이번 주 월요일이 아니라 지난주 금요일이 기준이라, 주초·월초 첫날 움직임이 안 빠진다.
+  const wkKey = d => {                       // 그 날이 속한 주의 월요일
+    const t = new Date(d + 'T00:00:00Z');
+    t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+    return t.toISOString().slice(0, 10);
+  };
+  const PERIOD_KEY = {
+    W: wkKey,
+    M: d => d.slice(0, 7),
+    Q: d => d.slice(0, 4) + 'Q' + Math.ceil(+d.slice(5, 7) / 3),
+    Y: d => d.slice(0, 4),
+  };
+  // 기준일(cur)에서 거슬러 올라가 기간 키가 처음 달라지는 날
+  const anchorOf = (cur, kind) => {
+    const f = PERIOD_KEY[kind], k = f(cur);
+    const i = ALL.indexOf(cur);
+    for (let j = i - 1; j >= 0; j--) if (f(ALL[j]) !== k) return ALL[j];
+    return null;                             // 이력이 그 기간 안에서 끝나면 계산 불가
+  };
+  // 관측창 안의 값들로 z = (현재 − 평균) ÷ 표준편차. 표본이 너무 적으면 안 낸다.
+  const zOf = (vals) => {
+    const v = vals.filter(x => x != null);
+    if (v.length < 60) return null;
+    const m = v.reduce((a, b) => a + b, 0) / v.length;
+    const sd = Math.sqrt(v.reduce((a, b) => a + (b - m) * (b - m), 0) / (v.length - 1));
+    return sd > 0 ? (v[v.length - 1] - m) / sd : null;
+  };
+  return { ALL, last, ago, snap, at, G, issuerOf, yAt, tenOpts, issOpts, cell, ctrl,
+           anchorOf, zOf };
+}
+
 // ② 일드커브: 선택 시점들의 만기별 금리 곡선
 function renderYieldCurve() {
   const box = document.getElementById('retailWrap');
   const cols = periodDates.filter(inRange);
   if (!cols.length) { box.innerHTML = '<div style="padding:24px;color:#888">기간에 데이터가 없습니다.</div>'; return; }
-  const last = cols[cols.length - 1];
-  const ago = n => cols[Math.max(0, cols.length - 1 - n)];
-  if (yldCurveDates === null) yldCurveDates = [last, ago(20), ago(60), ago(250)].filter((d, i, a) => a.indexOf(d) === i);
-  const at = (tenor, d) => yMap('kr_yield', `국고채권 ${tenor}`).get(d) ?? null;
-  const labels = TENORS.filter(t => at(t, last) != null);
+  const { ALL, last, ago, snap, at, G, issuerOf, tenOpts, issOpts, cell, ctrl,
+          anchorOf, zOf } = yldCtx();
+  // 가로축은 선택된 발행주체 중 하나라도 값이 있는 만기 (국고만 30년까지 있다)
+  const dates = yldCurveDates;
+  const labels = TENORS.filter(t => yldIssuers.some(k => dates.some(d => at(k, t, d) != null)));
+  // 차트1 만기 구간. 고른 두 끝을 정렬해 쓰므로 순서를 거꾸로 골라도 된다.
+  const lo = Math.min(TENOR_Y[yldTenLo], TENOR_Y[yldTenHi]);
+  const hi = Math.max(TENOR_Y[yldTenLo], TENOR_Y[yldTenHi]);
+  const labelsR = labels.filter(t => TENOR_Y[t] >= lo && TENOR_Y[t] <= hi);
+  const cur = dates.find(d => d) || last;   // 표의 기준일 = 채워진 첫 칸
 
-  let out = '<div style="font-size:12.5px;color:#8592a3;margin-bottom:8px">'
-    + '만기별 금리 곡선. 표에서 <b>날짜를 클릭</b>하면 커브를 추가/제거합니다. 커브가 가팔라지면 성장·물가 기대 상승, 평평/역전은 경기둔화 신호.</div>'
-    + '<div class="cchart" style="height:340px;margin-bottom:14px"><canvas id="ydCurve"></canvas></div>';
-  // 만기별 표 (선택 날짜 + 변화)
-  out += '<div class="block-title">만기별 금리 (%)</div><div class="tscroll"><table class="data vlines"><thead><tr><th>일자</th>'
-    + labels.map(t => `<th>${t}</th>`).join('') + '</tr></thead><tbody>';
-  cols.slice(-30).reverse().forEach(d => {
-    const sel = yldCurveDates.includes(d) ? '● ' : '';
-    out += `<tr class="lv1"><td data-ycd="${d}" style="cursor:pointer">${sel}${yldLab(d)}</td>`
-      + labels.map(t => { const x = at(t, d); return `<td>${x == null ? '' : x.toFixed(3)}</td>`; }).join('') + '</tr>';
-  });
-  out += '</tbody></table></div>';
+  // 발행주체가 하나면 색을 날짜에 쓴다. 차트와 칸 미리보기가 같은 함수를 쓰게 해서
+  // 둘이 어긋나지 않게 한다.
+  const byDate = yldIssuers.length === 1;
+  const lineColor = (k, j) => byDate ? CURVE_DATE_COLORS[j] : issuerOf(k)[2];
+
+  // 날짜 4칸 — 각 칸은 달력. 날짜1 위의 '오늘' 을 켜면 최신 영업일에 고정된다.
+  const slotBox = (i) => {
+    const d = yldCurveDates[i] || '';
+    const lock = i === 0 && yldToday;
+    const swc = byDate ? CURVE_DATE_COLORS[i] : '#5a6b82';
+    const head = i === 0
+      ? `<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#8592a3;cursor:pointer;margin-bottom:2px">`
+        + `<input type="checkbox" id="ycToday"${yldToday ? ' checked' : ''} style="margin:0">오늘</label>`
+      : '<div style="height:16px;margin-bottom:2px"></div>';
+    return '<div style="display:flex;flex-direction:column">' + head
+      + `<div style="font-size:11px;color:${byDate ? swc : '#8592a3'};font-weight:${byDate ? 700 : 400};margin-bottom:2px">날짜${i + 1}`
+      + `<span style="display:inline-block;width:22px;border-top:${i === 0 ? '2.4' : '1.6'}px `
+      + `${i === 0 ? 'solid' : 'dashed'} ${swc};margin-left:5px;vertical-align:middle"></span></div>`
+      + `<div style="display:flex;gap:3px;align-items:center">`
+      + `<input type="date" data-ycs="${i}" value="${d}" min="${ALL[0]}" max="${last}"`
+      + `${lock ? ' disabled' : ''} style="font-size:12px;padding:2px 4px">`
+      + (i === 0 ? '' : `<button data-ycx="${i}" title="비우기" style="font-size:11px;padding:1px 5px;line-height:1.4">×</button>`)
+      + '</div></div>';
+  };
+
+  let out = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    + '<div class="mode">'
+    + CURVE_ISSUERS.map(([k, nm, c]) => `<button data-yci="${k}" `
+        + `class="${yldIssuers.includes(k) ? 'active' : ''}" `
+        + `style="color:${yldIssuers.includes(k) ? c : '#8592a3'};font-weight:700">${nm}</button>`).join('')
+    + '</div>'
+    + '<span style="font-size:12px;color:#8592a3">'
+    + (byDate ? '날짜는 <b>색 + 선 모양</b>으로 구분합니다'
+              : '발행주체는 <b>색</b>, 날짜는 <b>선 모양</b>으로 구분합니다 (발행주체를 하나만 켜면 날짜별 색으로 바뀝니다)')
+    + '</span></div>'
+    + '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">'
+    + [0, 1, 2, 3].map(slotBox).join('') + '</div>'
+    + '<div style="font-size:12.5px;color:#8592a3;margin-bottom:10px">'
+    + '만기별 금리 곡선. 휴장일을 고르면 <b>직전 영업일</b>로 맞춰집니다.</div>';
+
+  // ── 1행: 일드커브 · 스프레드 커브 ──
+  out += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">'
+    + cell(ctrl(`만기 구간 <select id="ycTenLo">${tenOpts(yldTenLo)}</select> ~ `
+        + `<select id="ycTenHi">${tenOpts(yldTenHi)}</select>`)
+      + '<div class="cchart" style="height:330px"><canvas id="ydCurve"></canvas></div>')
+    + cell(ctrl('&nbsp;')
+      + '<div class="cchart" style="height:330px"><canvas id="ydSprd"></canvas></div>')
+    + '</div>';
+
+  // ── 2행: 스프레드 추이 ──
+  out += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">'
+    + cell(ctrl(`기간 <input type="date" id="ycSpS" value="${yldSpStart}" min="${ALL[0]}" max="${last}" style="font-size:11px">`
+        + ` ~ <input type="date" id="ycSpE" value="${yldSpEnd}" min="${ALL[0]}" max="${last}" style="font-size:11px">`)
+      + ctrl(yldSpSlots.map((s, i) =>
+          `<span style="border-left:3px solid ${s.on ? CURVE_DATE_COLORS[i] : '#c8cdd6'};padding-left:4px;`
+          + `opacity:${s.on ? 1 : 0.5}">`
+          + `<input type="checkbox" data-spo="${i}"${s.on ? ' checked' : ''} title="표시/해제" style="margin:0 3px 0 0">`
+          + `<select data-sps="${i}"${s.on ? '' : ' disabled'}>${issOpts(s.k)}</select>`
+          + `<select data-spt="${i}"${s.on ? '' : ' disabled'}>${tenOpts(s.t)}</select></span>`).join(''))
+      + '<div class="cchart" style="height:300px"><canvas id="ydSpTr"></canvas></div>')
+    // ── 요약표: 기준일 대비 1D·WTD·MTD·QTD·YTD 와 Z스코어 ──
+    + cell(ctrl(`만기 <select id="ycSumT">${tenOpts(yldSumTenor)}</select>`
+        + ' · Z <span class="mode">'
+        + Z_WINS.map(([w, nm]) => `<button data-zw="${w}" class="${yldSumWin === w ? 'active' : ''}">${nm}</button>`).join('')
+        + `</span> · 기준일 ${yldLab(cur)}`)
+      + '<div id="ycSum"></div>')
+    + '</div>';
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = 0);
-  box.querySelectorAll('[data-ycd]').forEach(td => td.onclick = () => {
-    const d = td.dataset.ycd;
-    yldCurveDates = yldCurveDates.includes(d) ? yldCurveDates.filter(x => x !== d) : [...yldCurveDates, d];
+  // 달력: 고른 날을 영업일로 스냅해 칸에 넣는다. 비우면 그 선만 사라진다.
+  box.querySelectorAll('[data-ycs]').forEach(inp => inp.onchange = () => {
+    const i = +inp.dataset.ycs;
+    yldCurveDates[i] = inp.value ? snap(inp.value) : null;
     renderYield();
   });
+  box.querySelectorAll('[data-ycx]').forEach(b => b.onclick = () => {
+    yldCurveDates[+b.dataset.ycx] = null;
+    renderYield();
+  });
+  const todayBox = box.querySelector('#ycToday');
+  if (todayBox) todayBox.onchange = () => {
+    yldToday = todayBox.checked;
+    if (yldToday) yldCurveDates[0] = last;     // 끌 때는 지금 날짜를 그대로 두고 편집만 풀어 준다
+    renderYield();
+  };
+  box.querySelectorAll('[data-yci]').forEach(b => b.onclick = () => {
+    const k = b.dataset.yci;
+    yldIssuers = yldIssuers.includes(k) ? yldIssuers.filter(x => x !== k) : [...yldIssuers, k];
+    if (!yldIssuers.length) yldIssuers = ['국고채권'];     // 전부 끄면 국고로 되돌린다
+    renderYield();
+  });
+
+  // 발행주체 × 날짜 조합. 조합이 많아지므로 색(발행주체) + 선 모양(날짜)으로 가른다.
+  const mk = (valFn, ls) => {
+    const ds = [];
+    yldIssuers.forEach(k => {
+      const [, nm, c] = issuerOf(k);
+      dates.forEach((d, j) => {
+        const arr = ls.map(t => valFn(k, t, d));
+        if (!arr.some(v => v != null)) return;
+        const col = lineColor(k, j);
+        ds.push({ label: byDate ? `날짜${j + 1} ${yldLab(d)}` : `${nm} ${yldLab(d)}`, data: arr,
+          borderColor: col, backgroundColor: col, borderDash: CURVE_DASH[j],
+          borderWidth: j === 0 ? 2.4 : 1.6, pointRadius: j === 0 ? 3 : 2,
+          tension: 0.2, spanGaps: true });
+      });
+    });
+    return ds;
+  };
   if (yldCharts[0]) { yldCharts[0].destroy(); yldCharts[0] = null; }
   yldCharts[0] = new Chart(box.querySelector('#ydCurve'), {
     type: 'line',
-    data: { labels, datasets: yldCurveDates.map((d, j) => ({
-      label: yldLab(d), data: labels.map(t => at(t, d)),
-      borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
-      borderWidth: 2, pointRadius: 3, tension: 0.2, spanGaps: true })) },
+    data: { labels: labelsR, datasets: mk((k, t, d) => at(k, t, d), labelsR) },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
-        title: { display: true, text: '국고채 일드커브 (%)', font: { size: 12 } },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10 } },
+        title: { display: true, text: '일드커브 (%)', font: { size: 12 } },
         tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(3)}%` } } },
       scales: { x: { title: { display: true, text: '만기', font: { size: 10 } }, ticks: { font: { size: 10 } } },
         y: { ticks: { font: { size: 10 } } } } },
   });
+
+  // 크레딧 스프레드 커브 — 같은 만기의 기준물을 뺀다. 기준물 자신은 그 만기에서 0이라 뺀다.
+  const sprd = mk((k, t, d) => { if (NO_SPREAD.includes(k)) return null;
+    const a = at(k, t, d), g = G(t, d); return a == null || g == null ? null : (a - g) * 100; }, labels);
+  if (yldCharts[1]) { yldCharts[1].destroy(); yldCharts[1] = null; }
+  yldCharts[1] = new Chart(box.querySelector('#ydSprd'), {
+    type: 'line',
+    data: { labels, datasets: sprd },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10 } },
+        title: { display: true, text: sprd.length ? `크레딧 스프레드 커브 (${GOV_NM} 대비, bp)`
+                                                  : '크레딧 스프레드 — 발행주체를 추가하세요', font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}bp` } } },
+      scales: { x: { title: { display: true, text: '만기', font: { size: 10 } }, ticks: { font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+
+  // ── 컨트롤 ──
+  const on = (sel, ev, fn) => { const el = box.querySelector(sel); if (el) el[ev] = fn; };
+  on('#ycTenLo', 'onchange', e => { yldTenLo = e.target.value; renderYield(); });
+  on('#ycTenHi', 'onchange', e => { yldTenHi = e.target.value; renderYield(); });
+  on('#ycSpS', 'onchange', e => { yldSpStart = snap(e.target.value); renderYield(); });
+  on('#ycSpE', 'onchange', e => { yldSpEnd = snap(e.target.value); renderYield(); });
+  box.querySelectorAll('[data-sps]').forEach(s => s.onchange = () => {
+    yldSpSlots[+s.dataset.sps].k = s.value; renderYield(); });
+  box.querySelectorAll('[data-spt]').forEach(s => s.onchange = () => {
+    yldSpSlots[+s.dataset.spt].t = s.value; renderYield(); });
+  box.querySelectorAll('[data-spo]').forEach(c => c.onchange = () => {
+    yldSpSlots[+c.dataset.spo].on = c.checked; renderYield(); });
+  on('#ycSumT', 'onchange', e => { yldSumTenor = e.target.value; renderYield(); });
+  box.querySelectorAll('[data-zw]').forEach(b => b.onclick = () => {
+    yldSumWin = +b.dataset.zw; renderYield(); });
+
+  // ── 요약표 ──────────────────────────────────────────────────
+  // 기준일(날짜1)과 각 기간 직전 영업일의 차이를 bp 로 적는다. Z 는 수준의 표준화 값.
+  const ST = yldSumTenor;
+  const iCur = ALL.indexOf(cur);
+  const anchors = [['1D', iCur > 0 ? ALL[iCur - 1] : null], ['WTD', anchorOf(cur, 'W')],
+                   ['MTD', anchorOf(cur, 'M')], ['QTD', anchorOf(cur, 'Q')], ['YTD', anchorOf(cur, 'Y')]];
+  const win = ALL.slice(Math.max(0, iCur - yldSumWin + 1), iCur + 1);
+  // val(d) 은 그 날의 수준. 금리는 %, 스프레드는 bp 로 들어온다.
+  const sumRow = (nm, color, val, unit) => {
+    const now = val(cur);
+    if (now == null) return '';
+    const m = unit === '%' ? 100 : 1;                    // 변동은 항상 bp
+    const z = zOf(win.map(val));
+    const cells = anchors.map(([, d]) => {
+      const p = d == null ? null : val(d);
+      if (p == null) return '<td></td>';
+      const v = (now - p) * m;
+      return `<td${v < 0 ? ' class="neg"' : ''}>${(v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1)}</td>`;
+    }).join('');
+    // |z| ≥ 2 면 눈에 띄게 — 과거 분포에서 벗어난 수준이라는 뜻
+    const zc = z == null ? '' : (Math.abs(z) >= 2 ? (z > 0 ? '#c0392b' : '#1a4fa0') : '#5a6b82');
+    return `<tr class="lv1"><td style="text-align:left;color:${color};font-weight:700">${nm}</td>`
+      + `<td>${unit === '%' ? now.toFixed(3) : now.toFixed(1)}</td>` + cells
+      + `<td style="color:${zc};font-weight:${z != null && Math.abs(z) >= 2 ? 700 : 400}">`
+      + `${z == null ? '' : (z >= 0 ? '+' : '−') + Math.abs(z).toFixed(2)}</td></tr>`;
+  };
+  const head = '<tr><th>구분</th><th>현재</th>'
+    + anchors.map(([nm]) => `<th>${nm}</th>`).join('') + '<th>Z</th></tr>';
+  const govKeys = CURVE_ISSUERS.map(x => x[0]).filter(k => NO_SPREAD.includes(k));
+  const cdtKeys = CURVE_ISSUERS.map(x => x[0]).filter(k => !NO_SPREAD.includes(k));
+  let sum = `<div class="block-title">${ST} · 금리 (%) · 변동 bp</div>`
+    + `<div class="tscroll"><table class="data vlines">${'<thead>' + head + '</thead>'}<tbody>`
+    + govKeys.map(k => sumRow(issuerOf(k)[1], issuerOf(k)[2], d => at(k, ST, d), '%')).join('')
+    + '</tbody></table></div>'
+    + `<div class="block-title">${ST} · 스프레드 (bp, ${GOV_NM} 대비)</div>`
+    + `<div class="tscroll"><table class="data vlines">${'<thead>' + head + '</thead>'}<tbody>`
+    + cdtKeys.map(k => sumRow(issuerOf(k)[1], issuerOf(k)[2], d => {
+        const a = at(k, ST, d), g = G(ST, d);
+        return (a == null || g == null) ? null : (a - g) * 100;
+      }, 'bp')).join('')
+    + '</tbody></table></div>'
+    + '<div style="font-size:12px;color:#8592a3;margin-top:6px">'
+    + 'WTD·MTD·QTD·YTD 는 <b>그 기간 직전 영업일</b> 대비입니다 (WTD 는 지난주 마지막 영업일). '
+    + `Z 는 최근 ${Z_WINS.find(x => x[0] === yldSumWin)[1]}(${yldSumWin}영업일) 수준의 `
+    + '(현재 − 평균) ÷ 표준편차이고, |Z| ≥ 2 면 색으로 표시합니다. 관측치가 60일 미만이면 비웁니다.</div>';
+  const sumBox = box.querySelector('#ycSum');
+  if (sumBox) sumBox.innerHTML = sum;
+
+  // ── ③ 스프레드 추이 (시계열) — 칸마다 '발행주체 − 같은 만기 국고', bp ──
+  // 거꾸로 골라도 되도록 두 끝을 정렬한다
+  const [spA, spB] = [yldSpStart, yldSpEnd].sort();
+  const span = ALL.filter(d => d >= spA && d <= spB);
+  const trDs = yldSpSlots.map((s, i) => {
+    const [, nm] = issuerOf(s.k);
+    if (!s.on) return null;                       // 체크 해제된 칸
+    if (NO_SPREAD.includes(s.k)) return null;     // 국고·통안은 스프레드를 안 낸다
+    const data = span.map(d => {
+      const a = at(s.k, s.t, d), g = G(s.t, d);
+      return (a == null || g == null) ? null : (a - g) * 100;
+    });
+    if (!data.some(v => v != null)) return null;
+    return { label: `${nm} ${s.t}`, data,
+      borderColor: CURVE_DATE_COLORS[i], backgroundColor: CURVE_DATE_COLORS[i],
+      borderWidth: 1.6, pointRadius: 0, tension: 0.15, spanGaps: true };
+  }).filter(Boolean);
+  if (yldCharts[2]) { yldCharts[2].destroy(); yldCharts[2] = null; }
+  yldCharts[2] = new Chart(box.querySelector('#ydSpTr'), {
+    type: 'line',
+    data: { labels: span.map(yldLab), datasets: trDs },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10 } },
+        title: { display: true, text: trDs.length ? `스프레드 추이 (${GOV_NM} 대비, bp)`
+                 : (yldSpSlots.some(s => s.on) ? `스프레드 추이 — ${GOV_NM}·${issuerShort('통안증권')} 외 발행주체를 고르세요`
+                                               : '스프레드 추이 — 켜진 칸이 없습니다'), font: { size: 12 } },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}bp` } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxTicksLimit: 8, autoSkip: true } },
+        y: { ticks: { font: { size: 10 } } } } },
+  });
+
+}
+
+// 잔존만기 가로축. 롤다운은 짧은 구간이 관심사라 5년에서 끊고, 5Y 점이 오른쪽 벽에
+// 붙어 잘려 보이지 않도록 축만 조금 더 늘린다 (눈금은 5Y 가 마지막).
+const ROLL_XMAX = 5, ROLL_XPAD = 0.35;
+const ROLL_TENORS = ['3월', '6월', '9월', '1년', '1.5년', '2년', '2.5년', '3년', '4년', '5년'];
+const ROLL_TICKS = ROLL_TENORS.map(t => TENOR_Y[t]);
+const fmtY = x => x.toFixed(1) + 'Y';
+// 눈금 라벨: 1년 미만은 개월, 그 위는 연. 3M · 1.5Y · 5Y
+const fmtTen = x => x < 1 ? Math.round(x * 12) + 'M'
+                          : (x % 1 ? x.toFixed(1) : x.toFixed(0)) + 'Y';
+
+// ── 채권 계산: 롤다운 (날짜2 → 날짜1) ──────────────────────────
+// 두 날짜 중 이른 쪽에서 사서 늦은 쪽까지 들고 간다. 그 사이 Δ년만큼 잔존만기가 준다.
+//   롤다운   = 매수일 커브를 타고 내려간 몫  y_A(T−Δ) − y_A(T)   (커브 불변 가정)
+//   커브변화 = 그 지점에서 커브 자체가 움직인 몫  y_B(T−Δ) − y_A(T−Δ)
+// 둘을 더하면 실제 금리 변화가 된다. 금리가 내려가면(음수 bp) 채권 가격은 오른다.
+function renderBondCalc() {
+  const box = document.getElementById('retailWrap');
+  if (!periodDates.length) { box.innerHTML = '<div style="padding:24px;color:#888">데이터가 없습니다.</div>'; return; }
+  const { ALL, last, snap, at, issuerOf, yAt, issOpts, ctrl } = yldCtx();
+
+  // 날짜 2칸 — 일드커브 화면의 날짜1·날짜2 를 그대로 쓴다 (두 화면이 같은 상태를 공유).
+  const slot = i => {
+    const d = yldCurveDates[i] || '';
+    const lock = i === 0 && yldToday;
+    return `<span style="display:inline-flex;align-items:center;gap:3px">날짜${i + 1}`
+      + `<input type="date" data-ycs="${i}" value="${d}" min="${ALL[0]}" max="${last}"`
+      + `${lock ? ' disabled' : ''} style="font-size:12px;padding:2px 4px"></span>`;
+  };
+  box.innerHTML = '<div style="font-size:12.5px;color:#8592a3;margin-bottom:8px">'
+    + '<b>롤다운</b> — 이른 날짜에 사서 늦은 날짜까지 들고 갔을 때, 금리 변화를 '
+    + '<b>커브를 타고 내려간 몫</b>과 <b>커브 자체가 움직인 몫</b>으로 나눕니다. '
+    + '커브 위의 점을 클릭하면 그 만기로 다시 계산합니다.</div>'
+    + ctrl(`<label style="cursor:pointer"><input type="checkbox" id="ycToday"${yldToday ? ' checked' : ''} `
+        + 'style="margin:0 3px 0 0">오늘</label>' + slot(0) + slot(1)
+        + ` · 종류 <select id="ycRollK">${issOpts(yldRollKey)}</select>`)
+    // 표가 한 칸뿐이라 차트 밑에 두면 허전하다. 차트 | 표 로 나란히 놓는다.
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">'
+    + '<div style="flex:1 1 56%;min-width:420px">'
+    + '<div class="cchart" style="height:420px"><canvas id="ydRoll"></canvas></div></div>'
+    + '<div id="ycRollOut" style="flex:1 1 38%;min-width:330px"></div>'
+    + '</div>';
+
+  const on = (sel, ev, fn) => { const el = box.querySelector(sel); if (el) el[ev] = fn; };
+  on('#ycRollK', 'onchange', e => { yldRollKey = e.target.value; yldRollT = null; renderYield(); });
+  on('#ycToday', 'onchange', e => {
+    yldToday = e.target.checked;
+    if (yldToday) yldCurveDates[0] = last;
+    renderYield();
+  });
+  box.querySelectorAll('[data-ycs]').forEach(inp => inp.onchange = () => {
+    yldCurveDates[+inp.dataset.ycs] = inp.value ? snap(inp.value) : null;
+    renderYield();
+  });
+  // 표는 아래에서 다시 그려지므로, 토글은 innerHTML 을 채운 뒤에 붙인다 (renderRollTable 끝)
+  const bindRollView = () => box.querySelectorAll('[data-rv]').forEach(b => b.onclick = () => {
+    yldRollView = b.dataset.rv; renderYield();
+  });
+
+  const rollPair = [yldCurveDates[1], yldCurveDates[0]].filter(Boolean).sort();
+  const rollCell = box.querySelector('#ycRollOut');
+  if (yldCharts[3]) { yldCharts[3].destroy(); yldCharts[3] = null; }
+  if (rollPair.length < 2) {
+    if (rollCell) rollCell.innerHTML = '<span style="color:#c0392b">날짜1·날짜2 를 모두 채우면 롤이 계산됩니다.</span>';
+  } else {
+    const [dA, dB] = rollPair;                                  // dA = 매수일(이른 쪽)
+    const dlt = (new Date(dB) - new Date(dA)) / 86400000 / 365.25;
+    const K = yldRollKey, kNm = issuerOf(K)[1];
+    const gridT = TENORS.filter(t => at(K, t, dA) != null && TENOR_Y[t] - dlt > 0);
+    if (yldRollT == null) yldRollT = TENOR_Y[gridT.includes('5년') ? '5년' : (gridT[gridT.length - 1] || '5년')];
+    yldRollT = Math.min(yldRollT, ROLL_XMAX);        // 가로축 밖은 클릭도 안 되므로 맞춰 둔다
+    const T = yldRollT, T2 = Math.max(0.01, T - dlt);
+    const yA = yAt(K, dA, T), yA2 = yAt(K, dA, T2), yB2 = yAt(K, dB, T2);
+    if (rollCell && yA != null && yA2 != null && yB2 != null) {
+      // 가격 수익은 듀레이션을 잔존만기로 대신한 '근사'다. 쿠폰 정보가 없어 정확히는 못 낸다.
+      const ret = yA * dlt - (T2 * (yB2 - yA));
+      const dBp = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + 'bp';
+      // 국고·통안은 그 자체가 기준물이라 스프레드로 쪼갤 게 없다. 자기 커브 위에서
+      // 롤다운·델타 두 조각으로만 나눈다.
+      const isCredit = !NO_SPREAD.includes(K);
+      // 크레딧은 총 변화를 2×2 로 쪼갠다. 가로는 국고/스프레드, 세로는 롤다운/커브변화.
+      //   국고 롤다운   g_A(T−Δ) − g_A(T)      스프레드 롤다운   s_A(T−Δ) − s_A(T)
+      //   국고 커브변화 g_B(T−Δ) − g_A(T−Δ)    스프레드 커브변화 s_B(T−Δ) − s_A(T−Δ)
+      // 스프레드는 정의상 크레딧 − 국고라, 네 칸을 더하면 총 변화와 정확히 같다.
+      const gA = yAt('국고채권', dA, T), gA2 = yAt('국고채권', dA, T2), gB2 = yAt('국고채권', dB, T2);
+      const tot = (yB2 - yA) * 100;
+      const ownRoll = (yA2 - yA) * 100, ownShift = (yB2 - yA2) * 100;   // 고른 커브 자체의 분해
+      let grid = '';
+      if (!isCredit || gA == null || gA2 == null || gB2 == null) {
+        // 기준물 자신 — 롤다운 + 델타 두 줄이면 끝이고, 둘을 더하면 총 변화가 된다.
+        const num1 = (v, b) => `<td${v < 0 ? ' class="neg"' : ''}>${b ? '<b>' : ''}${dBp(v)}${b ? '</b>' : ''}</td>`;
+        const ln1 = (nm, color, v, b) =>
+          `<tr class="${b ? 'lv0 sep-solid' : 'lv1'}">`
+          + `<td style="text-align:left;color:${color};font-weight:700">${nm}</td>` + num1(v, b) + '</tr>';
+        grid = '<table class="data vlines" style="width:auto"><thead><tr>'
+          + '<th>요인</th><th>기여</th></tr></thead><tbody>'
+          + ln1(`롤다운 (${fmtY(T)}→${fmtY(T2)})`, '#1f9e5a', ownRoll, false)
+          + ln1(`${kNm} 델타`, '#5a6b82', ownShift, false)
+          + ln1('합계', '#1a2b4a', tot, true)
+          + '</tbody></table>'
+          + '<div style="font-size:12px;color:#8592a3;margin-top:6px">'
+          + `<b>롤다운</b>은 커브가 그대로일 때 만기가 ${fmtY(T)}→${fmtY(T2)} 로 짧아지며 생긴 몫, `
+          + `<b>${kNm} 델타</b>는 ${fmtY(T2)} 에서 커브 자체가 움직인 몫입니다.`
+          + `<br>${kNm}는 스프레드의 기준물이라 국고·스프레드로 쪼개지 않습니다.</div>`;
+      } else {
+        const sA = (yA - gA) * 100, sA2 = (yA2 - gA2) * 100, sB2 = (yB2 - gB2) * 100;
+        const gRoll = (gA2 - gA) * 100, gShift = (gB2 - gA2) * 100;
+        const sRoll = sA2 - sA, sShift = sB2 - sA2;
+        const num = (v, b) => `<td${v < 0 ? ' class="neg"' : ''}>${b ? '<b>' : ''}${dBp(v)}${b ? '</b>' : ''}</td>`;
+        const simple = yldRollView === 'simple';
+        const tog = '<div class="mode" style="margin-bottom:6px">'
+          + `<button data-rv="simple" class="${simple ? 'active' : ''}">3줄</button>`
+          + `<button data-rv="grid" class="${simple ? '' : 'active'}">2×2</button></div>`;
+        if (simple) {
+          // 2×2 의 위 줄(롤다운)을 하나로 합친 것. 그래서 여기의 '국고 델타'·'스프레드' 는
+          // 커브가 움직인 몫만 뜻한다 — 2×2 의 국고·스프레드 열 합계와는 다르다.
+          const ln = (nm, color, v, b) =>
+            `<tr class="${b ? 'lv0 sep-solid' : 'lv1'}">`
+            + `<td style="text-align:left;color:${color};font-weight:700">${nm}</td>` + num(v, b) + '</tr>';
+          grid = tog + '<table class="data vlines" style="width:auto"><thead><tr>'
+            + '<th>요인</th><th>기여</th></tr></thead><tbody>'
+            + ln(`롤다운 (${fmtY(T)}→${fmtY(T2)})`, '#1f9e5a', ownRoll, false)
+            + ln(`${GOV_NM} 델타`, '#5a6b82', gShift, false)
+            + ln('스프레드', '#7b4fa0', sShift, false)
+            + ln('합계', '#1a2b4a', tot, true)
+            + '</tbody></table>';
+        } else {
+          const line = (nm, color, g, s, b) =>
+            `<tr class="${b ? 'lv0 sep-solid' : 'lv1'}">`
+            + `<td style="text-align:left;color:${color};font-weight:700">${nm}</td>`
+            + num(g, b) + num(s, b) + num(g + s, true) + '</tr>';
+          grid = tog + `<table class="data vlines" style="width:auto"><thead><tr><th></th><th>${GOV_NM}</th>`
+            + '<th>스프레드</th><th>합계</th></tr></thead><tbody>'
+            + line('롤다운', '#1f9e5a', gRoll, sRoll, false)
+            + line('커브변화', '#d1495b', gShift, sShift, false)
+            + line('합계', '#1a2b4a', gRoll + gShift, sRoll + sShift, true)
+            + '</tbody></table>';
+        }
+        grid += '<div style="font-size:12px;color:#8592a3;margin-top:6px">'
+          + `수준 — ${GOV_NM} ${gA.toFixed(3)}% → ${gB2.toFixed(3)}%`
+          + ` · 스프레드 ${sA.toFixed(1)}bp → ${sB2.toFixed(1)}bp`
+          + `<br><b>롤다운</b>은 커브가 그대로일 때 만기가 ${fmtY(T)}→${fmtY(T2)} 로 짧아지며 생긴 몫, `
+          + (simple ? `<b>${GOV_NM} 델타</b>·<b>스프레드</b> 는 ${fmtY(T2)} 에서 커브 자체가 움직인 몫입니다.`
+                    : '<b>커브변화</b>는 같은 만기에서 커브 자체가 움직인 몫입니다.')
+          + (simple
+            ? `<br>3줄에서는 롤다운에 국고 롤(${dBp(gRoll)})과 스프레드 롤(${dBp(sRoll)})이 함께 들어갑니다. `
+              + '둘을 갈라 보려면 2×2 를 누르세요.'
+            : '')
+          + ` 스프레드 끝값은 ${yldLab(dB)}의 <b>${fmtY(T2)}</b> 에서 읽습니다`
+          + ` — 내 채권이 그만큼 짧아졌기 때문입니다.`
+          + '</div>';
+      }
+      rollCell.innerHTML =
+        `<div class="block-title">${kNm} · ${yldLab(dA)} ${fmtY(T)} → ${yldLab(dB)} ${fmtY(T2)}`
+        + ` (보유 ${dlt.toFixed(2)}년)</div>`
+        + '<div style="font-size:15px;color:#1a2b4a;margin-bottom:8px">'
+        + `<b>${yA.toFixed(3)}%</b> → <b>${yB2.toFixed(3)}%</b>`
+        + `<span style="margin-left:10px;color:${tot < 0 ? '#1a4fa0' : '#c0392b'};font-weight:700">${dBp(tot)}</span></div>`
+        + grid
+        + `<div style="font-size:12px;color:#8592a3;margin-top:6px">금리가 내려가면(− bp) 채권 가격은 오릅니다. `
+        + `실현 근사 수익 <b>${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%</b> — 캐리까지 합친 값이고, `
+        + `쿠폰을 몰라 듀레이션을 잔존만기로 대신했으므로 가격 변동을 과대평가합니다. 방향만 보세요.</div>`;
+    } else if (rollCell) {
+      rollCell.innerHTML = '<span style="color:#c0392b">이 만기는 두 날짜 중 한쪽에 값이 없습니다.</span>';
+    }
+    bindRollView();
+    const pt = (x, y) => ({ x, y });
+    const curveOf = (key, d) => TENORS.filter(t => at(key, t, d) != null).map(t => pt(TENOR_Y[t], at(key, t, d)));
+    // 범례는 '국고 25.12.31' 처럼 한 줄이어야 읽히고, 툴팁은 줄을 나눠 보여 준다.
+    // 그래서 label 은 그대로 두고 rollMeta 에 조각을 따로 담는다.
+    const rds = [];
+    if (K !== '국고채권') {          // 비교용으로 국고 커브를 옅게 깔아 준다
+      // 주인공은 크레딧 커브라 국고는 옅게 깔되, 안 보일 만큼은 아니게
+      const GC = 'rgba(96,110,132,0.75)';
+      rds.push({ label: `${GOV_NM} ${yldLab(dA)}`, rollMeta: { nm: GOV_NM, d: yldLab(dA) },
+        data: curveOf('국고채권', dA),
+        borderColor: GC, backgroundColor: GC,
+        borderWidth: 1.4, pointRadius: 0, tension: 0.2 });
+      rds.push({ label: `${GOV_NM} ${yldLab(dB)}`, rollMeta: { nm: GOV_NM, d: yldLab(dB) },
+        data: curveOf('국고채권', dB),
+        borderColor: GC, backgroundColor: GC,
+        borderWidth: 1.4, borderDash: [4, 3], pointRadius: 0, tension: 0.2 });
+    }
+    rds.push({ label: `${kNm} ${yldLab(dA)}`, rollMeta: { nm: kNm, d: yldLab(dA) },
+      data: curveOf(K, dA),
+      borderColor: CURVE_DATE_COLORS[1], backgroundColor: CURVE_DATE_COLORS[1],
+      borderWidth: 2, pointRadius: 3.5, tension: 0.2 });
+    rds.push({ label: `${kNm} ${yldLab(dB)}`, rollMeta: { nm: kNm, d: yldLab(dB) },
+      data: curveOf(K, dB),
+      borderColor: CURVE_DATE_COLORS[0], backgroundColor: CURVE_DATE_COLORS[0],
+      borderWidth: 2, pointRadius: 2, tension: 0.2 });
+    if (yA != null && yA2 != null && yB2 != null) {
+      // rollLeg: 실선 커브와 겹쳐 툴팁이 뒤엉키므로 툴팁에서는 뺀다 (값은 밑의 표로 본다)
+      rds.push({ label: '롤다운', rollLeg: true, data: [pt(T, yA), pt(T2, yA2)],
+        borderColor: '#1f9e5a', backgroundColor: '#1f9e5a', borderWidth: 3, pointRadius: 5, tension: 0 });
+      rds.push({ label: '커브변화', rollLeg: true, data: [pt(T2, yA2), pt(T2, yB2)],
+        borderColor: '#d1495b', backgroundColor: '#d1495b', borderWidth: 3,
+        borderDash: [5, 3], pointRadius: 5, tension: 0 });
+    }
+    yldCharts[3] = new Chart(box.querySelector('#ydRoll'), {
+      type: 'line',
+      data: { datasets: rds },
+      options: { responsive: true, maintainAspectRatio: false, parsing: false,
+        interaction: { mode: 'nearest', intersect: true },
+        // 매수일 커브(=색인 dA) 위의 점을 클릭하면 그 만기로 롤을 다시 계산한다
+        onClick: (evt, els, ch) => {
+          const hit = ch.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true)[0];
+          if (!hit) return;
+          const p = ch.data.datasets[hit.datasetIndex].data[hit.index];
+          if (p && p.x - dlt > 0) { yldRollT = p.x; renderYield(); }
+        },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10 } },
+          title: { display: true, text: `롤다운 ${yldLab(dA)} → ${yldLab(dB)} (%)`, font: { size: 12 } },
+          // 잔존만기 / 금리 / 종류 / 날짜 순. 맨 위 제목이 만기(0.0Y)다.
+          tooltip: {
+            filter: it => !it.dataset.rollLeg,
+            callbacks: {
+              title: items => items.length ? fmtY(items[0].parsed.x) : '',
+              label: it => {
+                const m = it.dataset.rollMeta || {};
+                return [` ${it.parsed.y.toFixed(3)}%`, ` ${m.nm || it.dataset.label}`, ` ${m.d || ''}`];
+              } } } },
+        scales: { x: { type: 'linear', min: 0, max: ROLL_XMAX + ROLL_XPAD,
+            title: { display: true, text: '잔존만기', font: { size: 10 } },
+            // 만기 격자에만 선을 긋는다. 균등 간격이 아니라서 stepSize 로는 안 된다.
+            afterBuildTicks: a => { a.ticks = ROLL_TICKS.map(value => ({ value })); },
+            ticks: { font: { size: 9 }, autoSkip: false, callback: v => fmtTen(v) } },
+          y: { ticks: { font: { size: 10 } } } } },
+    });
+  }
 }
 
 // ── NSS(Nelson-Siegel-Svensson) 커브 피팅 ───────────────────────
@@ -14673,70 +15292,6 @@ function drawCustomChart(i) {
   });
 }
 
-// ── 엑셀 다운로드 ─────────────────────────────────────────────
-function sheetFromMode(md) {
-  const saved = mode; mode = md;
-  const rows = current.series
-    .filter(s => !hiddenRows.has(s.name))
-    .map(s => ({
-      name: s.name, map: new Map(transformSeries(s).map(p => [p.d, p.v])),
-    }));
-  mode = saved;
-  const dateSet = new Set();
-  rows.forEach(r => r.map.forEach((v, d) => dateSet.add(d)));
-  const dates = [...dateSet].sort().filter(inRange);
-  const aoa = [['항목', ...dates.map(dateLabel)]];
-  rows.forEach(r => aoa.push([r.name, ...dates.map(d => r.map.get(d) ?? null)]));
-  return aoa;
-}
-
-function exportExcel() {
-  if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리 로드 실패 (인터넷 연결 확인)'); return; }
-  const wb = XLSX.utils.book_new();
-  const today = new Date().toISOString().slice(0, 10);
-  if (view === 'compare') {
-    if (!compareList.length) { alert('추가된 시리즈가 없습니다.'); return; }
-    const ds = new Set();
-    compareList.forEach(c => transformData(c.data, c.freq).forEach(p => ds.add(p.d)));
-    const dates = [...ds].sort().filter(inRange);
-    const aoa = [['시리즈', ...dates.map(dateLabel)]];
-    compareList.forEach(c => {
-      const m = new Map(transformData(c.data, c.freq).map(p => [p.d, p.v]));
-      aoa.push([`[${c.indName}] ${c.sName}`, ...dates.map(d => m.get(d) ?? null)]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '지표비교');
-    XLSX.writeFile(wb, `compare_${today}.xlsx`);
-    return;
-  }
-  if (view === 'combo') {
-    if (!comboData) { alert('데이터가 없습니다.'); return; }
-    const { sale, jeonse, demand } = comboData;
-    [['매매_주간변동률', sale, wow], ['전세_주간변동률', jeonse, wow],
-     ['매매수급지수', demand, lvl]].forEach(([nm, ind, fn]) => {
-      const dates = [...new Set(ind.series.flatMap(s => fn(s).map(p => p.d)))].sort();
-      const aoa = [['지역', ...dates.map(dateLabel)]];
-      ind.series.forEach(s => {
-        const m = new Map(fn(s).map(p => [p.d, p.v]));
-        aoa.push([s.name, ...dates.map(d => m.get(d) ?? null)]);
-      });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nm);
-    });
-    XLSX.writeFile(wb, `apt_weekly_${today}.xlsx`);
-    return;
-  }
-  if (view === 'multi') {
-    [['원자료', 'level'], ['QoQ', 'pop'], ['YoY', 'yoy'],
-     ['기여도QoQ', 'cqoq'], ['기여도YoY', 'cyoy'], ['비중', 'share']].forEach(([nm, md]) => {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetFromMode(md)), nm);
-    });
-  } else {
-    const nm = mode === 'level' ? '원자료'
-      : { pop: 'QoQ', yoy: 'YoY', cqoq: '기여도QoQ', cyoy: '기여도YoY', share: '비중' }[mode];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetFromMode(mode)), nm);
-  }
-  XLSX.writeFile(wb, `${current.id}_${today}.xlsx`);
-}
-
 async function select(id) {
   if (['compare', 'combo', 'map', 'cpicombo', 'retail', 'ppi', 'usemp'].includes(view)) view = 'chart';
   current = gdpAddNet(await loadIndicator(id));
@@ -15080,6 +15635,17 @@ document.getElementById('endSel').onchange = e => {
         nav.appendChild(b);
         return;
       }
+      // 금리 흐름 → '금리 분해' 뷰의 일드커브 탭만. indicators.yaml 에서 kr_yield 가
+      // 한국 블록에 있으므로 버튼도 한국 섹션에 붙는다.
+      if (item.id === 'kr_yield') {
+        const b = document.createElement('button');
+        b.id = 'krCurveBtn'; b.textContent = KR_CURVE_NAME; b.onclick = () => enterYield('curve');
+        nav.appendChild(b);
+        const c = document.createElement('button');
+        c.id = 'bondCalcBtn'; c.textContent = BOND_CALC_NAME; c.onclick = () => enterYield('calc');
+        nav.appendChild(c);
+        return;
+      }
       if (RETAIL.ids.includes(item.id)) {   // 소매판매 2종 → "소매판매" 하나로
         if (!retInserted && navOn('retail')) {
           const b = document.createElement('button');
@@ -15128,7 +15694,8 @@ document.getElementById('endSel').onchange = e => {
     // 금리 분해 (인포맥스 금리 기반) — 미국 섹션 앞에 배치
     if (navOn('yield')) {
       const yBtn = document.createElement('button');
-      yBtn.id = 'yieldBtn'; yBtn.textContent = YIELD.name; yBtn.onclick = enterYield;
+      // onclick 에 그대로 넘기면 이벤트 객체가 curveOnly 로 들어가 버린다
+      yBtn.id = 'yieldBtn'; yBtn.textContent = YIELD.name; yBtn.onclick = () => enterYield('full');
       const usHdr0 = [...nav.children].find(el => el.textContent === '🇺🇸 미국');
       if (usHdr0) nav.insertBefore(yBtn, usHdr0); else nav.appendChild(yBtn);
     }
@@ -15161,6 +15728,23 @@ document.getElementById('endSel').onchange = e => {
       if (usHdr2) nav.insertBefore(ngBtn, usHdr2); else nav.appendChild(ngBtn);
     }
     applyNavOrder(nav);
+    // ── 채권 대그룹 — 한국 위로 뺀다 ──
+    // 버튼은 각 지표 자리에서 이미 만들어졌으므로, 여기서는 순서만 다시 잡는다.
+    // (없는 버튼은 건너뛰므로 지표가 빠져도 깨지지 않는다)
+    const HDR = 'font-size:11px;color:#98a3b6;font-weight:700;padding-left:4px';
+    const bondBtns = ['krCurveBtn', 'irsBtn', 'ngdpBtn', 'bondCalcBtn']
+      .map(id => document.getElementById(id)).filter(Boolean);
+    if (bondBtns.length) {
+      const bh = document.createElement('div');
+      bh.textContent = '📉 채권';
+      bh.style.cssText = HDR + ';margin:0 0 4px';
+      nav.insertBefore(bh, nav.firstChild);
+      let prev = bh;
+      bondBtns.forEach(b => { prev.after(b); prev = b; });
+      // 채권이 맨 위로 올라갔으니 한국 헤더에도 미국처럼 구분선을 준다
+      const krHdr = [...nav.children].find(el => el.textContent === '🇰🇷 한국');
+      if (krHdr) krHdr.style.cssText = HDR + ';margin:14px 0 4px;border-top:1px solid #e0e4ea;padding-top:10px';
+    }
     // 지표 비교 메뉴 (구분선 + 버튼)
     const hr = document.createElement('div');
     hr.style.cssText = 'border-top:1px solid #e0e4ea;margin:10px 0';
@@ -15174,7 +15758,6 @@ document.getElementById('endSel').onchange = e => {
       if (!e.target.dataset.mm) return;
       mapMetric = e.target.dataset.mm; renderMap();
     });
-    document.getElementById('exportBtn').onclick = exportExcel;
     refreshFundAlerts();          // 배지는 비동기로 따라붙는다 (첫 화면을 막지 않는다)
     if (catalog.length) select(catalog[0].id);
     else document.getElementById('title').textContent = '지표가 없습니다. fetch.py를 먼저 실행하세요.';

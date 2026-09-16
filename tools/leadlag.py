@@ -11,10 +11,11 @@
 있다는 뜻이다. 범위를 넓혀 다시 볼 것.
 
 사용법:
-    python tools/leadlag.py supercore           # 비주거 서비스 vs 임금 (미리 짜둔 묶음)
+    python tools/leadlag.py bb                  # 베냉키·블랑샤르 틀 (v/u → 임금 → 물가)
+    python tools/leadlag.py bb --level          # 차분하지 않고 원계열끼리
     python tools/leadlag.py supercore --curve   # 시차별 상관을 전부 (모양 확인)
     python tools/leadlag.py --list              # 쓸 수 있는 계열 이름 보기
-    python tools/leadlag.py "임금추적기 전체" "비주거 핵심서비스"
+    python tools/leadlag.py "구인배율 v/u" "근원 PCE"
 
 상관은 인과가 아니다. 통제변수가 없고 표본이 사이클 두세 개뿐이라 시대별로
 계수가 크게 흔들린다 — 하위 표본 결과를 같이 보고 판단할 것.
@@ -48,6 +49,10 @@ SOURCES = {
         "임금추적기 전체": "임금추적기 전체",
         "임금추적기 이직자": "임금추적기 이직자",
         "임금추적기 잔류자": "임금추적기 잔류자",
+        "LMCI 활동수준": "KC연준 LMCI 활동수준",
+        "LMCI 모멘텀": "KC연준 LMCI 모멘텀",
+        "_구인건수": "구인건수 (JOLTS)",     # v/u 재료. '_' 로 시작하면 목록에서 감춘다
+        "_실업자": "실업자",
     },
     "us_ahe": {"AHE 민간전체": "민간 전체"},
     # us_eci 는 분기라 이 월별 시차 틀에 안 맞는다. 넣지 않는다.
@@ -70,6 +75,17 @@ PRESETS = {
     # 이전에 얻은 값(임금→수요물가 −0.29 / 수요물가→임금 +0.51@11개월)을 재현해
     # 스크립트가 같은 계산을 하는지 확인하는 용도.
     "check": (["임금추적기 전체"], ["수요주도 물가", "공급주도 물가", "근원 PCE"]),
+    # 베냉키·블랑샤르(2023) 틀. 노동시장 긴축도를 실업률이 아니라 v/u 로 잡고,
+    # ① v/u → 임금 ② 임금 → 물가 ③ v/u → 물가 세 고리를 나눠 본다.
+    # 그 논문의 결론은 ①은 살아 있고(v/u 1.0→1.5 시 장기 +0.64%p), ②는 약하며,
+    # ③은 초기에 작지만 시간이 갈수록 누적된다는 것이다.
+    #   공급주도 물가를 나란히 두는 게 이 묶음의 판정 기준이다. v/u 가 수요물가에만
+    #   붙으면 '노동시장 → 수요' 경로라고 말할 수 있지만, 공급물가에도 같이 붙으면
+    #   v/u 는 그냥 경기 대리변수일 뿐이다 (Shapiro 분해상 공급물가는 정의상
+    #   노동시장과 무관해야 한다).
+    "bb": (["구인배율 v/u", "LMCI 활동수준", "임금추적기 전체", "AHE 민간전체"],
+           ["임금추적기 전체", "AHE 민간전체", "근원 PCE", "비주거 핵심서비스",
+            "시장기반 근원", "수요주도 물가", "공급주도 물가"]),
 }
 
 
@@ -97,6 +113,11 @@ def load() -> dict:
             ks = sorted(m)
             out[label] = {ks[i]: (m[ks[i]] / m[ks[i - 12]] - 1) * 100
                           for i in range(12, len(ks)) if m[ks[i - 12]]}
+    # 구인배율 v/u — 베냉키·블랑샤르가 노동시장 긴축도로 쓰는 변수다.
+    # 실업률이 아니라 이걸 써야 팬데믹기 긴축도가 제대로 잡힌다는 게 그 논문의 요지다.
+    v, u = out.pop("_구인건수", None), out.pop("_실업자", None)
+    if v and u:
+        out["구인배율 v/u"] = {d: v[d] / u[d] for d in sorted(set(v) & set(u)) if u[d]}
     return out
 
 
@@ -122,8 +143,23 @@ def corr(a: dict, b: dict):
     return (num / den if den else None), len(ks)
 
 
+LEVEL = False       # True 면 12개월 차분을 건너뛰고 원계열끼리 잰다 (--level)
+# 표본 자르기 (--from / --until). 'ex_covid' 는 2020~21 만 빼는데, 그러면 2022 가
+# 남는다 — v/u 가 2.0 으로 정점이고 품귀발 공급물가도 정점이던 해다. 같은 사건으로
+# 같이 치솟은 구간을 남겨두면 '코로나 제외'라는 이름이 무색해진다. 팬데믹 이전만으로
+# 자를 수 있어야 그게 진짜 관계인지 그 사건 하나인지 갈린다.
+FROM = END = None
+
+
 def profile(x: dict, y: dict, ex_covid=False):
-    A, B = d12(x), d12(y)
+    # 원계열 상관은 둘 다 추세를 갖고 있으면 부풀려진다. 그래서 기본은 12개월 차분이다.
+    # 다만 베냉키·블랑샤르의 임금식은 '임금상승률 ~ v/u 수준' 이라 차분하면 그 관계가
+    # 사라진다. --level 로 둘 다 볼 수 있게 두고, 어느 쪽인지 화면에 적는다.
+    A, B = (dict(x), dict(y)) if LEVEL else (d12(x), d12(y))
+    if FROM or END:
+        g = lambda m: {d: v for d, v in m.items()
+                       if (not FROM or d >= FROM) and (not END or d <= END)}
+        A, B = g(A), g(B)
     if ex_covid:
         f = lambda m: {d: v for d, v in m.items() if not (COVID[0] <= d <= COVID[1])}
         A, B = f(A), f(B)
@@ -210,9 +246,16 @@ def curve(S, xs, ys):
 
 
 def main():
+    global LEVEL, FROM, END
     args = sys.argv[1:]
     want_curve = "--curve" in args
-    args = [a for a in args if a != "--curve"]
+    LEVEL = "--level" in args
+    for a in args:                              # --from=1999-01 / --until=2019-12
+        if a.startswith("--from="):
+            FROM = a.split("=", 1)[1]
+        elif a.startswith("--until="):
+            END = a.split("=", 1)[1]
+    args = [a for a in args if not a.startswith("--")]
     S = load()
     if not args or args[0] == "--list":
         print("\n쓸 수 있는 계열:")
@@ -227,7 +270,11 @@ def main():
         xs, ys = [args[0]], args[1:]
     else:
         sys.exit("계열 두 개를 주거나 프리셋 이름을 주세요. --list 로 목록 확인.")
-    print(f"12개월 차분 · 시차 {LAGS[0]}~{LAGS[-1]}개월 · k>0 이면 X 가 Y 를 k개월 선행")
+    print(("원계열(--level)" if LEVEL else "12개월 차분")
+          + f" · 시차 {LAGS[0]}~{LAGS[-1]}개월 · k>0 이면 X 가 Y 를 k개월 선행"
+          + (f" · 표본 {FROM or '처음'}~{END or '끝'}" if (FROM or END) else ""))
+    if LEVEL:
+        print("  ※ 원계열끼리는 둘 다 추세를 갖고 있으면 상관이 부풀려집니다. 차분분과 같이 보세요.")
     if want_curve:
         curve(S, xs, ys)
     else:

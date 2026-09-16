@@ -5,7 +5,7 @@ RSS로 최근 게시글을 찾아 각 게시글의 엑셀 첨부('잔액' 우선
 최근 N개 게시글을 훑어 최근 며칠치 시계열을 만들고, fetch.py 가 아카이브에 누적한다.
 
 수집 항목(잔액, 억원):
-  은행:  실세총예금·실세요구불·저축성·금전신탁
+  은행:  실세총예금·실세요구불·저축성·CD순발행잔액·금전신탁
   증권:  고객RP (대고객RP매도)·CMA·고객예탁금
   자산운용: MMF·채권형·주식형·혼합형  ← FREESIS 유형별 합산과 어긋나 정본으로 쓴다
 
@@ -34,10 +34,15 @@ RSS_URL = "https://www.bok.or.kr/portal/bbs/P0002018/news.rss?menuNo=200366"
 #     그 전까지는 한국은행 공표치를 정본으로 삼는다.
 #   채권형도 같은 문제가 있다 (2,023,763 vs 2,137,339).
 #   주식형은 국내+해외를 다 더하면 정확히 일치하므로 검산용으로 함께 받는다.
+#
+# CD순발행: 표 각주가 '은행의 CD 발행잔액에서 타은행 보유분을 뺀' 값이라고 밝힌다.
+#   총발행 잔액이 아니라 순발행이므로 이름에 '순' 을 남긴다. 은행채는 이 표에 없다
+#   (2026-09-14 표 전체를 찍어 확인 — python -m fetchers.bok).
 TARGET = {
     "실세총예금": "실세총예금",
     "실세요구불": "실세요구불",
     "저축성": "저축성",
+    "CD순발행": "CD 순발행잔액",
     "금전신탁": "금전신탁",
     "대고객RP매도": "고객RP",
     "CMA": "CMA",
@@ -204,7 +209,7 @@ def fetch(indicator: dict) -> list[dict]:
     if not collected:
         raise BokError("BOK 게시글에서 자금흐름 항목을 얻지 못했습니다 (게시판/엑셀 구조 확인)")
 
-    order = ["실세총예금", "실세요구불", "저축성", "금전신탁", "고객RP", "CMA",
+    order = ["실세총예금", "실세요구불", "저축성", "CD 순발행잔액", "금전신탁", "고객RP", "CMA",
              "고객예탁금(BOK)", "MMF(BOK)", "채권형(BOK)", "주식형(BOK)", "혼합형(BOK)"]
     series = []
     for name in order:
@@ -212,3 +217,50 @@ def fetch(indicator: dict) -> list[dict]:
         if by_date:
             series.append({"name": name, "data": [{"d": d, "v": v} for d, v in sorted(by_date.items())]})
     return series
+
+
+def dump_labels():
+    """'2. 금융권별 여수신 동향' 표의 **모든** 행 이름과 잔액을 그대로 찍는다.
+
+    TARGET 에 없는 항목이 표에 있는지 눈으로 보려는 용도다. 항목을 추가할 때
+    이름을 추측하면 조용히 안 잡히거나 엉뚱한 줄을 문다 — 먼저 찍어보고 정한다.
+    """
+    import io
+    for page_url, title in _rss_posts(4):
+        xu = _xlsx_url(page_url)
+        if not xu:
+            continue
+        wb = openpyxl.load_workbook(io.BytesIO(_get(xu)), data_only=True)
+        names = [n for n in wb.sheetnames if n == "일일동향" or DATE_SHEET_RE.match(n)] or [wb.sheetnames[0]]
+        ws = wb[names[0]]
+        sec = None
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value == "2. 금융권별 여수신 동향":
+                    sec = cell.row; break
+            if sec:
+                break
+        if sec is None:
+            continue
+        hr = sec + 3
+        bal_col = None
+        for col in range(1, ws.max_column + 1):
+            if _xldate(ws.cell(hr, col).value) and _norm(ws.cell(hr - 1, col).value) == "잔액":
+                bal_col = col; break
+        print(f"게시글: {title}\n시트: {names[0]} · 잔액열={bal_col}\n")
+        print(f"{'열2':<16}{'열3':<20}{'열4':<20}{'잔액':>14}")
+        print("-" * 72)
+        for r in range(sec + 1, min(ws.max_row, sec + 70) + 1):
+            c2, c3, c4 = (ws.cell(r, i).value for i in (2, 3, 4))
+            v = _num(ws.cell(r, bal_col).value) if bal_col else None
+            if not any([c2, c3, c4]) and v is None:
+                continue
+            f = lambda x: ("" if x is None else str(x))[:18]
+            print(f"{f(c2):<16}{f(c3):<20}{f(c4):<20}"
+                  + (f"{v:>14,.0f}" if v is not None else f"{'':>14}"))
+        return
+    print("게시글에서 엑셀을 찾지 못했습니다.")
+
+
+if __name__ == "__main__":   # python -m fetchers.bok  → 표 전체를 찍어본다
+    dump_labels()

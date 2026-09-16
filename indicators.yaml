@@ -883,8 +883,9 @@ indicators:
     series_first: ["국고채 3년"]
     params:
       sheet: 금리stack
-      groups: ["국고채권", "통안증권", "회사채AA-(공모/무보증)", "회사채A-(공모/무보증)",
-               "금융채 은행채 AAA", "CD AAA", "CP A1"]
+      # groups 를 안 적으면 시트의 모든 그룹을 가져온다. 대시보드가 발행주체 목록을
+      # 데이터에서 직접 뽑으므로, 시트에 그룹이 늘면 화면에도 자동으로 나타난다.
+      # (은행채AA+ 만 화면 쪽에서 뺀다 — 호가가 얇아 커브가 튄다)
 
   # KOSPI (한국거래소 OpenAPI). 이 API 는 하루치씩만 주므로 여러 번 나눠 받는다.
   #   .env 에 KRX_API_KEY=... 필요 · openapi.krx.co.kr 에서 'KOSPI 시리즈 일별시세정보'
@@ -1495,6 +1496,14 @@ indicators:
     start_year: 2010
     always_full: true
     series_first: ["입찰 예정"]
+
+  # 건설사 재무 (DART) 는 2026-09-16 에 제거했다. 수집기(fetchers/dart.py)·fetch.py
+  # 등록·수집 데이터(docs/data/kr_builder.*)까지 전부 지웠으므로, 되살리려면 수집기를
+  # 새로 써야 한다. 참고용으로 당시 설정만 남긴다:
+  #   id: kr_builder · source: dart · freq: Q · start_year: 2018 · unit: 억원
+  #   키는 .env DART_API_KEY, 연결(CFS) 우선 후 별도(OFS) 재시도, 2015년 이후만 제공.
+  #   ※ 삼성물산은 상사·패션·바이오가 섞여 다른 건설사와 같은 잣대로 비교하면 안 됐다.
+  #   ※ PF 우발채무(보증잔액)는 주석이라 이 API 로는 안 들어왔다.
 
   # QRA(분기 리펀딩) 실적 — 유통국채 잔액(월말)과 TGA 잔고(일별).
   #   순발행은 유통잔액의 분기 변화로, Bill 비중은 Bills ÷ 유통잔액으로 화면에서 본다.

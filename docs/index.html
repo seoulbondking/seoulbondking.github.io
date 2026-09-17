@@ -11874,21 +11874,22 @@ function renderUsNfpIndustry() {
     return h + '</tbody></table></div>';
   };
 
-  let out = '<div class="block-title">비농업 취업자 — 산업별 (천명)</div>'
+  // 부문별 전월비 증감 — 한 달을 가로 막대로. 어느 업종이 끌고 끌어내렸는지 한눈에 본다.
+  // 이 탭에서 제일 먼저 보는 그림이라 맨 위에 둔다.
+  const barCols = cols.length ? cols : periodDates;
+  if (!barCols.includes(usIndBarMonth)) usIndBarMonth = barCols[barCols.length - 1];
+  let out = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 6px;font-size:12px">'
+    + '<b>부문별 전월비 증감</b><select id="usIndBarSel" style="font-size:12px">'
+    + barCols.slice().reverse().map(d => `<option value="${d}"${d === usIndBarMonth ? ' selected' : ''}>${dateLabel(d)}</option>`).join('')
+    + '</select><span style="color:#8592a3">파란 막대 = 증가 · 회색 막대 = 감소</span></div>'
+    + '<div class="cchart" style="height:430px;margin-bottom:16px"><canvas id="usNfpBar"></canvas></div>';
+
+  out += '<div class="block-title">비농업 취업자 — 산업별 (천명)</div>'
     + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">14개 산업의 합 = 총 비농업(검은 선). 표 항목 <b>우클릭</b>으로 두 차트에 넣고 빼기. 들여쓴 트럭운송·임시직알선·보육서비스는 상위 업종에 포함된 참고 세부업종.</div>'
     + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">'
     + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart0"></canvas></div></div>'
     + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart1"></canvas></div></div>'
     + '</div>';
-
-  // 부문별 전월비 증감 — 한 달을 가로 막대로. 어느 업종이 끌고 끌어내렸는지 한눈에 본다.
-  const barCols = cols.length ? cols : periodDates;
-  if (!barCols.includes(usIndBarMonth)) usIndBarMonth = barCols[barCols.length - 1];
-  out += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;font-size:12px">'
-    + '<b>부문별 전월비 증감</b><select id="usIndBarSel" style="font-size:12px">'
-    + barCols.slice().reverse().map(d => `<option value="${d}"${d === usIndBarMonth ? ' selected' : ''}>${dateLabel(d)}</option>`).join('')
-    + '</select><span style="color:#8592a3">파란 막대 = 증가 · 회색 막대 = 감소</span></div>'
-    + '<div class="cchart" style="height:430px;margin-bottom:16px"><canvas id="usNfpBar"></canvas></div>';
 
   out += treeTable('전월 증감 (천명)', delta);
   out += treeTable('취업자 수 (천명)', level);

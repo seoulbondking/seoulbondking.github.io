@@ -123,6 +123,81 @@ ALERT_TAIL_DAYS = 20      # 알림 계산에 필요한 최근 영업일 수 (5�
 ALERT_INDICATORS = ["kr_fund_flow", "kr_repo_flow", "kr_bank_flow"]
 
 
+# 새 지표가 나오면 메뉴 버튼에 배지를 띄울 대상.
+#   버튼 하나가 지표 여러 개를 묶는 경우가 있어(미국 고용상황 등) 대표 지표만 본다.
+#   단, 국내총생산은 실질이 먼저 나오고 명목이 늦게 따라오므로 둘을 따로 단다.
+#
+#   kind — 배지 문구와 '새로 나왔다'의 판정 단위를 함께 정한다
+#     month   'YYYY-MM' 이 바뀌면  →  "8월 지표 업데이트"
+#     quarter 'YYYY-Qn' 이 바뀌면  →  "실질 2분기 업데이트"   (label 을 앞에 붙인다)
+#     plain   마지막 날짜가 바뀌면  →  "Update"
+#             주간 지표(카드·아파트)는 '몇 월 지표'라는 말이 어색해서 이 쪽을 쓴다.
+RELEASE_BADGE = {
+    # 한국
+    "kr_gdp_real":       {"btn": "gdpBtn",       "kind": "quarter", "label": "실질 "},
+    "kr_gdp_nominal":    {"btn": "gdpBtn",       "kind": "quarter", "label": "명목 "},
+    "kr_cpi":            {"btn": "cpiComboBtn",  "kind": "month"},
+    "kr_emp_total":      {"btn": "krEmpBtn",     "kind": "month"},
+    "kr_retail":         {"btn": "retailBtn",    "kind": "month"},
+    "kr_household_loan": {"btn": "hdBtn",        "kind": "month"},
+    "kr_terms_trade":    {"btn": "totBtn",       "kind": "month"},
+    "kr_card_weekly":    {"btn": "cardBtn",      "kind": "plain"},
+    "kr_apt_sale_idx":   {"btn": "aptComboBtn",  "kind": "plain"},
+    # 미국
+    "us_pce":            {"btn": "usPceBtn",     "kind": "month"},
+    "us_cpi":            {"btn": "usCpiBtn",     "kind": "month"},
+    "us_ppi":            {"btn": "usPpiBtn",     "kind": "month"},
+    "us_nowcast":        {"btn": "nowcBtn",      "kind": "month"},
+    "us_nfp":            {"btn": "usEmpBtn",     "kind": "month"},
+}
+RELEASE_DAYS = 7          # 배지를 며칠 띄울지
+
+
+def release_period(last_d: str, kind: str) -> str:
+    """마지막 관측일 → 그 지표의 '발표 단위' 키."""
+    if kind == "quarter":
+        return f"{last_d[:4]}-Q{(int(last_d[5:7]) - 1) // 3 + 1}"
+    if kind == "plain":
+        return last_d
+    return last_d[:7]
+
+
+def write_releases(done: dict[str, str]) -> None:
+    """지표별 '최신 월'과 '그 월이 처음 보인 날'을 docs/data/releases.js 에 적는다.
+
+    done: {지표id: 'YYYY-MM-DD'}  이번 실행에서 수집한 지표의 마지막 관측일.
+
+    since 를 데이터의 날짜가 아니라 '우리가 처음 본 날'로 잡는 이유는, 8월 지표가
+    9월 중순에 나오기 때문이다. 발표일을 따로 알 수 없으니 fetch 가 처음 본 날을
+    발표일로 친다. 처음 만들어질 때는 since 를 비워 둔다 — 안 그러면 기존 데이터가
+    전부 '방금 나온 것'으로 잡혀 배지가 한꺼번에 뜬다.
+    """
+    path = DATA_DIR / "releases.json"
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        state = {}
+
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    for ind_id, last_d in done.items():
+        cfg = RELEASE_BADGE.get(ind_id)
+        if not cfg or not last_d:
+            continue
+        period = release_period(last_d, cfg["kind"])
+        prev = state.get(ind_id)
+        if prev is None:
+            state[ind_id] = {"period": period, "since": None}      # 첫 기록 — 배지 없음
+        elif prev.get("period") != period:
+            state[ind_id] = {"period": period, "since": today}     # 새 회차가 나왔다
+            print(f"[new]  {ind_id}: {period} 확인 ({today} 부터 {RELEASE_DAYS}일간 배지)")
+
+    path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    body = json.dumps({"days": RELEASE_DAYS, "cfg": RELEASE_BADGE, "state": state},
+                      ensure_ascii=False)
+    (DATA_DIR / "releases.js").write_text(
+        f"window.__MACRO_RELEASES__={body};", encoding="utf-8")
+
+
 def write_alert_tail(all_indicators: list[dict]) -> None:
     """알림용 '최근 며칠' 요약 파일 하나 (docs/data/alerts.js).
 
@@ -171,6 +246,7 @@ def main():
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     catalog, failures = [], []
+    last_dates: dict[str, str] = {}      # 발표 배지용 {지표id: 마지막 관측일}
 
     this_year = datetime.now(KST).year
     for ind in indicators:
@@ -298,6 +374,9 @@ def main():
         n_points = sum(len(s["data"]) for s in series)
         tag = f"증분 {ind['_start_year']}~" if incremental else f"전체 {ind['_start_year']}~"
         print(f"[ok]   {ind['id']}: 시리즈 {len(series)}개, 관측치 {n_points}개 ({tag})")
+        # 발표 배지용: 이 지표의 마지막 관측일
+        last_dates[ind["id"]] = max(
+            (p["d"] for s in series for p in s["data"]), default=None)
 
     # 대시보드 메뉴 목록: 항상 전체 지표 기준으로, 데이터 파일이 있는 것만 수록.
     # (일부만 수집해도 메뉴가 갱신되고, 이번에 실패해도 기존 지표는 유지된다)
@@ -312,6 +391,7 @@ def main():
     )
     print(f"[ok]   index.json: 지표 {len(catalog)}개")
     write_alert_tail(all_indicators)
+    write_releases(last_dates)
 
     if failures:
         print(f"\n⚠ 실패한 지표: {failures}")

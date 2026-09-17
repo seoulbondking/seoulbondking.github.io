@@ -121,71 +121,9 @@ const chkHas = (name, elId, needle) => {
     chk('IRS 재진입', 'retailWrap');
   } else { console.log('  IRS 시나리오                 (데이터 없음 — python fetch.py kr_swap)'); }
 
-  // 금리 흐름 / 채권 계산 — 둘 다 '금리 분해' 뷰의 한 탭을 떼어 쓴다.
-  // 차트뿐이라 마크업이 짧으므로 chk 기준을 낮춰 잡는다.
-  if (w.__MACRO__ && w.__MACRO__.kr_yield) {
-    await ev("enterYield('curve')");
-    chk('금리 흐름', 'retailWrap', 1200);
-    const iss = ev('CURVE_ISSUERS.map(x => x[0])');
-    console.log('    발행주체 ' + iss.length + '개 — ' + ev('CURVE_ISSUERS.map(x=>x[1]).join(", ")'));
-    const leaked = iss.filter(g => (g.includes('은행채') && g.includes('AA+')) || /^(CD|CP)\b/.test(g));
-    if (leaked.length) { fail++; console.log('    ⚠ 빠져야 할 분류가 남음: ' + leaked.join(', ')); }
-    const unshort = ev('CURVE_ISSUERS.map(x=>x[1])').filter(n =>
-      n.startsWith('금융채') || n.includes('공사/공단') || n.includes('(공모')
-      || n.includes('기타금융') || n === '국고채권' || n === '통안증권'
-      || (n.endsWith('AAA') && !n.startsWith('회사채')));
-    if (unshort.length) { fail++; console.log('    ⚠ 이름이 안 줄여짐: ' + unshort.join(', ')); }
-    // 발행주체를 여럿 켜면 색 규칙이 날짜 → 발행주체로 바뀐다
-    ev('yldIssuers = CURVE_ISSUERS.slice(0, 3).map(x => x[0]); renderYield();');
-    chk('금리 흐름 > 발행주체3', 'retailWrap', 1200);
-    ev("yldIssuers = [CURVE_ISSUERS[0][0]]; yldTenLo='3월'; yldTenHi='30년'; renderYield();");
-    chk('금리 흐름 > 만기 전구간', 'retailWrap', 1200);
-    ev("yldTenLo='1년'; yldTenHi='10년'; yldCurveDates[2]=null; yldCurveDates[3]=null; renderYield();");
-    chk('금리 흐름 > 날짜 2칸', 'retailWrap', 1200);
-    ev('yldSpSlots.forEach(s => s.on = false); renderYield();');
-    chk('금리 흐름 > 스프레드 해제', 'retailWrap', 1200);
-    ev('yldSpSlots.forEach(s => s.on = true);');
-    // 요약표 — 1D/WTD/MTD/QTD/YTD 열과 Z 가 붙는지, 창을 바꿔도 다시 그려지는지
-    ev("yldSumTenor='3년'; yldSumWin=250; renderYield();");
-    chkHas('금리 흐름 > 요약표', 'ycSum', 'QTD');
-    chkHas('금리 흐름 > 요약 Z', 'ycSum', '<th>Z</th>');
-    ev('yldSumWin=750; renderYield();');
-    chkHas('금리 흐름 > Z 3년', 'ycSum', '750영업일');
-    ev('yldSumWin=250;');
+  // 금리 흐름 / 채권 계산은 2026-09-17 에 메뉴에서 내렸다 (kr_yield.json 34MB).
+  // 렌더 함수는 남아 있으니, 되살릴 때 이 자리에 검사도 같이 되살릴 것.
 
-    await ev("enterYield('calc')");
-    chk('채권 계산', 'retailWrap', 800);
-    chkHas('채권 계산 > 3줄 분해', 'ycRollOut', '롤다운');
-    ev("yldRollView='grid'; renderYield();");
-    chkHas('채권 계산 > 2×2 분해', 'ycRollOut', '커브변화');
-    ev("yldRollView='simple';");
-    // 크레딧을 고르면 스프레드 행이 붙고, 국고·통안이면 안 붙는다
-    const credit = ev('(CURVE_ISSUERS.find(x => !NO_SPREAD.includes(x[0])) || [])[0]');
-    if (credit) {
-      ev(`yldRollKey=${JSON.stringify(credit)}; yldRollT=null; renderYield();`);
-      chkHas('채권 계산 > 크레딧 스프레드', 'ycRollOut', '스프레드');
-    } else { console.log('    크레딧 발행주체가 없어 스프레드 분해는 건너뜀'); }
-    // 기준물(국고·통안)은 롤다운 + 자기 델타 두 줄로만 나오고, 둘을 더하면 합계가 돼야 한다
-    for (const base of ['국고채권', '통안증권']) {
-      if (!iss.includes(base)) continue;
-      ev(`yldRollKey=${JSON.stringify(base)}; yldRollT=null; renderYield();`);
-      const h = ev("document.getElementById('ycRollOut').innerHTML");
-      const nm = ev(`(CURVE_ISSUERS.find(x=>x[0]===${JSON.stringify(base)})||[])[1]`);
-      const okNm = h.includes(nm + ' 델타');
-      // bp 3개(롤다운·델타·합계)를 뽑아 합이 맞는지 본다
-      const v = (h.match(/[+−]\d+\.\d bp|[+−]\d+\.\dbp/g) || [])
-        .map(s => (s[0] === '−' ? -1 : 1) * parseFloat(s.slice(1)));
-      const okSum = v.length >= 3 && Math.abs(v[0] + v[1] - v[2]) < 0.15;
-      if (!okNm || !okSum) fail++;
-      console.log('  ' + `채권 계산 > ${nm}`.padEnd(26)
-        + (okNm ? '' : ` ⚠ '${nm} 델타' 라벨 없음`)
-        + (okSum ? '' : ` ⚠ 합 안맞음 ${v.slice(0, 3).join(' / ')}`)
-        + (okNm && okSum ? '           OK' : ''));
-    }
-    // 다른 화면이 retailWrap 을 갈아엎은 뒤 돌아와도 다시 세우는지
-    ev("document.getElementById('retailWrap').innerHTML=''; renderYield();");
-    chk('채권 계산 재진입', 'retailWrap', 800);
-  } else { console.log('  금리 흐름 / 채권 계산        (데이터 없음 — python fetch.py kr_yield)'); }
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
   for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow', 'jolts', 'lmci']) {
     ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');
@@ -204,8 +142,7 @@ const chkHas = (name, elId, needle) => {
   await new Promise(r => setTimeout(r, 200));
   const btns = [...w.document.querySelectorAll('nav button')].map(b => b.textContent.trim());
   console.log('\n  nav 버튼 ' + btns.length + '개');
-  const wantBtn = ['소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향',
-                   '금리 흐름', '채권 계산'];
+  const wantBtn = ['소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향'];
   wantBtn.forEach(t => {
     const ok = btns.some(b => b === t || b.indexOf(t) === 0);
     if (!ok) fail++;

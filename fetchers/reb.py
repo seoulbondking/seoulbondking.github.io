@@ -8,7 +8,7 @@ import os
 import re
 import calendar
 import xml.etree.ElementTree as ET
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
@@ -74,8 +74,14 @@ def fetch(indicator: dict) -> list[dict]:
     cls_ids = p.get("cls_ids")
     by_cid: dict[str, dict] = {}   # CLS_ID → {name, pts}
 
+    # 페이지 상한. 여기에 걸리면 응답이 잘린 것이므로 조용히 넘어가지 않고 멈춘다.
+    #   2026-09-18 실제 사고: 주간 아파트(239개 지역 × 약 90주 ≈ 21,500행)가 옛 상한
+    #   20페이지(20,000행)를 넘겨, 뒤쪽 92개 지역만 최신 주차를 못 받고 잘렸다.
+    #   값이 그럴듯해서 화면에서는 '전국만 갱신된' 것처럼 보였다.
+    MAX_PAGES = 60
+
     def collect(params):
-        for page in range(1, 21):        # 최대 20페이지(20,000행)
+        for page in range(1, MAX_PAGES + 1):
             params["pIndex"] = str(page)
             resp = requests.get(BASE_URL, params=params, timeout=60)
             resp.raise_for_status()
@@ -86,7 +92,7 @@ def fetch(indicator: dict) -> list[dict]:
                     msg = (root.findtext(".//message") or root.findtext(".//MESSAGE")
                            or root.findtext(".//RESULT/MESSAGE") or "row 없음")
                     print(f"  [reb {p['statbl_id']}] 데이터 없음: {msg.strip()}")
-                break
+                return
             for row in rows:
                 cid = (row.findtext("CLS_ID") or "").strip()
                 name = (row.findtext("CLS_NM") or cid).strip()
@@ -99,13 +105,29 @@ def fetch(indicator: dict) -> list[dict]:
                     rec = by_cid.setdefault(cid, {"name": name, "pts": []})
                     rec["pts"].append({"d": d, "v": v})
             if len(rows) < 1000:
-                break
+                return
+        raise RebError(
+            f"'{p['statbl_id']}' 응답이 {MAX_PAGES}페이지({MAX_PAGES * 1000}행)를 넘었습니다. "
+            "조회 구간이 너무 넓어 뒤쪽 지역이 잘립니다 — "
+            "indicators.yaml 에서 lookback_weeks 를 줄이거나 MAX_PAGES 를 늘리세요.")
+
+    # 조회 시작 시점.
+    #   주간은 지역 수가 많아(239개) 연 단위로 잡으면 금세 수만 행이 된다.
+    #   증분 수집이면 lookback_weeks 만큼만 거슬러 받는다 — 나머지는 아카이브가 들고 있다.
+    #   전체 재수집(--full, 아카이브 없음)일 때는 무시하고 연 단위로 통째로 받는다.
+    lookback_weeks = p.get("lookback_weeks")
+    if cycle == "WK" and lookback_weeks and indicator.get("_has_archive") \
+            and not indicator.get("_full"):
+        iso = (date.today() - timedelta(weeks=int(lookback_weeks))).isocalendar()
+        start_wrttime = f"{iso[0]}{iso[1]:02d}"
+    else:
+        start_wrttime = f"{start_year}01"
 
     base = {
         "KEY": key, "pSize": "1000",
         "STATBL_ID": p["statbl_id"], "DTACYCLE_CD": cycle,
         "ITM_ID": p.get("itm_id", "10001"),
-        "START_WRTTIME": f"{start_year}01",
+        "START_WRTTIME": start_wrttime,
     }
     if cls_ids:
         for cid in cls_ids:
@@ -130,4 +152,19 @@ def fetch(indicator: dict) -> list[dict]:
         })
     if not series:
         raise RebError("수집된 시리즈가 없습니다 (API 키·파라미터 확인)")
+
+    # 잘림 재발 감지 — 최신 시점의 지역 수가 직전 시점보다 확 적으면 응답이 덜 온 것이다.
+    # 값 자체는 멀쩡해 보여서 화면에서는 '일부 지역만 갱신된' 것처럼 나타난다.
+    # 발표 중이라 실제로 덜 나온 경우도 같은 모양이므로, 막지 말고 눈에 띄게 알린다.
+    cov: dict[str, int] = {}
+    for s in series:
+        for pt in s["data"]:
+            cov[pt["d"]] = cov.get(pt["d"], 0) + 1
+    ds = sorted(cov)
+    if len(ds) >= 2:
+        newest, prev = ds[-1], ds[-2]
+        if cov[newest] < cov[prev] * 0.9:
+            print(f"  ⚠ [reb {p['statbl_id']}] {newest} 지역 {cov[newest]}개 "
+                  f"(직전 {prev} 은 {cov[prev]}개) — 응답이 잘렸거나 발표가 진행 중입니다. "
+                  "잠시 뒤 다시 수집하면 채워집니다.")
     return series

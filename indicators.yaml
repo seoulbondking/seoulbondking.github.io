@@ -379,6 +379,9 @@ indicators:
     start_year: 2015
     refetch_years: 1
     params:
+      # 주간은 지역이 239개라 연 단위로 받으면 2만 행을 넘겨 응답이 잘린다.
+      # 과거는 아카이브가 들고 있으므로 최근 12주만 받는다 (--full 이면 무시).
+      lookback_weeks: 12
       statbl_id: "T244183132827305"
       itm_id: "10001"
 
@@ -390,6 +393,9 @@ indicators:
     start_year: 2015
     refetch_years: 1
     params:
+      # 주간은 지역이 239개라 연 단위로 받으면 2만 행을 넘겨 응답이 잘린다.
+      # 과거는 아카이브가 들고 있으므로 최근 12주만 받는다 (--full 이면 무시).
+      lookback_weeks: 12
       statbl_id: "T247713133046872"
       itm_id: "10001"
 
@@ -401,6 +407,9 @@ indicators:
     start_year: 2015
     refetch_years: 1
     params:
+      # 주간은 지역이 239개라 연 단위로 받으면 2만 행을 넘겨 응답이 잘린다.
+      # 과거는 아카이브가 들고 있으므로 최근 12주만 받는다 (--full 이면 무시).
+      lookback_weeks: 12
       statbl_id: "T248163133074619"
       itm_id: "10001"
 

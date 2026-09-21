@@ -110,6 +110,28 @@ def request_table(key: str, dataset: str, table: str, freq: str, year: str = "AL
 def parse(rows: list[dict], prefix: str = "", lines=None) -> list[dict]:
     """BEA 행 리스트 → 시리즈 목록. 수집과 분리해 저장된 응답으로 테스트할 수 있게 한다."""
     want = None if lines is None else {int(x) for x in lines}
+
+    # 같은 이름이 여러 줄에 나오는 표가 있다. NIPA 1.1.1 은 'Goods'·'Services' 가
+    # 소비·수출·수입 아래 세 번 나온다. 이름만으로 키를 잡으면 뒤 줄이 앞 줄을 덮어써서
+    # 'Goods' 에 수입 값이 들어앉는다 (2026-09-21 에 이 증상으로 발견: 소비 재화가
+    # 2025/1Q +52% → 2Q −35% 로 찍혔는데 그건 관세 선수요 때의 수입이었다).
+    # 그래서 중복된 이름에만 줄 번호를 붙여 구분한다. 유일한 이름은 그대로 둔다
+    # — merge_series 가 이름을 키로 쓰므로 기존 아카이브를 건드리지 않기 위해서다.
+    seen: dict[str, set] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        try:
+            ln = int(r.get("LineNumber"))
+        except (TypeError, ValueError):
+            continue
+        if want is not None and ln not in want:
+            continue
+        raw = (r.get("LineDescription") or "").strip()
+        if raw:
+            seen.setdefault(raw, set()).add(ln)
+    dup = {k for k, v in seen.items() if len(v) > 1}
+
     order: list[str] = []
     acc: dict[str, dict] = {}
     for r in rows:
@@ -126,6 +148,8 @@ def parse(rows: list[dict], prefix: str = "", lines=None) -> list[dict]:
         #   있으면 계층으로 살리고, 없으면 그냥 이름만 쓴다(계층은 화면 쪽에서 정의).
         depth = (len(raw) - len(raw.lstrip(" "))) // INDENT
         name = ("· " * depth) + raw.strip()
+        if raw.strip() in dup:
+            name = f"{name} [{ln}]"          # 중복 이름만 줄 번호로 구분
         if prefix:
             name = f"{prefix} · {name}"
         d = _to_date(r.get("TimePeriod"))

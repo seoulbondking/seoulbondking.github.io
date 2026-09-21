@@ -1085,6 +1085,62 @@ indicators:
   #   ※ T20404 는 월별 제공이 없다 (2026-08 확인: APIErrorCode 201).
   #   ※ 더 깊게 파려면 U20404 (NIUnderlyingDetail, 400줄) 로 바꾼다.
   #   ※ BEA API 의 LineDescription 에는 들여쓰기가 없다 — 계층은 화면 쪽에서 정의한다.
+  # ── 미국 GDP (BEA NIPA) ────────────────────────────────────────
+  #   Macro/US_macro.xlsm 의 GDP 시트를 그대로 옮긴 구성이다.
+  #     T10101  실질 GDP 전기비 연율 (%)      — 시트의 'GDP QoQ' 블록
+  #     T10102  실질 GDP 성장 기여도 (%p)      — 어느 항목이 성장률을 만들었나
+  #     T10106  실질 GDP 수준 (2017년 연쇄달러) — 시트의 'GDP Level' 블록
+  #
+  #   ※ Gross domestic purchases 는 위 세 표에 없다 (2026-09-21 수집으로 확인).
+  #     1.1.x 는 '생산' 계열이라 GDP 구성만 담는다. purchases 는 1.4.x 계열이다.
+  #       T10401  실질 GDP·국내총구매·국내최종판매 전기비 연율
+  #       T10406  같은 항목의 실질 수준
+  #     GDP 는 '미국에서 생산된 것', gross domestic purchases 는 '미국 거주자가 산 것'
+  #     (= GDP − 수출 + 수입). 무역이 튀는 분기엔 둘이 갈라진다.
+  #     2026/2Q 가 그 예로 GDP +1.48% 인데 purchases 는 +2.58% 였다 — 수입 급감이
+  #     GDP 를 부풀린 것이라, 내수 강도는 purchases 쪽이 맞다.
+  - id: us_gdp
+    name: 미국 GDP
+    source: bea
+    unit: '%·%p·백만달러'
+    freq: Q
+    start_year: 2010
+    refetch_years: 3
+    series_first: ["전기비연율 · Gross domestic product"]
+    params:
+      tables:
+        - dataset: NIPA
+          table: T10101
+          prefix: "전기비연율"
+        - dataset: NIPA
+          table: T10102
+          prefix: "기여도"
+        - dataset: NIPA
+          table: T10106
+          prefix: "실질수준"
+        # 국내총구매 — 표 이름이 틀리면 수집기가 그 표만 건너뛰고 나머지는 살린다
+        - dataset: NIPA
+          table: T10401
+          prefix: "국내총구매"
+        - dataset: NIPA
+          table: T10406
+          prefix: "국내총구매수준"
+
+  # ── 애틀랜타 연준 GDPNow (분기 GDP 나우캐스트) ─────────────────
+  #   매 영업일 그 분기 성장률을 다시 추정한다. BEA 속보치가 나오기 전에
+  #   지표가 쌓이면서 추정이 어떻게 움직이는지 보는 용도다.
+  #   모형 스프레드시트(10MB)를 data/ 에 받아 두고 Last-Modified 로만 갱신을 확인한다.
+  #   ※ 항목 이름을 us_gdp(BEA)와 맞춰 두 화면을 나란히 읽을 수 있게 했다.
+  - id: us_gdpnow
+    name: GDP 나우캐스트
+    source: gdpnow
+    unit: '%·%p'
+    freq: Q
+    always_full: true       # 빈티지 계열은 최근 분기만 담으므로 매번 새로 만든다
+    params:
+      vintage_quarters: 8
+      max_age_hours: 6
+
   - id: us_pce
     name: 미국 PCE
     source: bea

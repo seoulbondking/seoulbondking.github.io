@@ -22,7 +22,7 @@ import yaml
 
 from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos,
                       reb, bls, freesis, bok, seibro, fred, infomax, acm, krx,
-                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata)
+                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -50,6 +50,7 @@ SOURCES = {
     "clevelandfed": clevelandfed.fetch,
     "treasurydirect": treasurydirect.fetch,
     "fiscaldata": fiscaldata.fetch,
+    "gdpnow": gdpnow.fetch,
 }
 
 KST = timezone(timedelta(hours=9))

@@ -453,7 +453,7 @@ let catalog = [], current = null, chart = null;
 // 버튼을 다 만든 **뒤에** DOM 에서 자리만 옮긴다 — 어떤 지표에서 어떤 버튼이 생기는지
 // (US_EMP 처럼 지표 10개가 버튼 하나로 묶이는 경우 포함)를 건드리지 않아서
 // 지표가 늘거나 yaml 순서가 바뀌어도 깨지지 않는다. 없는 버튼은 그냥 건너뛴다.
-const NAV_ORDER = ['usGdpBtn', 'gnBtn', 'usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn',
+const NAV_ORDER = ['usGdpBtn', 'fisBtn', 'gnBtn', 'usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn',
                    'usEmpBtn', 'fedBtn', 'aucBtn', 'yenBtn'];
 function applyNavOrder(nav) {
   const btns = NAV_ORDER.map(id => document.getElementById(id)).filter(Boolean);
@@ -478,6 +478,8 @@ const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_bank_deposit', 'kr_yield_daily', 'us_pce_diffusion',
                   // 전용 탭에서만 쓰는 미국 보조 지표 — 대그룹 메뉴에는 안 띄운다
                   'us_pce_sd', 'us_polrate', 'us_flows', 'us_lmci', 'us_jolts',
+                  // '미국 재정' 화면이 쓰는 재료 (이자·부채·재정수지·미국채 30년)
+                  'us_fiscal', 'us_fiscal_bal', 'us_t30',
                   // 엔캐리 탭 전용 보조 지표
                   'mkt_jgb', 'mkt_cot_jpy'];
 
@@ -713,7 +715,7 @@ function refresh() {
   const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
   const isAuc = view === 'auction';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce', isUGdp = view === 'usgdp';
-  const isGn = view === 'gdpnow';
+  const isGn = view === 'gdpnow', isFis = view === 'usfiscal';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -735,7 +737,7 @@ function refresh() {
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   // '금리 흐름'·'채권 계산' 은 한 화면뿐이라 탭 막대를 감춘다
   document.getElementById('yieldTabs').style.display = (isYld && yldMode === 'full') ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -748,13 +750,13 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   // 금리 흐름·채권 계산은 차트뿐이라 표 좌우 스크롤 버튼이 할 일이 없다 ('금리 분해'는 원자료 표가 있어 남긴다)
   const isYldTbl = isYld && yldMode === 'full';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   // IRS 시나리오·채권 계산은 기간 선택기를 안 쓴다 (평가일 두 개가 기준이라 기간 개념이 없다).
   // 툴바 자체는 남겨서 제목이 계속 보이게 하고, 선택기만 감춘다.
@@ -788,6 +790,7 @@ function refresh() {
   else if (isUPce) renderUsPce();
   else if (isUGdp) renderUsGdp();
   else if (isGn) renderGdpNow();
+  else if (isFis) renderUsFiscal();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
     if (tab === 'chart') renderCombo();
@@ -10027,6 +10030,284 @@ function renderUsGdp() {
   });
 }
 
+// ── 미국 재정 (성장 기여) ──────────────────────────────────────
+// us_gdp 의 T10102(기여도)만 쓴다. 새로 받을 데이터가 없다.
+//   ① 재정을 뺀 성장률 vs 재정 기여도  — 민간 자력 성장이 얼마인지
+//   ② 성장에서 재정이 차지한 몫 + 정부지출 증가율
+const USFIS = { id: 'usfiscal', name: '미국 재정',
+                ids: ['us_gdp', 'us_fiscal', 'us_fiscal_bal'] };
+const FIS_GOV = 'Government consumption expenditures and gross investment';
+let fisData = null, fisDebt = null, fisBal = null;
+let fisCharts = [null, null, null, null, null];
+let fisFreq = 'A';   // 기본 연간 — 메리츠 자료와 같은 기준
+
+async function enterUsFiscal() {
+  const got = await Promise.all(USFIS.ids.map(id => loadIndicator(id).catch(() => null)));
+  fisData = got[0]; fisDebt = got[1]; fisBal = got[2];
+  if (!fisData) { alert('미국 GDP 데이터가 없습니다. python fetch.py us_gdp 실행 필요.'); return; }
+  current = { id: USFIS.id, name: USFIS.name, freq: 'Q', unit: '%·%p',
+              updated_at: fisData.updated_at, series: [] };
+  view = 'usfiscal';
+  document.getElementById('title').textContent = USFIS.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + current.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'fisBtn'));
+  // 기간 선택은 두 지표를 합쳐 만든다. us_gdp 는 2000년부터지만 us_fiscal(이자·부채)은
+  // 1947년부터라, GDP 기준으로만 잡으면 이자부담 차트의 과거 구간을 못 고른다.
+  const ds = new Set();
+  fisData.series.filter(s => s.name.startsWith('기여도 · '))
+    .forEach(s => s.data.forEach(p => ds.add(p.d)));
+  if (fisDebt) fisDebt.series.forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[0];
+  endD = periodDates[periodDates.length - 1];
+  if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
+  refresh();
+}
+
+function renderUsFiscal() {
+  const box = document.getElementById('retailWrap');
+  const M = nm => { const x = fisData.series.find(t => t.name === nm);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const LV = nm => M(`실질수준 · ${nm}`);
+  const gdpL = LV('Gross domestic product'), govL = LV(FIS_GOV);
+  const fedL = LV('Federal'), slL = LV('State and local');
+  const qcols = periodDates.filter(inRange);
+  const ann = fisFreq === 'A';
+
+  // 연간은 BEA 방식대로 '분기 수준의 연평균' 으로 만든다 (검산: 2020 −2.08 / 2021 6.15 —
+  // 공표치 −2.2 / 6.1 과 일치). 분기 연율로 보면 2020 Q2 −28% 가 축을 다 먹어 나머지가 평평해진다.
+  //   진행 중인 해는 있는 분기만 쓰되, 직전 해도 '같은 분기까지' 로 잘라 비교한다.
+  //   2026 이 1~2Q 뿐이면 2025 도 1~2Q 평균과 견준다 — 반년치를 1년치와 비교하면 안 된다.
+  const byYear = m => { const g = {};
+    m.forEach((v, d) => { (g[d.slice(0, 4)] = g[d.slice(0, 4)] || [])
+      .push([+d.slice(5, 7), v]); });
+    Object.values(g).forEach(a => a.sort((x, z) => x[0] - z[0]));
+    return g; };
+  const YG = byYear(gdpL), YV = byYear(govL), YF = byYear(fedL), YS = byYear(slL);
+  // n분기 평균 (n 을 안 주면 그 해 전부)
+  const mean = (Y, y, n) => { const a = Y[y]; if (!a) return null;
+    const k = n || a.length; if (a.length < k) return null;
+    return a.slice(0, k).reduce((s, x) => s + x[1], 0) / k; };
+  const nQ = y => (YG[y] || []).length;
+  const years = Object.keys(YG).filter(y => YG[String(+y - 1)] &&
+      YG[String(+y - 1)].length >= nQ(y))
+    .filter(y => qcols.some(d => d.slice(0, 4) === y)).sort();
+  const last = years[years.length - 1];
+  const partial = last && nQ(last) < 4 ? last : null;
+
+  // 공통 인터페이스 — cols(축) / 성장률 / 기여도 / 정부지출 증가율
+  let cols, lab, growth, contrib, contribFed, contribSL, govGrow;
+  if (ann) {
+    cols = years;
+    lab = years.map(y => y === partial ? `'${y.slice(2)} (1~${nQ(y)}Q)` : `'${y.slice(2)}`);
+    const g = (Y, y) => { const n = nQ(y), p = String(+y - 1);
+      const a = mean(Y, y, n), b = mean(Y, p, n);
+      return a == null || b == null ? null : [a, b]; };
+    growth = y => { const v = g(YG, y); return v ? (v[0] / v[1] - 1) * 100 : null; };
+    const ctb = (Y, y) => { const v = g(Y, y), b = g(YG, y);
+      return v && b ? (v[0] - v[1]) / b[1] * 100 : null; };
+    contrib = y => ctb(YV, y); contribFed = y => ctb(YF, y); contribSL = y => ctb(YS, y);
+    govGrow = y => { const v = g(YV, y); return v ? (v[0] / v[1] - 1) * 100 : null; };
+  } else {
+    const gdpC = M('기여도 · Gross domestic product'), govC = M(`기여도 · ${FIS_GOV}`);
+    const fedC = M('기여도 · Federal'), slC = M('기여도 · State and local');
+    const govQ = M(`전기비연율 · ${FIS_GOV}`);
+    cols = qcols; lab = qcols.map(d => `${d.slice(2, 4)} Q${Math.ceil(+d.slice(5, 7) / 3)}`);
+    growth = d => gdpC.get(d) ?? null; contrib = d => govC.get(d) ?? null;
+    contribFed = d => fedC.get(d) ?? null; contribSL = d => slC.get(d) ?? null;
+    govGrow = d => govQ.get(d) ?? null;
+  }
+  // 재정 몫 = 기여도 ÷ 성장률. 분모가 0 근처면 발산하므로(25 Q4 −198%) 그때는 비운다.
+  const share = k => { const g = growth(k), c = contrib(k);
+    return g == null || c == null || Math.abs(g) < 0.3 ? null : c / g * 100; };
+  const exFis = k => { const g = growth(k), c = contrib(k);
+    return g == null || c == null ? null : g - c; };
+
+  const f2 = v => v == null ? '' : v.toLocaleString('ko-KR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const f1 = v => v == null ? '' : v.toFixed(1);
+  const cell = (v, f) => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`;
+  const UNIT = ann ? '연간 (%)' : '전기비 연율 (%)';
+
+  box.innerHTML = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:8px">'
+    + '성장률에서 <b>재정이 만든 몫</b>을 떼어 봅니다. <b>ex 재정</b>은 GDP 성장률에서'
+    + ' 정부소비·투자 기여도를 뺀 민간 자력 성장입니다.<br>'
+    + (ann
+      ? '연간은 BEA 방식대로 <b>분기 수준의 연평균</b>으로 계산합니다'
+        + ' (2020 −2.08 · 2021 6.15 — 공표치 −2.2 · 6.1 과 일치). 연쇄가중이라 항목 합이'
+        + ' GDP 와 소수점에서 조금 어긋납니다.'
+        + (partial ? ` <b>${partial}년은 ${nQ(partial)}분기까지</b>라, 직전 해도 같은 분기까지만 잘라 비교합니다.` : '')
+      : '분기 기여도는 BEA 가 <b>T10102</b> 로 직접 주는 값입니다.'
+        + ' 2020 Q2 −28% 같은 분기가 있어 축이 눌리므로, 흐름은 연간이 읽기 좋습니다.')
+    + '</div>'
+    + '<div class="grpbar">'
+    + [['A', '연간'], ['Q', '분기']].map(([k, t]) =>
+        `<button class="catbtn${fisFreq === k ? '' : ' off'}" data-fisf="${k}">${t}</button>`).join('')
+    + '</div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div style="flex:1 1 46%;min-width:360px"><div class="cchart" style="height:300px">'
+    + '<canvas id="fisC0"></canvas></div></div>'
+    + '<div style="flex:1 1 46%;min-width:360px"><div class="cchart" style="height:300px">'
+    + '<canvas id="fisC1"></canvas></div></div></div>'
+    + `<div class="block-title">${UNIT}</div><div class="tscroll">`
+    + '<table class="data vlines"><thead><tr><th>구분</th>'
+    + lab.map(t => `<th>${t}</th>`).join('') + '</tr></thead><tbody>'
+    + '<tr class="lv0 sep-solid"><td style="text-align:left">GDP 성장률 (%)</td>'
+    + cols.map(k => cell(growth(k), f2)).join('') + '</tr>'
+    + '<tr class="lv1"><td style="text-align:left">재정 기여도 (%p)</td>'
+    + cols.map(k => cell(contrib(k), f2)).join('') + '</tr>'
+    + '<tr class="lv2"><td style="text-align:left">· 연방</td>'
+    + cols.map(k => cell(contribFed(k), f2)).join('') + '</tr>'
+    + '<tr class="lv2"><td style="text-align:left">· 주·지방</td>'
+    + cols.map(k => cell(contribSL(k), f2)).join('') + '</tr>'
+    + '<tr class="lv1"><td style="text-align:left">ex 재정 (%p)</td>'
+    + cols.map(k => cell(exFis(k), f2)).join('') + '</tr>'
+    + '<tr class="lv1"><td style="text-align:left">정부지출 증가율 (%)</td>'
+    + cols.map(k => cell(govGrow(k), f2)).join('') + '</tr>'
+    + '<tr class="lv0 sep-solid"><td style="text-align:left">성장 중 재정 몫 (%)</td>'
+    + cols.map(k => cell(share(k), f1)).join('') + '</tr>'
+    + '</tbody></table></div>';
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-fisf]').forEach(b => b.onclick = () => {
+    fisFreq = b.dataset.fisf; renderUsFiscal();
+  });
+
+  if (fisCharts[0]) { fisCharts[0].destroy(); fisCharts[0] = null; }
+  fisCharts[0] = new Chart(box.querySelector('#fisC0'), {
+    type: 'bar',
+    data: { labels: lab, datasets: [
+      { label: '실질GDP: ex 재정', backgroundColor: '#9dc3ea', data: cols.map(exFis) },
+      { label: '재정 성장기여도', backgroundColor: '#1a4fa0', data: cols.map(contrib) },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, font: { size: 12 },
+          text: `성장률 분해 — 재정과 그 외 (%p, ${ann ? '연간' : '분기'})` },
+        tooltip: { callbacks: { label: it => it.parsed.y == null ? null
+          : ` ${it.dataset.label}: ${it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxTicksLimit: 18 } },
+        y: { ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+
+  // ── 이자부담·부채 (그림24~26·28) — us_fiscal 이 있을 때만 ──
+  if (fisDebt) {
+    const D = nm => { const x = fisDebt.series.find(t => t.name === nm);
+      return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+    const INT = D('연방 이자지급'), NGDP = D('명목 GDP');
+    const DEBT = D('연방부채/GDP'), T10 = D('국채 10년'), T30 = D('국채 30년');
+    const BAL = new Map();     // 연간 재정수지/GDP → 그 해 분기에 펴 놓는다
+    if (fisBal && fisBal.series[0]) fisBal.series[0].data.forEach(p => BAL.set(p.d.slice(0, 4), p.v));
+    // 이자부담 = 연방 이자지급 ÷ 명목 GDP. 둘 다 분기 SAAR 라 그대로 나눈다.
+    const burden = d => { const a = INT.get(d), b = NGDP.get(d);
+      return a == null || !b ? null : a / b * 100; };
+    const qd = [...NGDP.keys()].filter(inRange).sort();
+    const qlab2 = d => `'${d.slice(2, 4)}`;
+    const ln = (nm, f, col, dash, axis) => ({ label: nm, type: 'line',
+      data: qd.map(f), borderColor: col, backgroundColor: col, borderWidth: 2,
+      pointRadius: 0, tension: 0.15, spanGaps: true, borderDash: dash || [],
+      yAxisID: axis || 'y' });
+    // 눈금은 0.5 단위로 두되 범위는 보이는 값에 맞춘다.
+    //   고정하면 1991년 이자부담 4.99% 같은 값이 잘린다 — 잘린 줄 모르는 게 더 나쁘다.
+    const fixY = (vals, step) => {
+      const v = vals.filter(x => x != null);
+      if (!v.length) return null;
+      return { min: Math.floor(Math.min(...v) / step) * step,
+               max: Math.ceil(Math.max(...v) / step) * step, stepSize: step };
+    };
+    const opt = (title, y2, yfix) => ({ responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: title, font: { size: 12 } },
+        tooltip: { callbacks: { label: it => it.parsed.y == null ? null
+          : ` ${it.dataset.label}: ${it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxTicksLimit: 12,
+            callback: function (v) { return qlab2(qd[v] || ''); } } },
+        // yfix 를 주면 눈금을 고정한다. 구간 밖 값은 잘리므로 기간을 좁혀 볼 때 쓴다.
+        y: { ...(yfix || {}), ticks: { font: { size: 10 },
+             ...(yfix ? { stepSize: yfix.stepSize } : {}) } },
+        ...(y2 ? { y2: { position: 'right', grid: { drawOnChartArea: false },
+                         ticks: { font: { size: 9 } } } } : {}) } });
+    // 분기 재정수지 = (경상수입 − 경상지출) ÷ 명목GDP. 연간 회계연도 계열과 기준이 달라
+    // 수준은 조금 다르지만 분기 흐름을 볼 수 있다.
+    const REC = D('연방 경상수입'), EXP = D('연방 경상지출');
+    const balQ = d => { const r = REC.get(d), e = EXP.get(d), g = NGDP.get(d);
+      return r == null || e == null || !g ? null : (r - e) / g * 100; };
+    const hasBalQ = qd.some(d => balQ(d) != null);
+
+    box.insertAdjacentHTML('afterbegin',
+      '<div class="block-title">이자부담 · 부채 · 적자</div>'
+      + '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:10px">'
+      + '<b>이자부담</b> = 연방정부 이자지급 ÷ 명목 GDP (둘 다 분기 SAAR). '
+      + '현재 <b>' + (burden(qd[qd.length - 1]) || 0).toFixed(2) + '%</b> 로 '
+      + '2차대전 직후 이후 가장 높은 축입니다.<br>'
+      + '부채/GDP 는 1966년, 국채 30년은 1977년부터입니다 — 그 앞 구간은 FRED 에 없습니다. '
+      + '재정수지는 <b>연간·회계연도</b>(10~9월) 기준이라 역년과 반 분기 어긋납니다.</div>'
+      + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">'
+      + [2, 3, 4].map(i => '<div style="flex:1 1 31%;min-width:330px">'
+          + `<div class="cchart" style="height:290px"><canvas id="fisC${i}"></canvas></div></div>`).join('')
+      + '</div>');
+
+    // ③ 이자부담 vs 장기금리 (그림24·25)
+    if (fisCharts[2]) { fisCharts[2].destroy(); fisCharts[2] = null; }
+    fisCharts[2] = new Chart(box.querySelector('#fisC2'), {
+      data: { labels: qd.map(qlab2), datasets: [
+        ln('정부이자 지출/GDP', burden, '#1a4fa0'),
+        ln('국채 30년 (우)', d => T30.get(d) ?? null, '#9dc3ea', [], 'y2'),
+        ln('국채 10년 (우)', d => T10.get(d) ?? null, '#c9c9c9', [4, 3], 'y2'),
+      ] },
+      options: opt('이자부담과 장기금리 (%)', true, fixY(qd.map(burden), 0.5)),
+    });
+
+    // ④ 이자부담 vs 부채/GDP · 재정수지 (그림26·28)
+    // 이자부담(1.8~5.0)과 재정수지(−15~+2)는 축 폭이 달라 한 차트에 두면 이자부담이
+    // 눌려 평평해 보인다. 메리츠도 그림26·28 로 나눠 그렸다.
+    if (fisCharts[3]) { fisCharts[3].destroy(); fisCharts[3] = null; }
+    fisCharts[3] = new Chart(box.querySelector('#fisC3'), {
+      data: { labels: qd.map(qlab2), datasets: [
+        ln('정부이자 지출/GDP', burden, '#1a4fa0'),
+        ln('연방부채/GDP (우)', d => DEBT.get(d) ?? null, '#9dc3ea', [], 'y2'),
+      ] },
+      options: opt('이자부담과 정부부채 (%)', true, fixY(qd.map(burden), 0.5)),
+    });
+
+    const balFn = hasBalQ ? balQ : (d => BAL.get(d.slice(0, 4)) ?? null);
+    if (fisCharts[4]) { fisCharts[4].destroy(); fisCharts[4] = null; }
+    fisCharts[4] = new Chart(box.querySelector('#fisC4'), {
+      data: { labels: qd.map(qlab2), datasets: [
+        ln(hasBalQ ? '재정수지/GDP (분기)' : '재정수지/GDP (연간)', balFn, '#c0392b'),
+        ln('정부이자 지출/GDP (우)', burden, '#1a4fa0', [5, 3], 'y2'),
+      ] },
+      options: opt('재정수지와 이자부담 (%)', true),
+    });
+  }
+
+  if (fisCharts[1]) { fisCharts[1].destroy(); fisCharts[1] = null; }
+  fisCharts[1] = new Chart(box.querySelector('#fisC1'), {
+    data: { labels: lab, datasets: [
+      { label: '성장 중 재정 몫 (%)', type: 'bar',
+        backgroundColor: 'rgba(120,132,150,0.45)', data: cols.map(share), yAxisID: 'y' },
+      { label: '정부지출 증가율 (우, %)', type: 'line', borderColor: '#1a4fa0',
+        backgroundColor: '#1a4fa0', borderWidth: 2.2, pointRadius: 2.5, tension: 0.2,
+        spanGaps: true, data: cols.map(govGrow), yAxisID: 'y2' },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } },
+        title: { display: true, text: '성장에서 재정이 차지한 몫', font: { size: 12 } },
+        tooltip: { callbacks: { label: it => it.parsed.y == null ? null
+          : ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)}` } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxTicksLimit: 18 } },
+        y: { ticks: { font: { size: 10 } },
+             grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 9 } } } } },
+  });
+}
+
 // ── GDP 나우캐스트 (애틀랜타 연준 GDPNow) ──────────────────────
 // 한 지표에 두 주기가 섞여 있다 — 분기말 값과 일별 빈티지. 범용 표로는 못 읽어서
 // 전용 화면을 둔다 (물가 나우캐스트와 같은 이유).
@@ -16186,6 +16467,10 @@ document.getElementById('endSel').onchange = e => {
         const b = document.createElement('button');
         b.id = 'usGdpBtn'; b.textContent = US_GDP.name; b.onclick = enterUsGdp;
         nav.appendChild(b);
+        // 재정 화면은 us_gdp 데이터만 쓴다 — 별도 지표가 없어 여기서 같이 만든다
+        const f = document.createElement('button');
+        f.id = 'fisBtn'; f.textContent = USFIS.name; f.onclick = enterUsFiscal;
+        nav.appendChild(f);
         return;
       }
       if (item.id === 'us_gdpnow') {  // GDP 나우캐스트 → 전용 화면

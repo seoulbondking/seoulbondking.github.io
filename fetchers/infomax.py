@@ -36,8 +36,14 @@ class InfomaxError(RuntimeError):
 
 def _find_file(indicator: dict) -> Path:
     custom = indicator.get("params", {}).get("path")
-    if custom and Path(custom).exists():
-        return Path(custom)
+    if custom:
+        # 상대경로는 저장소 기준으로 푼다 (fetch.py 를 어디서 실행하든 같게 동작하도록)
+        cand = Path(custom)
+        if not cand.is_absolute():
+            cand = ROOT / custom
+        if cand.exists():
+            return cand
+        raise InfomaxError(f"params.path 파일이 없습니다: {cand}")
     found = []
     for d in SEARCH_DIRS:
         if d.is_dir():

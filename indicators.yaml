@@ -1104,7 +1104,7 @@ indicators:
     source: bea
     unit: '%·%p·백만달러'
     freq: Q
-    start_year: 2010
+    start_year: 1947
     refetch_years: 3
     series_first: ["전기비연율 · Gross domestic product"]
     params:
@@ -1140,6 +1140,68 @@ indicators:
     params:
       vintage_quarters: 8
       max_age_hours: 6
+
+  # ── 미국 재정 — 이자부담·부채·적자 (FRED) ─────────────────────
+  #   메리츠 「재정과 금리」 그림24~26·28 재현용. 분기(SAAR) 기준으로 맞춰 받는다.
+  #     A091RC1Q027SBEA  연방정부 이자지급 (경상지출 중, 십억달러 SAAR, 1947~)
+  #     GDP              명목 GDP (십억달러 SAAR) — 위를 나누는 분모
+  #     GFDEGDQ188S      연방부채/GDP (%, 1966~)
+  #     GS10 · GS30      국채 10년·30년 (월평균 → 분기평균)
+  #   ※ 30년물은 2002-02~2006-01 발행 중단 구간이 비어 있다. 그 구간은 10년으로 본다.
+  #   ※ 부채/GDP 는 1966년부터다. 2차대전 직후 구간은 FRED 에 이 계열이 없다.
+  - id: us_fiscal
+    name: 미국 재정수지·이자
+    source: fred
+    unit: '십억달러·%'
+    freq: Q
+    start_year: 1947
+    refetch_years: 3
+    series_first: ["연방 이자지급"]
+    params:
+      frequency: q
+      aggregation_method: avg
+      series:
+        A091RC1Q027SBEA: 연방 이자지급
+        GDP: 명목 GDP
+        GFDEGDQ188S: 연방부채/GDP
+        GS10: 국채 10년
+        GS30: 국채 30년
+        # 분기 재정수지용 (NIPA 경상수입·지출, 십억달러 SAAR, 1947~).
+        #   수지 = 수입 − 지출. 연간 FYFSGDA188S(통합예산·회계연도)와는 기준이 달라
+        #   수준이 조금 다르지만 흐름은 같다.
+        FGRECPT: 연방 경상수입
+        FGEXPND: 연방 경상지출
+
+  # 재정수지는 연간 계열이라 분기로 못 받는다 (FRED 가 상향 변환을 안 해줘 400 을 낸다).
+  #   회계연도(10월~9월) 기준이라 역년 GDP 와 시점이 반 분기 어긋난다 — 추세용으로만 본다.
+  - id: us_fiscal_bal
+    name: 미국 재정수지 (연간)
+    source: fred
+    unit: '%'
+    freq: A
+    start_year: 1947
+    refetch_years: 3
+    series_first: ["재정수지/GDP"]
+    params:
+      series:
+        FYFSGDA188S: 재정수지/GDP
+
+  # 미국채 30년 (인포맥스 일별). FRED GS30 은 분기평균이고 1977 년부터인데, 이건
+  #   1999-12 부터 일별이라 최근 흐름을 보기 좋다. 두 계열은 수준이 거의 같다.
+  #   엑셀은 data/미국채30년.xlsx — 인포맥스에서 새로 받아 덮어쓰면 다음 fetch 에 반영된다.
+  - id: us_t30
+    name: 미국채 30년 (일별)
+    source: infomax
+    unit: '%'
+    freq: D
+    merge_always: true
+    series_first: ["미국채 30년"]
+    params:
+      path: data/미국채30년.xlsx
+      sheet: Sheet1
+      header_row: 4
+      rename:
+        MID_Close: 미국채 30년
 
   - id: us_pce
     name: 미국 PCE

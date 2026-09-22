@@ -10211,6 +10211,42 @@ function renderUsFiscal() {
       data: qd.map(f), borderColor: col, backgroundColor: col, borderWidth: 2,
       pointRadius: 0, tension: 0.15, spanGaps: true, borderDash: dash || [],
       yAxisID: axis || 'y' });
+    // 재정이 크게 벌어진 국면 — 전쟁과 위기. 이자부담·부채가 뛴 구간이 어디였는지
+    // 배경으로 깔아 둔다. (데이터는 1947년부터라 2차대전은 구간 밖이면 그냥 안 그려진다)
+    const ERAS = [
+      ['1941-12-01', '1945-09-30', '2차대전'],
+      ['1950-06-01', '1953-07-31', '한국전쟁'],
+      ['1965-03-01', '1973-01-31', '베트남전'],
+      ['1990-08-01', '1991-02-28', '걸프전'],
+      ['2008-09-01', '2009-06-30', '금융위기'],
+      ['2020-03-01', '2021-12-31', '코로나'],
+    ];
+    const eraPlugin = {
+      id: 'fisEras',
+      beforeDatasetsDraw(ch) {
+        const ca = ch.chartArea, xs = ch.scales.x;
+        if (!ca || !xs) return;
+        const ctx = ch.ctx;
+        ctx.save();
+        ERAS.forEach(([a, b, nm]) => {
+          let i0 = qd.findIndex(d => d >= a);
+          if (i0 < 0) return;                       // 구간이 데이터보다 뒤
+          let i1 = qd.findIndex(d => d > b);
+          i1 = i1 < 0 ? qd.length - 1 : i1 - 1;
+          if (i1 < i0) return;                      // 구간이 데이터보다 앞
+          const x0 = xs.getPixelForValue(i0), x1 = xs.getPixelForValue(i1);
+          ctx.fillStyle = 'rgba(192,57,43,0.10)';
+          ctx.fillRect(x0, ca.top, Math.max(x1 - x0, 2), ca.bottom - ca.top);
+          if (x1 - x0 > 26) {
+            ctx.fillStyle = 'rgba(192,57,43,0.7)';
+            ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(nm, (x0 + x1) / 2, ca.top + 11);
+          }
+        });
+        ctx.restore();
+      },
+    };
+
     // 눈금은 0.5 단위로 두되 범위는 보이는 값에 맞춘다.
     //   고정하면 1991년 이자부담 4.99% 같은 값이 잘린다 — 잘린 줄 모르는 게 더 나쁘다.
     const fixY = (vals, step) => {
@@ -10261,6 +10297,7 @@ function renderUsFiscal() {
         ln('국채 10년 (우)', d => T10.get(d) ?? null, '#c9c9c9', [4, 3], 'y2'),
       ] },
       options: opt('이자부담과 장기금리 (%)', true, fixY(qd.map(burden), 0.5)),
+      plugins: [eraPlugin],
     });
 
     // ④ 이자부담 vs 부채/GDP · 재정수지 (그림26·28)
@@ -10273,6 +10310,7 @@ function renderUsFiscal() {
         ln('연방부채/GDP (우)', d => DEBT.get(d) ?? null, '#9dc3ea', [], 'y2'),
       ] },
       options: opt('이자부담과 정부부채 (%)', true, fixY(qd.map(burden), 0.5)),
+      plugins: [eraPlugin],
     });
 
     const balFn = hasBalQ ? balQ : (d => BAL.get(d.slice(0, 4)) ?? null);
@@ -10283,6 +10321,7 @@ function renderUsFiscal() {
         ln('정부이자 지출/GDP (우)', burden, '#1a4fa0', [5, 3], 'y2'),
       ] },
       options: opt('재정수지와 이자부담 (%)', true),
+      plugins: [eraPlugin],
     });
   }
 

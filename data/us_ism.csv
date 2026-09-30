@@ -1,0 +1,986 @@
+month,survey,item,value
+2026-04,mfg,Backlog of Orders,51.4
+2026-05,mfg,Backlog of Orders,52.2
+2026-06,mfg,Backlog of Orders,50.5
+2026-07,mfg,Backlog of Orders,55
+2026-08,mfg,Backlog of Orders,51.8
+2026-04,mfg,Customers' Inventories,39.1
+2026-05,mfg,Customers' Inventories,42.7
+2026-06,mfg,Customers' Inventories,42.3
+2026-07,mfg,Customers' Inventories,40.7
+2026-08,mfg,Customers' Inventories,42.8
+2026-04,mfg,Employment,46.4
+2026-05,mfg,Employment,48.6
+2026-06,mfg,Employment,49.7
+2026-07,mfg,Employment,52.8
+2026-08,mfg,Employment,51.2
+2026-04,mfg,Imports,50.3
+2026-05,mfg,Imports,53
+2026-06,mfg,Imports,52.9
+2026-07,mfg,Imports,55.7
+2026-08,mfg,Imports,52.5
+2026-04,mfg,Inventories,49
+2026-05,mfg,Inventories,49.9
+2026-06,mfg,Inventories,51.4
+2026-07,mfg,Inventories,51.2
+2026-08,mfg,Inventories,50.6
+2008-06,mfg,Manufacturing PMI,50.2
+2008-07,mfg,Manufacturing PMI,50.0
+2008-08,mfg,Manufacturing PMI,49.9
+2008-09,mfg,Manufacturing PMI,43.5
+2008-10,mfg,Manufacturing PMI,38.9
+2008-11,mfg,Manufacturing PMI,36.2
+2008-12,mfg,Manufacturing PMI,32.4
+2009-01,mfg,Manufacturing PMI,35.6
+2009-02,mfg,Manufacturing PMI,35.8
+2009-03,mfg,Manufacturing PMI,36.3
+2009-04,mfg,Manufacturing PMI,40.1
+2009-05,mfg,Manufacturing PMI,42.8
+2009-06,mfg,Manufacturing PMI,44.8
+2009-07,mfg,Manufacturing PMI,48.9
+2009-08,mfg,Manufacturing PMI,52.9
+2009-09,mfg,Manufacturing PMI,52.6
+2009-10,mfg,Manufacturing PMI,55.7
+2009-11,mfg,Manufacturing PMI,53.6
+2009-12,mfg,Manufacturing PMI,55.9
+2010-01,mfg,Manufacturing PMI,58.4
+2010-02,mfg,Manufacturing PMI,56.5
+2010-03,mfg,Manufacturing PMI,59.6
+2010-04,mfg,Manufacturing PMI,60.4
+2010-05,mfg,Manufacturing PMI,59.7
+2010-06,mfg,Manufacturing PMI,56.2
+2010-07,mfg,Manufacturing PMI,55.5
+2010-08,mfg,Manufacturing PMI,56.3
+2010-09,mfg,Manufacturing PMI,54.4
+2010-10,mfg,Manufacturing PMI,56.9
+2010-11,mfg,Manufacturing PMI,56.6
+2010-12,mfg,Manufacturing PMI,57.0
+2011-01,mfg,Manufacturing PMI,60.8
+2011-02,mfg,Manufacturing PMI,61.4
+2011-03,mfg,Manufacturing PMI,61.2
+2011-04,mfg,Manufacturing PMI,60.4
+2011-05,mfg,Manufacturing PMI,53.5
+2011-06,mfg,Manufacturing PMI,55.3
+2011-07,mfg,Manufacturing PMI,50.9
+2011-08,mfg,Manufacturing PMI,50.6
+2011-09,mfg,Manufacturing PMI,51.6
+2011-10,mfg,Manufacturing PMI,50.8
+2011-11,mfg,Manufacturing PMI,52.7
+2011-12,mfg,Manufacturing PMI,53.9
+2012-01,mfg,Manufacturing PMI,54.1
+2012-02,mfg,Manufacturing PMI,52.4
+2012-03,mfg,Manufacturing PMI,53.4
+2012-04,mfg,Manufacturing PMI,54.8
+2012-05,mfg,Manufacturing PMI,53.5
+2012-06,mfg,Manufacturing PMI,49.7
+2012-07,mfg,Manufacturing PMI,49.8
+2012-08,mfg,Manufacturing PMI,49.6
+2012-09,mfg,Manufacturing PMI,51.5
+2012-10,mfg,Manufacturing PMI,51.7
+2012-11,mfg,Manufacturing PMI,49.5
+2012-12,mfg,Manufacturing PMI,50.7
+2013-01,mfg,Manufacturing PMI,53.1
+2013-02,mfg,Manufacturing PMI,54.2
+2013-03,mfg,Manufacturing PMI,51.3
+2013-04,mfg,Manufacturing PMI,50.7
+2013-05,mfg,Manufacturing PMI,49.0
+2013-06,mfg,Manufacturing PMI,50.9
+2013-07,mfg,Manufacturing PMI,55.4
+2013-08,mfg,Manufacturing PMI,55.7
+2013-09,mfg,Manufacturing PMI,56.2
+2013-10,mfg,Manufacturing PMI,56.4
+2013-11,mfg,Manufacturing PMI,57.3
+2013-12,mfg,Manufacturing PMI,57.0
+2014-01,mfg,Manufacturing PMI,51.3
+2014-02,mfg,Manufacturing PMI,53.2
+2014-03,mfg,Manufacturing PMI,53.7
+2014-04,mfg,Manufacturing PMI,54.9
+2014-05,mfg,Manufacturing PMI,55.4
+2014-06,mfg,Manufacturing PMI,55.3
+2014-07,mfg,Manufacturing PMI,57.1
+2014-08,mfg,Manufacturing PMI,59.0
+2014-09,mfg,Manufacturing PMI,56.6
+2014-10,mfg,Manufacturing PMI,59.0
+2014-11,mfg,Manufacturing PMI,58.7
+2014-12,mfg,Manufacturing PMI,55.5
+2015-01,mfg,Manufacturing PMI,53.5
+2015-02,mfg,Manufacturing PMI,52.9
+2015-03,mfg,Manufacturing PMI,51.5
+2015-04,mfg,Manufacturing PMI,51.5
+2015-05,mfg,Manufacturing PMI,52.8
+2015-06,mfg,Manufacturing PMI,53.5
+2015-07,mfg,Manufacturing PMI,52.7
+2015-08,mfg,Manufacturing PMI,51.1
+2015-09,mfg,Manufacturing PMI,50.2
+2015-10,mfg,Manufacturing PMI,50.1
+2015-11,mfg,Manufacturing PMI,48.6
+2015-12,mfg,Manufacturing PMI,48.2
+2016-01,mfg,Manufacturing PMI,48.2
+2016-02,mfg,Manufacturing PMI,49.5
+2016-03,mfg,Manufacturing PMI,51.8
+2016-04,mfg,Manufacturing PMI,50.8
+2016-05,mfg,Manufacturing PMI,51.3
+2016-06,mfg,Manufacturing PMI,53.2
+2016-07,mfg,Manufacturing PMI,52.6
+2016-08,mfg,Manufacturing PMI,49.4
+2016-09,mfg,Manufacturing PMI,51.5
+2016-10,mfg,Manufacturing PMI,51.9
+2016-11,mfg,Manufacturing PMI,53.2
+2016-12,mfg,Manufacturing PMI,54.7
+2017-01,mfg,Manufacturing PMI,56.0
+2017-02,mfg,Manufacturing PMI,57.7
+2017-03,mfg,Manufacturing PMI,57.2
+2017-04,mfg,Manufacturing PMI,54.8
+2017-05,mfg,Manufacturing PMI,54.9
+2017-06,mfg,Manufacturing PMI,57.8
+2017-07,mfg,Manufacturing PMI,56.3
+2017-08,mfg,Manufacturing PMI,58.8
+2017-09,mfg,Manufacturing PMI,60.8
+2017-10,mfg,Manufacturing PMI,58.7
+2017-11,mfg,Manufacturing PMI,58.2
+2017-12,mfg,Manufacturing PMI,59.7
+2018-01,mfg,Manufacturing PMI,59.1
+2018-02,mfg,Manufacturing PMI,60.8
+2018-03,mfg,Manufacturing PMI,59.3
+2018-04,mfg,Manufacturing PMI,57.3
+2018-05,mfg,Manufacturing PMI,58.7
+2018-06,mfg,Manufacturing PMI,60.2
+2018-07,mfg,Manufacturing PMI,58.1
+2018-08,mfg,Manufacturing PMI,61.3
+2018-09,mfg,Manufacturing PMI,59.8
+2018-10,mfg,Manufacturing PMI,57.7
+2018-11,mfg,Manufacturing PMI,59.3
+2018-12,mfg,Manufacturing PMI,54.1
+2019-01,mfg,Manufacturing PMI,56.6
+2019-02,mfg,Manufacturing PMI,54.2
+2019-03,mfg,Manufacturing PMI,55.3
+2019-04,mfg,Manufacturing PMI,52.8
+2019-05,mfg,Manufacturing PMI,52.1
+2019-06,mfg,Manufacturing PMI,51.7
+2019-07,mfg,Manufacturing PMI,51.2
+2019-08,mfg,Manufacturing PMI,49.1
+2019-09,mfg,Manufacturing PMI,47.8
+2019-10,mfg,Manufacturing PMI,48.3
+2019-11,mfg,Manufacturing PMI,48.1
+2019-12,mfg,Manufacturing PMI,47.2
+2020-01,mfg,Manufacturing PMI,50.9
+2020-02,mfg,Manufacturing PMI,50.1
+2020-03,mfg,Manufacturing PMI,49.1
+2020-04,mfg,Manufacturing PMI,41.5
+2020-05,mfg,Manufacturing PMI,43.1
+2020-06,mfg,Manufacturing PMI,52.6
+2020-07,mfg,Manufacturing PMI,54.2
+2020-08,mfg,Manufacturing PMI,56.0
+2020-09,mfg,Manufacturing PMI,55.4
+2020-10,mfg,Manufacturing PMI,59.3
+2020-11,mfg,Manufacturing PMI,57.5
+2020-12,mfg,Manufacturing PMI,60.7
+2021-01,mfg,Manufacturing PMI,58.7
+2021-02,mfg,Manufacturing PMI,60.8
+2021-03,mfg,Manufacturing PMI,64.7
+2021-04,mfg,Manufacturing PMI,60.7
+2021-05,mfg,Manufacturing PMI,61.2
+2021-06,mfg,Manufacturing PMI,60.6
+2021-07,mfg,Manufacturing PMI,59.5
+2021-08,mfg,Manufacturing PMI,59.9
+2021-09,mfg,Manufacturing PMI,61.1
+2021-10,mfg,Manufacturing PMI,60.8
+2021-11,mfg,Manufacturing PMI,61.1
+2021-12,mfg,Manufacturing PMI,58.7
+2022-01,mfg,Manufacturing PMI,57.6
+2022-02,mfg,Manufacturing PMI,58.6
+2022-03,mfg,Manufacturing PMI,57.1
+2022-04,mfg,Manufacturing PMI,55.4
+2022-05,mfg,Manufacturing PMI,56.1
+2022-06,mfg,Manufacturing PMI,53.0
+2022-07,mfg,Manufacturing PMI,52.8
+2022-08,mfg,Manufacturing PMI,52.8
+2022-09,mfg,Manufacturing PMI,50.9
+2022-10,mfg,Manufacturing PMI,50.2
+2022-11,mfg,Manufacturing PMI,49.0
+2022-12,mfg,Manufacturing PMI,48.4
+2023-01,mfg,Manufacturing PMI,47.4
+2023-02,mfg,Manufacturing PMI,47.7
+2023-03,mfg,Manufacturing PMI,46.3
+2023-04,mfg,Manufacturing PMI,47.1
+2023-05,mfg,Manufacturing PMI,46.9
+2023-06,mfg,Manufacturing PMI,46.0
+2023-07,mfg,Manufacturing PMI,46.4
+2023-08,mfg,Manufacturing PMI,47.6
+2023-09,mfg,Manufacturing PMI,49.0
+2023-10,mfg,Manufacturing PMI,46.7
+2023-11,mfg,Manufacturing PMI,46.7
+2023-12,mfg,Manufacturing PMI,47.4
+2024-01,mfg,Manufacturing PMI,49.1
+2024-02,mfg,Manufacturing PMI,47.8
+2024-03,mfg,Manufacturing PMI,50.3
+2024-04,mfg,Manufacturing PMI,49.2
+2024-05,mfg,Manufacturing PMI,48.7
+2024-06,mfg,Manufacturing PMI,48.5
+2024-07,mfg,Manufacturing PMI,46.8
+2024-08,mfg,Manufacturing PMI,47.2
+2024-09,mfg,Manufacturing PMI,47.2
+2024-10,mfg,Manufacturing PMI,46.5
+2024-11,mfg,Manufacturing PMI,48.4
+2024-12,mfg,Manufacturing PMI,49.3
+2025-01,mfg,Manufacturing PMI,50.9
+2025-02,mfg,Manufacturing PMI,50.3
+2025-03,mfg,Manufacturing PMI,49.0
+2025-04,mfg,Manufacturing PMI,48.7
+2025-05,mfg,Manufacturing PMI,48.5
+2025-06,mfg,Manufacturing PMI,49.0
+2025-07,mfg,Manufacturing PMI,48.0
+2025-08,mfg,Manufacturing PMI,48.9
+2025-09,mfg,Manufacturing PMI,48.9
+2025-10,mfg,Manufacturing PMI,48.8
+2025-11,mfg,Manufacturing PMI,48
+2025-12,mfg,Manufacturing PMI,47.9
+2026-01,mfg,Manufacturing PMI,52.6
+2026-02,mfg,Manufacturing PMI,52.4
+2026-03,mfg,Manufacturing PMI,52.7
+2026-04,mfg,Manufacturing PMI,52.7
+2026-05,mfg,Manufacturing PMI,54
+2026-06,mfg,Manufacturing PMI,53.3
+2026-07,mfg,Manufacturing PMI,55.6
+2026-08,mfg,Manufacturing PMI,54.6
+2008-06,mfg,Manufacturing PMI Consensus,48.6
+2008-07,mfg,Manufacturing PMI Consensus,49.4
+2008-08,mfg,Manufacturing PMI Consensus,49.9
+2008-09,mfg,Manufacturing PMI Consensus,49.5
+2008-10,mfg,Manufacturing PMI Consensus,41.6
+2008-11,mfg,Manufacturing PMI Consensus,37.2
+2008-12,mfg,Manufacturing PMI Consensus,35.5
+2009-01,mfg,Manufacturing PMI Consensus,32.4
+2009-02,mfg,Manufacturing PMI Consensus,34.0
+2009-03,mfg,Manufacturing PMI Consensus,35.7
+2009-04,mfg,Manufacturing PMI Consensus,38.0
+2009-05,mfg,Manufacturing PMI Consensus,42.0
+2009-06,mfg,Manufacturing PMI Consensus,44.0
+2009-07,mfg,Manufacturing PMI Consensus,46.5
+2009-08,mfg,Manufacturing PMI Consensus,50.5
+2009-09,mfg,Manufacturing PMI Consensus,54.5
+2009-10,mfg,Manufacturing PMI Consensus,53.0
+2009-11,mfg,Manufacturing PMI Consensus,54.8
+2009-12,mfg,Manufacturing PMI Consensus,54.0
+2010-01,mfg,Manufacturing PMI Consensus,55.2
+2010-02,mfg,Manufacturing PMI Consensus,58.0
+2010-03,mfg,Manufacturing PMI Consensus,57.0
+2010-04,mfg,Manufacturing PMI Consensus,60.0
+2010-05,mfg,Manufacturing PMI Consensus,58.9
+2010-06,mfg,Manufacturing PMI Consensus,59.0
+2010-07,mfg,Manufacturing PMI Consensus,54.2
+2010-08,mfg,Manufacturing PMI Consensus,53.0
+2010-09,mfg,Manufacturing PMI Consensus,54.5
+2010-10,mfg,Manufacturing PMI Consensus,53.6
+2010-11,mfg,Manufacturing PMI Consensus,56.4
+2010-12,mfg,Manufacturing PMI Consensus,57.3
+2011-01,mfg,Manufacturing PMI Consensus,58.2
+2011-02,mfg,Manufacturing PMI Consensus,60.9
+2011-03,mfg,Manufacturing PMI Consensus,61.0
+2011-04,mfg,Manufacturing PMI Consensus,59.7
+2011-05,mfg,Manufacturing PMI Consensus,57.5
+2011-06,mfg,Manufacturing PMI Consensus,51.5
+2011-07,mfg,Manufacturing PMI Consensus,54.8
+2011-08,mfg,Manufacturing PMI Consensus,48.5
+2011-09,mfg,Manufacturing PMI Consensus,50.5
+2011-10,mfg,Manufacturing PMI Consensus,52.1
+2011-11,mfg,Manufacturing PMI Consensus,51.5
+2011-12,mfg,Manufacturing PMI Consensus,53.2
+2012-01,mfg,Manufacturing PMI Consensus,54.5
+2012-02,mfg,Manufacturing PMI Consensus,54.6
+2012-03,mfg,Manufacturing PMI Consensus,53.0
+2012-04,mfg,Manufacturing PMI Consensus,53.0
+2012-05,mfg,Manufacturing PMI Consensus,53.9
+2012-06,mfg,Manufacturing PMI Consensus,52.0
+2012-07,mfg,Manufacturing PMI Consensus,50.2
+2012-08,mfg,Manufacturing PMI Consensus,50.0
+2012-09,mfg,Manufacturing PMI Consensus,49.7
+2012-10,mfg,Manufacturing PMI Consensus,51.2
+2012-11,mfg,Manufacturing PMI Consensus,51.3
+2012-12,mfg,Manufacturing PMI Consensus,50.3
+2013-01,mfg,Manufacturing PMI Consensus,50.6
+2013-02,mfg,Manufacturing PMI Consensus,52.5
+2013-03,mfg,Manufacturing PMI Consensus,54.2
+2013-04,mfg,Manufacturing PMI Consensus,50.9
+2013-05,mfg,Manufacturing PMI Consensus,50.7
+2013-06,mfg,Manufacturing PMI Consensus,50.5
+2013-07,mfg,Manufacturing PMI Consensus,52.0
+2013-08,mfg,Manufacturing PMI Consensus,54.0
+2013-09,mfg,Manufacturing PMI Consensus,55.0
+2013-10,mfg,Manufacturing PMI Consensus,55.0
+2013-11,mfg,Manufacturing PMI Consensus,55.0
+2013-12,mfg,Manufacturing PMI Consensus,57.0
+2014-01,mfg,Manufacturing PMI Consensus,56.4
+2014-02,mfg,Manufacturing PMI Consensus,52.0
+2014-03,mfg,Manufacturing PMI Consensus,54.0
+2014-04,mfg,Manufacturing PMI Consensus,54.3
+2014-05,mfg,Manufacturing PMI Consensus,55.5
+2014-06,mfg,Manufacturing PMI Consensus,55.8
+2014-07,mfg,Manufacturing PMI Consensus,56.0
+2014-08,mfg,Manufacturing PMI Consensus,56.8
+2014-09,mfg,Manufacturing PMI Consensus,58.5
+2014-10,mfg,Manufacturing PMI Consensus,56.2
+2014-11,mfg,Manufacturing PMI Consensus,57.9
+2014-12,mfg,Manufacturing PMI Consensus,57.6
+2015-01,mfg,Manufacturing PMI Consensus,54.5
+2015-02,mfg,Manufacturing PMI Consensus,53.0
+2015-03,mfg,Manufacturing PMI Consensus,52.5
+2015-04,mfg,Manufacturing PMI Consensus,52.0
+2015-05,mfg,Manufacturing PMI Consensus,52.0
+2015-06,mfg,Manufacturing PMI Consensus,53.1
+2015-07,mfg,Manufacturing PMI Consensus,53.5
+2015-08,mfg,Manufacturing PMI Consensus,52.6
+2015-09,mfg,Manufacturing PMI Consensus,50.6
+2015-10,mfg,Manufacturing PMI Consensus,50.0
+2015-11,mfg,Manufacturing PMI Consensus,50.5
+2015-12,mfg,Manufacturing PMI Consensus,49.0
+2016-01,mfg,Manufacturing PMI Consensus,48.1
+2016-02,mfg,Manufacturing PMI Consensus,48.5
+2016-03,mfg,Manufacturing PMI Consensus,50.7
+2016-04,mfg,Manufacturing PMI Consensus,51.4
+2016-05,mfg,Manufacturing PMI Consensus,50.4
+2016-06,mfg,Manufacturing PMI Consensus,51.4
+2016-07,mfg,Manufacturing PMI Consensus,53.0
+2016-08,mfg,Manufacturing PMI Consensus,52.0
+2016-09,mfg,Manufacturing PMI Consensus,50.3
+2016-10,mfg,Manufacturing PMI Consensus,51.7
+2016-11,mfg,Manufacturing PMI Consensus,52.2
+2016-12,mfg,Manufacturing PMI Consensus,53.6
+2017-01,mfg,Manufacturing PMI Consensus,55.0
+2017-02,mfg,Manufacturing PMI Consensus,56.0
+2017-03,mfg,Manufacturing PMI Consensus,57.0
+2017-04,mfg,Manufacturing PMI Consensus,56.5
+2017-05,mfg,Manufacturing PMI Consensus,54.5
+2017-06,mfg,Manufacturing PMI Consensus,55.2
+2017-07,mfg,Manufacturing PMI Consensus,56.5
+2017-08,mfg,Manufacturing PMI Consensus,56.5
+2017-09,mfg,Manufacturing PMI Consensus,58.0
+2017-10,mfg,Manufacturing PMI Consensus,59.5
+2017-11,mfg,Manufacturing PMI Consensus,58.4
+2017-12,mfg,Manufacturing PMI Consensus,58.1
+2018-01,mfg,Manufacturing PMI Consensus,58.8
+2018-02,mfg,Manufacturing PMI Consensus,58.7
+2018-03,mfg,Manufacturing PMI Consensus,60.1
+2018-04,mfg,Manufacturing PMI Consensus,58.6
+2018-05,mfg,Manufacturing PMI Consensus,58.2
+2018-06,mfg,Manufacturing PMI Consensus,58.4
+2018-07,mfg,Manufacturing PMI Consensus,59.4
+2018-08,mfg,Manufacturing PMI Consensus,57.6
+2018-09,mfg,Manufacturing PMI Consensus,60.1
+2018-10,mfg,Manufacturing PMI Consensus,59.0
+2018-11,mfg,Manufacturing PMI Consensus,57.6
+2018-12,mfg,Manufacturing PMI Consensus,57.7
+2019-01,mfg,Manufacturing PMI Consensus,54.2
+2019-02,mfg,Manufacturing PMI Consensus,55.5
+2019-03,mfg,Manufacturing PMI Consensus,54.5
+2019-04,mfg,Manufacturing PMI Consensus,55.0
+2019-05,mfg,Manufacturing PMI Consensus,53.0
+2019-06,mfg,Manufacturing PMI Consensus,51.0
+2019-07,mfg,Manufacturing PMI Consensus,52.0
+2019-08,mfg,Manufacturing PMI Consensus,51.1
+2019-09,mfg,Manufacturing PMI Consensus,50.4
+2019-10,mfg,Manufacturing PMI Consensus,48.9
+2019-11,mfg,Manufacturing PMI Consensus,49.2
+2019-12,mfg,Manufacturing PMI Consensus,49.0
+2020-01,mfg,Manufacturing PMI Consensus,48.5
+2020-02,mfg,Manufacturing PMI Consensus,50.5
+2020-03,mfg,Manufacturing PMI Consensus,45.0
+2020-04,mfg,Manufacturing PMI Consensus,36.9
+2020-05,mfg,Manufacturing PMI Consensus,43.0
+2020-06,mfg,Manufacturing PMI Consensus,49.5
+2020-07,mfg,Manufacturing PMI Consensus,53.6
+2020-08,mfg,Manufacturing PMI Consensus,54.5
+2020-09,mfg,Manufacturing PMI Consensus,56.4
+2020-10,mfg,Manufacturing PMI Consensus,55.8
+2020-11,mfg,Manufacturing PMI Consensus,58.0
+2020-12,mfg,Manufacturing PMI Consensus,56.6
+2021-01,mfg,Manufacturing PMI Consensus,60.0
+2021-02,mfg,Manufacturing PMI Consensus,58.8
+2021-03,mfg,Manufacturing PMI Consensus,61.3
+2021-04,mfg,Manufacturing PMI Consensus,65.0
+2021-05,mfg,Manufacturing PMI Consensus,60.9
+2021-06,mfg,Manufacturing PMI Consensus,61.0
+2021-07,mfg,Manufacturing PMI Consensus,60.9
+2021-08,mfg,Manufacturing PMI Consensus,58.6
+2021-09,mfg,Manufacturing PMI Consensus,59.6
+2021-10,mfg,Manufacturing PMI Consensus,60.5
+2021-11,mfg,Manufacturing PMI Consensus,61.0
+2021-12,mfg,Manufacturing PMI Consensus,60.0
+2022-01,mfg,Manufacturing PMI Consensus,57.5
+2022-02,mfg,Manufacturing PMI Consensus,58.0
+2022-03,mfg,Manufacturing PMI Consensus,59.0
+2022-04,mfg,Manufacturing PMI Consensus,57.6
+2022-05,mfg,Manufacturing PMI Consensus,54.5
+2022-06,mfg,Manufacturing PMI Consensus,54.9
+2022-07,mfg,Manufacturing PMI Consensus,52.0
+2022-08,mfg,Manufacturing PMI Consensus,52.0
+2022-09,mfg,Manufacturing PMI Consensus,52.2
+2022-10,mfg,Manufacturing PMI Consensus,50.0
+2022-11,mfg,Manufacturing PMI Consensus,49.8
+2022-12,mfg,Manufacturing PMI Consensus,48.5
+2023-01,mfg,Manufacturing PMI Consensus,48.0
+2023-02,mfg,Manufacturing PMI Consensus,48.0
+2023-03,mfg,Manufacturing PMI Consensus,47.5
+2023-04,mfg,Manufacturing PMI Consensus,46.8
+2023-05,mfg,Manufacturing PMI Consensus,47.0
+2023-06,mfg,Manufacturing PMI Consensus,47.2
+2023-07,mfg,Manufacturing PMI Consensus,46.8
+2023-08,mfg,Manufacturing PMI Consensus,47.0
+2023-09,mfg,Manufacturing PMI Consensus,47.7
+2023-10,mfg,Manufacturing PMI Consensus,49.0
+2023-11,mfg,Manufacturing PMI Consensus,47.6
+2023-12,mfg,Manufacturing PMI Consensus,47.1
+2024-01,mfg,Manufacturing PMI Consensus,47.2
+2024-02,mfg,Manufacturing PMI Consensus,49.5
+2024-03,mfg,Manufacturing PMI Consensus,48.5
+2024-04,mfg,Manufacturing PMI Consensus,50.0
+2024-05,mfg,Manufacturing PMI Consensus,49.8
+2024-06,mfg,Manufacturing PMI Consensus,49.2
+2024-07,mfg,Manufacturing PMI Consensus,48.8
+2024-08,mfg,Manufacturing PMI Consensus,47.5
+2024-09,mfg,Manufacturing PMI Consensus,47.6
+2024-10,mfg,Manufacturing PMI Consensus,47.6
+2024-11,mfg,Manufacturing PMI Consensus,47.7
+2024-12,mfg,Manufacturing PMI Consensus,48.2
+2025-01,mfg,Manufacturing PMI Consensus,49.3
+2025-02,mfg,Manufacturing PMI Consensus,50.6
+2025-03,mfg,Manufacturing PMI Consensus,49.5
+2025-04,mfg,Manufacturing PMI Consensus,48.0
+2025-05,mfg,Manufacturing PMI Consensus,49.3
+2025-06,mfg,Manufacturing PMI Consensus,48.8
+2025-07,mfg,Manufacturing PMI Consensus,49.5
+2025-08,mfg,Manufacturing PMI Consensus,49.0
+2025-09,mfg,Manufacturing PMI Consensus,49.0
+2025-10,mfg,Manufacturing PMI Consensus,49.4
+2025-11,mfg,Manufacturing PMI Consensus,49.0
+2025-12,mfg,Manufacturing PMI Consensus,48.3
+2026-01,mfg,Manufacturing PMI Consensus,48.5
+2026-02,mfg,Manufacturing PMI Consensus,51.7
+2026-03,mfg,Manufacturing PMI Consensus,52.3
+2026-04,mfg,Manufacturing PMI Consensus,53.1
+2026-05,mfg,Manufacturing PMI Consensus,53.3
+2026-06,mfg,Manufacturing PMI Consensus,53.8
+2026-07,mfg,Manufacturing PMI Consensus,54.0
+2026-08,mfg,Manufacturing PMI Consensus,55.2
+2026-09,mfg,Manufacturing PMI Consensus,55.0
+2026-04,mfg,New Export Orders,47.9
+2026-05,mfg,New Export Orders,50.6
+2026-06,mfg,New Export Orders,48.5
+2026-07,mfg,New Export Orders,53
+2026-08,mfg,New Export Orders,53.2
+2026-04,mfg,New Orders,54.1
+2026-05,mfg,New Orders,56.8
+2026-06,mfg,New Orders,56
+2026-07,mfg,New Orders,56.7
+2026-08,mfg,New Orders,53.7
+2026-04,mfg,Prices,84.6
+2026-05,mfg,Prices,82.1
+2026-06,mfg,Prices,73
+2026-07,mfg,Prices,71.1
+2026-08,mfg,Prices,71.1
+2026-04,mfg,Production,53.4
+2026-05,mfg,Production,54.3
+2026-06,mfg,Production,52.2
+2026-07,mfg,Production,58.5
+2026-08,mfg,Production,58.3
+2026-04,mfg,Supplier Deliveries,60.6
+2026-05,mfg,Supplier Deliveries,60.6
+2026-06,mfg,Supplier Deliveries,57.4
+2026-07,mfg,Supplier Deliveries,58.9
+2026-08,mfg,Supplier Deliveries,59.3
+2026-04,svc,Backlog of Orders,53
+2026-05,svc,Backlog of Orders,51.3
+2026-06,svc,Backlog of Orders,54.9
+2026-07,svc,Backlog of Orders,50.9
+2026-08,svc,Backlog of Orders,55.6
+2026-04,svc,Business Activity,55.9
+2026-05,svc,Business Activity,57.7
+2026-06,svc,Business Activity,55.4
+2026-07,svc,Business Activity,59.1
+2026-08,svc,Business Activity,61.7
+2026-04,svc,Employment,48
+2026-05,svc,Employment,47.9
+2026-06,svc,Employment,51.2
+2026-07,svc,Employment,47.4
+2026-08,svc,Employment,47.8
+2026-04,svc,Imports,54.7
+2026-05,svc,Imports,51.1
+2026-06,svc,Imports,49.4
+2026-07,svc,Imports,51.8
+2026-08,svc,Imports,56.3
+2026-04,svc,Inventories,53.1
+2026-05,svc,Inventories,62.5
+2026-06,svc,Inventories,51.2
+2026-07,svc,Inventories,51.4
+2026-08,svc,Inventories,56.7
+2026-04,svc,Inventory Sentiment,55.1
+2026-05,svc,Inventory Sentiment,55.2
+2026-06,svc,Inventory Sentiment,52.6
+2026-07,svc,Inventory Sentiment,52.5
+2026-08,svc,Inventory Sentiment,54.1
+2026-04,svc,New Export Orders,52.1
+2026-05,svc,New Export Orders,50
+2026-06,svc,New Export Orders,50.4
+2026-07,svc,New Export Orders,52
+2026-08,svc,New Export Orders,56.3
+2026-04,svc,New Orders,53.5
+2026-05,svc,New Orders,57.3
+2026-06,svc,New Orders,55.1
+2026-07,svc,New Orders,57.2
+2026-08,svc,New Orders,60.9
+2026-04,svc,Prices,70.7
+2026-05,svc,Prices,71.3
+2026-06,svc,Prices,67.7
+2026-07,svc,Prices,70.3
+2026-08,svc,Prices,72.6
+2008-02,svc,Services PMI,49.3
+2008-03,svc,Services PMI,49.6
+2008-04,svc,Services PMI,52.0
+2008-05,svc,Services PMI,51.7
+2008-06,svc,Services PMI,48.2
+2008-07,svc,Services PMI,49.5
+2008-08,svc,Services PMI,50.6
+2008-09,svc,Services PMI,50.2
+2008-10,svc,Services PMI,44.4
+2008-11,svc,Services PMI,37.3
+2008-12,svc,Services PMI,40.6
+2009-01,svc,Services PMI,42.9
+2009-02,svc,Services PMI,41.6
+2009-03,svc,Services PMI,40.8
+2009-04,svc,Services PMI,43.7
+2009-05,svc,Services PMI,44.0
+2009-06,svc,Services PMI,47.0
+2009-07,svc,Services PMI,46.4
+2009-08,svc,Services PMI,48.4
+2009-09,svc,Services PMI,50.9
+2009-10,svc,Services PMI,50.6
+2009-11,svc,Services PMI,48.7
+2009-12,svc,Services PMI,50.1
+2010-01,svc,Services PMI,50.5
+2010-02,svc,Services PMI,53.0
+2010-03,svc,Services PMI,55.4
+2010-04,svc,Services PMI,55.4
+2010-05,svc,Services PMI,55.4
+2010-06,svc,Services PMI,53.8
+2010-07,svc,Services PMI,54.3
+2010-08,svc,Services PMI,51.5
+2010-09,svc,Services PMI,53.2
+2010-10,svc,Services PMI,54.3
+2010-11,svc,Services PMI,55.0
+2010-12,svc,Services PMI,57.1
+2011-01,svc,Services PMI,59.4
+2011-02,svc,Services PMI,59.7
+2011-03,svc,Services PMI,57.3
+2011-04,svc,Services PMI,52.8
+2011-05,svc,Services PMI,54.6
+2011-06,svc,Services PMI,53.3
+2011-07,svc,Services PMI,52.7
+2011-08,svc,Services PMI,53.3
+2011-09,svc,Services PMI,53.0
+2011-10,svc,Services PMI,52.9
+2011-11,svc,Services PMI,52.0
+2011-12,svc,Services PMI,52.6
+2012-01,svc,Services PMI,56.8
+2012-02,svc,Services PMI,57.3
+2012-03,svc,Services PMI,56.0
+2012-04,svc,Services PMI,53.5
+2012-05,svc,Services PMI,53.7
+2012-06,svc,Services PMI,52.1
+2012-07,svc,Services PMI,52.6
+2012-08,svc,Services PMI,53.7
+2012-09,svc,Services PMI,55.1
+2012-10,svc,Services PMI,54.2
+2012-11,svc,Services PMI,54.7
+2012-12,svc,Services PMI,56.1
+2013-01,svc,Services PMI,55.2
+2013-02,svc,Services PMI,56.0
+2013-03,svc,Services PMI,54.4
+2013-04,svc,Services PMI,53.1
+2013-05,svc,Services PMI,53.7
+2013-06,svc,Services PMI,52.2
+2013-07,svc,Services PMI,56.0
+2013-08,svc,Services PMI,58.6
+2013-09,svc,Services PMI,54.4
+2013-10,svc,Services PMI,55.4
+2013-11,svc,Services PMI,53.9
+2013-12,svc,Services PMI,53.0
+2014-01,svc,Services PMI,54.0
+2014-02,svc,Services PMI,51.6
+2014-03,svc,Services PMI,53.1
+2014-04,svc,Services PMI,55.2
+2014-05,svc,Services PMI,56.3
+2014-06,svc,Services PMI,56.0
+2014-07,svc,Services PMI,58.7
+2014-08,svc,Services PMI,59.6
+2014-09,svc,Services PMI,58.6
+2014-10,svc,Services PMI,57.1
+2014-11,svc,Services PMI,59.3
+2014-12,svc,Services PMI,56.2
+2015-01,svc,Services PMI,56.7
+2015-02,svc,Services PMI,56.9
+2015-03,svc,Services PMI,56.5
+2015-04,svc,Services PMI,57.8
+2015-05,svc,Services PMI,55.7
+2015-06,svc,Services PMI,56.0
+2015-07,svc,Services PMI,60.3
+2015-08,svc,Services PMI,59.0
+2015-09,svc,Services PMI,56.9
+2015-10,svc,Services PMI,59.1
+2015-11,svc,Services PMI,55.9
+2015-12,svc,Services PMI,55.3
+2016-01,svc,Services PMI,53.5
+2016-02,svc,Services PMI,53.4
+2016-03,svc,Services PMI,54.5
+2016-04,svc,Services PMI,55.7
+2016-05,svc,Services PMI,52.9
+2016-06,svc,Services PMI,56.5
+2016-07,svc,Services PMI,55.5
+2016-08,svc,Services PMI,51.4
+2016-09,svc,Services PMI,57.1
+2016-10,svc,Services PMI,54.8
+2016-11,svc,Services PMI,57.2
+2016-12,svc,Services PMI,57.2
+2017-01,svc,Services PMI,56.5
+2017-02,svc,Services PMI,57.6
+2017-03,svc,Services PMI,55.2
+2017-04,svc,Services PMI,57.5
+2017-05,svc,Services PMI,56.9
+2017-06,svc,Services PMI,57.4
+2017-07,svc,Services PMI,53.9
+2017-08,svc,Services PMI,55.3
+2017-09,svc,Services PMI,59.8
+2017-10,svc,Services PMI,60.1
+2017-11,svc,Services PMI,57.4
+2017-12,svc,Services PMI,55.9
+2018-01,svc,Services PMI,59.9
+2018-02,svc,Services PMI,59.5
+2018-03,svc,Services PMI,58.8
+2018-04,svc,Services PMI,56.8
+2018-05,svc,Services PMI,58.6
+2018-06,svc,Services PMI,59.1
+2018-07,svc,Services PMI,55.7
+2018-08,svc,Services PMI,58.5
+2018-09,svc,Services PMI,61.6
+2018-10,svc,Services PMI,60.3
+2018-11,svc,Services PMI,60.7
+2018-12,svc,Services PMI,57.6
+2019-01,svc,Services PMI,56.7
+2019-02,svc,Services PMI,59.7
+2019-03,svc,Services PMI,56.1
+2019-04,svc,Services PMI,55.5
+2019-05,svc,Services PMI,56.9
+2019-06,svc,Services PMI,55.1
+2019-07,svc,Services PMI,53.7
+2019-08,svc,Services PMI,56.4
+2019-09,svc,Services PMI,52.6
+2019-10,svc,Services PMI,54.7
+2019-11,svc,Services PMI,53.9
+2019-12,svc,Services PMI,55.0
+2020-01,svc,Services PMI,55.5
+2020-02,svc,Services PMI,57.3
+2020-03,svc,Services PMI,52.5
+2020-04,svc,Services PMI,41.8
+2020-05,svc,Services PMI,45.4
+2020-06,svc,Services PMI,57.1
+2020-07,svc,Services PMI,58.1
+2020-08,svc,Services PMI,56.9
+2020-09,svc,Services PMI,57.8
+2020-10,svc,Services PMI,56.6
+2020-11,svc,Services PMI,55.9
+2020-12,svc,Services PMI,57.2
+2021-01,svc,Services PMI,58.7
+2021-02,svc,Services PMI,55.3
+2021-03,svc,Services PMI,63.7
+2021-04,svc,Services PMI,62.7
+2021-05,svc,Services PMI,64.0
+2021-06,svc,Services PMI,60.1
+2021-07,svc,Services PMI,64.1
+2021-08,svc,Services PMI,61.7
+2021-09,svc,Services PMI,61.9
+2021-10,svc,Services PMI,66.7
+2021-11,svc,Services PMI,69.1
+2021-12,svc,Services PMI,62.0
+2022-01,svc,Services PMI,59.9
+2022-02,svc,Services PMI,56.5
+2022-03,svc,Services PMI,58.3
+2022-04,svc,Services PMI,57.1
+2022-05,svc,Services PMI,55.9
+2022-06,svc,Services PMI,55.3
+2022-07,svc,Services PMI,56.7
+2022-08,svc,Services PMI,56.9
+2022-09,svc,Services PMI,56.7
+2022-10,svc,Services PMI,54.4
+2022-11,svc,Services PMI,56.5
+2022-12,svc,Services PMI,49.6
+2023-01,svc,Services PMI,55.2
+2023-02,svc,Services PMI,55.1
+2023-03,svc,Services PMI,51.2
+2023-04,svc,Services PMI,51.9
+2023-05,svc,Services PMI,50.3
+2023-06,svc,Services PMI,53.9
+2023-07,svc,Services PMI,52.7
+2023-08,svc,Services PMI,54.5
+2023-09,svc,Services PMI,53.6
+2023-10,svc,Services PMI,51.8
+2023-11,svc,Services PMI,52.7
+2023-12,svc,Services PMI,50.6
+2024-01,svc,Services PMI,53.4
+2024-02,svc,Services PMI,52.6
+2024-03,svc,Services PMI,51.4
+2024-04,svc,Services PMI,49.4
+2024-05,svc,Services PMI,53.8
+2024-06,svc,Services PMI,48.8
+2024-07,svc,Services PMI,51.4
+2024-08,svc,Services PMI,51.5
+2024-09,svc,Services PMI,54.9
+2024-10,svc,Services PMI,56.0
+2024-11,svc,Services PMI,52.1
+2024-12,svc,Services PMI,54.1
+2025-01,svc,Services PMI,52.8
+2025-02,svc,Services PMI,53.5
+2025-03,svc,Services PMI,50.8
+2025-04,svc,Services PMI,51.6
+2025-05,svc,Services PMI,49.9
+2025-06,svc,Services PMI,50.8
+2025-07,svc,Services PMI,50.1
+2025-08,svc,Services PMI,51.9
+2025-09,svc,Services PMI,50.3
+2025-10,svc,Services PMI,52
+2025-11,svc,Services PMI,52.4
+2025-12,svc,Services PMI,53.8
+2026-01,svc,Services PMI,53.8
+2026-02,svc,Services PMI,56.1
+2026-03,svc,Services PMI,54
+2026-04,svc,Services PMI,53.6
+2026-05,svc,Services PMI,54.5
+2026-06,svc,Services PMI,54
+2026-07,svc,Services PMI,54.1
+2026-08,svc,Services PMI,55.4
+2008-02,svc,Services PMI Consensus,47.6
+2008-03,svc,Services PMI Consensus,48.5
+2008-04,svc,Services PMI Consensus,49.1
+2008-05,svc,Services PMI Consensus,51.0
+2008-06,svc,Services PMI Consensus,51.1
+2008-07,svc,Services PMI Consensus,48.0
+2008-08,svc,Services PMI Consensus,49.4
+2008-09,svc,Services PMI Consensus,50.0
+2008-10,svc,Services PMI Consensus,47.3
+2008-11,svc,Services PMI Consensus,42.5
+2008-12,svc,Services PMI Consensus,36.8
+2009-01,svc,Services PMI Consensus,39.1
+2009-02,svc,Services PMI Consensus,41.2
+2009-03,svc,Services PMI Consensus,41.9
+2009-04,svc,Services PMI Consensus,42.1
+2009-05,svc,Services PMI Consensus,45.1
+2009-06,svc,Services PMI Consensus,45.9
+2009-07,svc,Services PMI Consensus,48.1
+2009-08,svc,Services PMI Consensus,48.5
+2009-09,svc,Services PMI Consensus,50.0
+2009-10,svc,Services PMI Consensus,51.7
+2009-11,svc,Services PMI Consensus,51.5
+2009-12,svc,Services PMI Consensus,50.5
+2010-01,svc,Services PMI Consensus,51.0
+2010-02,svc,Services PMI Consensus,51.0
+2010-03,svc,Services PMI Consensus,53.5
+2010-04,svc,Services PMI Consensus,56.1
+2010-05,svc,Services PMI Consensus,55.5
+2010-06,svc,Services PMI Consensus,55.0
+2010-07,svc,Services PMI Consensus,53.0
+2010-08,svc,Services PMI Consensus,53.2
+2010-09,svc,Services PMI Consensus,51.8
+2010-10,svc,Services PMI Consensus,53.6
+2010-11,svc,Services PMI Consensus,54.5
+2010-12,svc,Services PMI Consensus,55.7
+2011-01,svc,Services PMI Consensus,57.0
+2011-02,svc,Services PMI Consensus,59.7
+2011-03,svc,Services PMI Consensus,60.0
+2011-04,svc,Services PMI Consensus,57.4
+2011-05,svc,Services PMI Consensus,54.0
+2011-06,svc,Services PMI Consensus,54.0
+2011-07,svc,Services PMI Consensus,53.8
+2011-08,svc,Services PMI Consensus,51.0
+2011-09,svc,Services PMI Consensus,53.0
+2011-10,svc,Services PMI Consensus,53.7
+2011-11,svc,Services PMI Consensus,53.4
+2011-12,svc,Services PMI Consensus,53.0
+2012-01,svc,Services PMI Consensus,53.2
+2012-02,svc,Services PMI Consensus,56.1
+2012-03,svc,Services PMI Consensus,57.0
+2012-04,svc,Services PMI Consensus,55.5
+2012-05,svc,Services PMI Consensus,53.5
+2012-06,svc,Services PMI Consensus,53.0
+2012-07,svc,Services PMI Consensus,52.0
+2012-08,svc,Services PMI Consensus,52.5
+2012-09,svc,Services PMI Consensus,53.2
+2012-10,svc,Services PMI Consensus,54.5
+2012-11,svc,Services PMI Consensus,53.5
+2012-12,svc,Services PMI Consensus,54.2
+2013-01,svc,Services PMI Consensus,55.2
+2013-02,svc,Services PMI Consensus,55.0
+2013-03,svc,Services PMI Consensus,55.8
+2013-04,svc,Services PMI Consensus,54.0
+2013-05,svc,Services PMI Consensus,53.5
+2013-06,svc,Services PMI Consensus,54.0
+2013-07,svc,Services PMI Consensus,53.0
+2013-08,svc,Services PMI Consensus,55.0
+2013-09,svc,Services PMI Consensus,57.4
+2013-10,svc,Services PMI Consensus,54.0
+2013-11,svc,Services PMI Consensus,55.0
+2013-12,svc,Services PMI Consensus,54.5
+2014-01,svc,Services PMI Consensus,53.7
+2014-02,svc,Services PMI Consensus,53.5
+2014-03,svc,Services PMI Consensus,53.5
+2014-04,svc,Services PMI Consensus,54.1
+2014-05,svc,Services PMI Consensus,55.5
+2014-06,svc,Services PMI Consensus,56.3
+2014-07,svc,Services PMI Consensus,56.3
+2014-08,svc,Services PMI Consensus,57.5
+2014-09,svc,Services PMI Consensus,58.5
+2014-10,svc,Services PMI Consensus,58.0
+2014-11,svc,Services PMI Consensus,57.5
+2014-12,svc,Services PMI Consensus,58.0
+2015-01,svc,Services PMI Consensus,56.3
+2015-02,svc,Services PMI Consensus,56.5
+2015-03,svc,Services PMI Consensus,56.5
+2015-04,svc,Services PMI Consensus,56.2
+2015-05,svc,Services PMI Consensus,57.0
+2015-06,svc,Services PMI Consensus,56.2
+2015-07,svc,Services PMI Consensus,56.2
+2015-08,svc,Services PMI Consensus,58.1
+2015-09,svc,Services PMI Consensus,57.5
+2015-10,svc,Services PMI Consensus,56.5
+2015-11,svc,Services PMI Consensus,58.0
+2015-12,svc,Services PMI Consensus,56.0
+2016-01,svc,Services PMI Consensus,55.1
+2016-02,svc,Services PMI Consensus,53.2
+2016-03,svc,Services PMI Consensus,54.0
+2016-04,svc,Services PMI Consensus,54.7
+2016-05,svc,Services PMI Consensus,55.5
+2016-06,svc,Services PMI Consensus,53.3
+2016-07,svc,Services PMI Consensus,56.0
+2016-08,svc,Services PMI Consensus,55.0
+2016-09,svc,Services PMI Consensus,53.0
+2016-10,svc,Services PMI Consensus,56.0
+2016-11,svc,Services PMI Consensus,55.4
+2016-12,svc,Services PMI Consensus,56.6
+2017-01,svc,Services PMI Consensus,57.0
+2017-02,svc,Services PMI Consensus,56.5
+2017-03,svc,Services PMI Consensus,57.0
+2017-04,svc,Services PMI Consensus,55.8
+2017-05,svc,Services PMI Consensus,57.0
+2017-06,svc,Services PMI Consensus,56.5
+2017-07,svc,Services PMI Consensus,57.0
+2017-08,svc,Services PMI Consensus,55.4
+2017-09,svc,Services PMI Consensus,55.5
+2017-10,svc,Services PMI Consensus,58.5
+2017-11,svc,Services PMI Consensus,59.0
+2017-12,svc,Services PMI Consensus,57.8
+2018-01,svc,Services PMI Consensus,56.5
+2018-02,svc,Services PMI Consensus,58.9
+2018-03,svc,Services PMI Consensus,59.0
+2018-04,svc,Services PMI Consensus,58.1
+2018-05,svc,Services PMI Consensus,57.9
+2018-06,svc,Services PMI Consensus,58.3
+2018-07,svc,Services PMI Consensus,58.6
+2018-08,svc,Services PMI Consensus,57.0
+2018-09,svc,Services PMI Consensus,58.1
+2018-10,svc,Services PMI Consensus,59.3
+2018-11,svc,Services PMI Consensus,59.2
+2018-12,svc,Services PMI Consensus,59.6
+2019-01,svc,Services PMI Consensus,57.2
+2019-02,svc,Services PMI Consensus,57.3
+2019-03,svc,Services PMI Consensus,58.1
+2019-04,svc,Services PMI Consensus,57.2
+2019-05,svc,Services PMI Consensus,55.5
+2019-06,svc,Services PMI Consensus,56.1
+2019-07,svc,Services PMI Consensus,55.5
+2019-08,svc,Services PMI Consensus,54.0
+2019-09,svc,Services PMI Consensus,55.0
+2019-10,svc,Services PMI Consensus,53.5
+2019-11,svc,Services PMI Consensus,54.5
+2019-12,svc,Services PMI Consensus,54.5
+2020-01,svc,Services PMI Consensus,55.0
+2020-02,svc,Services PMI Consensus,54.9
+2020-03,svc,Services PMI Consensus,44.0
+2020-04,svc,Services PMI Consensus,36.8
+2020-05,svc,Services PMI Consensus,44.0
+2020-06,svc,Services PMI Consensus,50.1
+2020-07,svc,Services PMI Consensus,55.0
+2020-08,svc,Services PMI Consensus,57.0
+2020-09,svc,Services PMI Consensus,56.3
+2020-10,svc,Services PMI Consensus,57.5
+2020-11,svc,Services PMI Consensus,56.0
+2020-12,svc,Services PMI Consensus,54.6
+2021-01,svc,Services PMI Consensus,56.8
+2021-02,svc,Services PMI Consensus,58.7
+2021-03,svc,Services PMI Consensus,59.0
+2021-04,svc,Services PMI Consensus,64.3
+2021-05,svc,Services PMI Consensus,63.0
+2021-06,svc,Services PMI Consensus,63.5
+2021-07,svc,Services PMI Consensus,60.5
+2021-08,svc,Services PMI Consensus,61.5
+2021-09,svc,Services PMI Consensus,60.0
+2021-10,svc,Services PMI Consensus,62.0
+2021-11,svc,Services PMI Consensus,65.0
+2021-12,svc,Services PMI Consensus,66.9
+2022-01,svc,Services PMI Consensus,59.5
+2022-02,svc,Services PMI Consensus,61.0
+2022-03,svc,Services PMI Consensus,58.4
+2022-04,svc,Services PMI Consensus,58.5
+2022-05,svc,Services PMI Consensus,56.4
+2022-06,svc,Services PMI Consensus,54.3
+2022-07,svc,Services PMI Consensus,53.5
+2022-08,svc,Services PMI Consensus,55.1
+2022-09,svc,Services PMI Consensus,56.0
+2022-10,svc,Services PMI Consensus,55.5
+2022-11,svc,Services PMI Consensus,53.3
+2022-12,svc,Services PMI Consensus,55.0
+2023-01,svc,Services PMI Consensus,50.4
+2023-02,svc,Services PMI Consensus,54.5
+2023-03,svc,Services PMI Consensus,54.5
+2023-04,svc,Services PMI Consensus,51.8
+2023-05,svc,Services PMI Consensus,52.2
+2023-06,svc,Services PMI Consensus,51.0
+2023-07,svc,Services PMI Consensus,53.0
+2023-08,svc,Services PMI Consensus,52.5
+2023-09,svc,Services PMI Consensus,53.6
+2023-10,svc,Services PMI Consensus,53.0
+2023-11,svc,Services PMI Consensus,52.0
+2023-12,svc,Services PMI Consensus,52.6
+2024-01,svc,Services PMI Consensus,52.0
+2024-02,svc,Services PMI Consensus,53.0
+2024-03,svc,Services PMI Consensus,52.8
+2024-04,svc,Services PMI Consensus,52.0
+2024-05,svc,Services PMI Consensus,51.0
+2024-06,svc,Services PMI Consensus,52.6
+2024-07,svc,Services PMI Consensus,51.4
+2024-08,svc,Services PMI Consensus,51.3
+2024-09,svc,Services PMI Consensus,51.7
+2024-10,svc,Services PMI Consensus,53.8
+2024-11,svc,Services PMI Consensus,55.5
+2024-12,svc,Services PMI Consensus,53.5
+2025-01,svc,Services PMI Consensus,54.2
+2025-02,svc,Services PMI Consensus,52.5
+2025-03,svc,Services PMI Consensus,53.0
+2025-04,svc,Services PMI Consensus,50.2
+2025-05,svc,Services PMI Consensus,52.0
+2025-06,svc,Services PMI Consensus,50.8
+2025-07,svc,Services PMI Consensus,51.5
+2025-08,svc,Services PMI Consensus,50.9
+2025-09,svc,Services PMI Consensus,51.8
+2025-10,svc,Services PMI Consensus,50.7
+2025-11,svc,Services PMI Consensus,52.0
+2025-12,svc,Services PMI Consensus,52.2
+2026-01,svc,Services PMI Consensus,53.5
+2026-02,svc,Services PMI Consensus,53.5
+2026-03,svc,Services PMI Consensus,54.8
+2026-04,svc,Services PMI Consensus,53.7
+2026-05,svc,Services PMI Consensus,53.7
+2026-06,svc,Services PMI Consensus,54.2
+2026-07,svc,Services PMI Consensus,54.5
+2026-08,svc,Services PMI Consensus,54.1
+2026-04,svc,Supplier Deliveries,56.8
+2026-05,svc,Supplier Deliveries,55.2
+2026-06,svc,Supplier Deliveries,54.4
+2026-07,svc,Supplier Deliveries,52.8
+2026-08,svc,Supplier Deliveries,51.3

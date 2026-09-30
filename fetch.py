@@ -22,7 +22,7 @@ import yaml
 
 from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos,
                       reb, bls, freesis, bok, seibro, fred, infomax, acm, krx,
-                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow)
+                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow, ism)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -51,6 +51,7 @@ SOURCES = {
     "treasurydirect": treasurydirect.fetch,
     "fiscaldata": fiscaldata.fetch,
     "gdpnow": gdpnow.fetch,
+    "ism": ism.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -150,6 +151,7 @@ RELEASE_BADGE = {
     "us_ppi":            {"btn": "usPpiBtn",     "kind": "month"},
     "us_nowcast":        {"btn": "nowcBtn",      "kind": "month"},
     "us_nfp":            {"btn": "usEmpBtn",     "kind": "month"},
+    "us_ism":            {"btn": "ismBtn",       "kind": "month"},
 }
 RELEASE_DAYS = 7          # 배지를 며칠 띄울지
 
@@ -385,8 +387,12 @@ def main():
             #   data 없이 name+notes 만 있는 시리즈가 섞일 수 있다 (us_gdpnow 의
             #   '사유 · 2026 Q3' 말풍선). s["data"] 로 쓰면 KeyError 로 루프가 끊긴다
             #   — 2026-09-21~30 에 이걸로 #65 이후 25개 지표가 9일간 멈췄다.
+            #   badge_skip: 이름에 이 문자열이 든 계열은 빼고 본다. 예상치(컨센서스)는
+            #   발표 전에 다음 달 값이 먼저 들어와, 그대로 두면 안 나온 달에 배지가 뜬다.
+            skip = ind.get("badge_skip") or []
             last_dates[ind["id"]] = max(
-                (p["d"] for s in series for p in (s.get("data") or [])), default=None)
+                (p["d"] for s in series if not any(k in s["name"] for k in skip)
+                 for p in (s.get("data") or [])), default=None)
 
     except Exception:
         import traceback

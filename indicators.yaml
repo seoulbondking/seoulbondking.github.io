@@ -1141,6 +1141,20 @@ indicators:
       vintage_quarters: 8
       max_age_hours: 6
 
+  # ── ISM 제조업·서비스 PMI ──────────────────────────────────────
+  #   ismworld.org 는 reCAPTCHA 로 막혀 자동으로 받을 수 없다. 발표가 나면
+  #   브라우저로 보고서 표를 뽑아 tools/ism_add.py 로 data/us_ism.csv 에 넣고,
+  #   여기서는 그 CSV 만 읽는다. 공개 페이지는 최근 2개월치뿐이라 이력은 쌓아 간다.
+  - id: us_ism
+    name: 미국 ISM PMI
+    source: ism
+    unit: 지수
+    freq: M
+    always_full: true       # CSV 가 원본이다 — 매번 통째로 다시 만든다
+    badge_skip: [컨센서스]   # 다음 달 예상치가 먼저 들어와도 '새 지표' 배지를 띄우지 않는다
+    params:
+      path: data/us_ism.csv
+
   # ── 미국 재정 — 이자부담·부채·적자 (FRED) ─────────────────────
   #   메리츠 「재정과 금리」 그림24~26·28 재현용. 분기(SAAR) 기준으로 맞춰 받는다.
   #     A091RC1Q027SBEA  연방정부 이자지급 (경상지출 중, 십억달러 SAAR, 1947~)

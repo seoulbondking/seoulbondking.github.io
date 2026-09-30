@@ -453,7 +453,7 @@ let catalog = [], current = null, chart = null;
 // 버튼을 다 만든 **뒤에** DOM 에서 자리만 옮긴다 — 어떤 지표에서 어떤 버튼이 생기는지
 // (US_EMP 처럼 지표 10개가 버튼 하나로 묶이는 경우 포함)를 건드리지 않아서
 // 지표가 늘거나 yaml 순서가 바뀌어도 깨지지 않는다. 없는 버튼은 그냥 건너뛴다.
-const NAV_ORDER = ['usGdpBtn', 'fisBtn', 'gnBtn', 'usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn',
+const NAV_ORDER = ['usGdpBtn', 'fisBtn', 'gnBtn', 'ismBtn', 'usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn',
                    'usEmpBtn', 'fedBtn', 'aucBtn', 'yenBtn'];
 function applyNavOrder(nav) {
   const btns = NAV_ORDER.map(id => document.getElementById(id)).filter(Boolean);
@@ -715,7 +715,7 @@ function refresh() {
   const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
   const isAuc = view === 'auction';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce', isUGdp = view === 'usgdp';
-  const isGn = view === 'gdpnow', isFis = view === 'usfiscal';
+  const isGn = view === 'gdpnow', isFis = view === 'usfiscal', isIsm = view === 'ism';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -737,7 +737,7 @@ function refresh() {
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   // '금리 흐름'·'채권 계산' 은 한 화면뿐이라 탭 막대를 감춘다
   document.getElementById('yieldTabs').style.display = (isYld && yldMode === 'full') ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -750,13 +750,13 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   // 금리 흐름·채권 계산은 차트뿐이라 표 좌우 스크롤 버튼이 할 일이 없다 ('금리 분해'는 원자료 표가 있어 남긴다)
   const isYldTbl = isYld && yldMode === 'full';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   // IRS 시나리오·채권 계산은 기간 선택기를 안 쓴다 (평가일 두 개가 기준이라 기간 개념이 없다).
   // 툴바 자체는 남겨서 제목이 계속 보이게 하고, 선택기만 감춘다.
@@ -790,6 +790,7 @@ function refresh() {
   else if (isUPce) renderUsPce();
   else if (isUGdp) renderUsGdp();
   else if (isGn) renderGdpNow();
+  else if (isIsm) renderIsm();
   else if (isFis) renderUsFiscal();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
@@ -10357,6 +10358,177 @@ function renderUsFiscal() {
 }
 
 // ── GDP 나우캐스트 (애틀랜타 연준 GDPNow) ──────────────────────
+// ISM 제조업·서비스 PMI — 두 조사를 나란히 본다.
+//   원문(ismworld.org)은 reCAPTCHA 로 자동수집이 막혀 있어, 발표 후 브라우저로 표를 뽑아
+//   tools/ism_add.py 로 data/us_ism.csv 에 넣는다. 공개 페이지가 최근 2개월치뿐이라
+//   하위지수 이력은 2026-04 부터 쌓아 가는 중이다 (헤드라인은 12개월치를 받아 둠).
+const ISM = { id: 'ism', name: '미국 ISM PMI', ids: ['us_ism'] };
+const ISM_SV = [['제조업', 'mfg'], ['서비스', 'svc']];
+let ismData = null, ismCharts = [null, null];
+let ismSel = null;               // { 제조업: Set, 서비스: Set } — 표에서 우클릭
+// 50 = 확장/위축 경계. 공급자 배송만 역지수라 50 초과가 '배송 지연'이다.
+const ISM_NOTE = {
+  '공급자 배송': '역지수 — 50 초과면 배송 지연(수요 강함 또는 공급 병목)',
+  '고객 재고': '50 미만 = 고객 재고 부족 → 향후 생산에 긍정적',
+  '재고 체감': '50 초과 = 재고가 과하다고 느낌',
+};
+
+async function enterIsm() {
+  ismData = await loadIndicator('us_ism').catch(() => null);
+  if (!ismData) { alert('ISM 데이터가 없습니다. python fetch.py us_ism 실행 필요.'); return; }
+  current = { id: ISM.id, name: ISM.name, freq: 'M', unit: '지수',
+              updated_at: ismData.updated_at, series: [] };
+  view = 'ism';
+  document.getElementById('title').textContent = ISM.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + ismData.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'ismBtn'));
+  const ds = new Set();
+  ismData.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates[Math.max(0, periodDates.length - 36)];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderIsm() {
+  const box = document.getElementById('retailWrap');
+  if (ismSel === null) ismSel = {
+    '제조업': new Set(['PMI', 'PMI 컨센서스', '신규주문', '가격']),
+    '서비스': new Set(['PMI', 'PMI 컨센서스', '사업활동', '가격']),
+  };
+  const cols = periodDates.filter(inRange);
+  const items = sv => ismData.series.filter(s => s.name.startsWith(sv + ' · '))
+    .map(s => ({ ko: s.name.slice(sv.length + 3), m: new Map(s.data.map(p => [p.d, p.v])) }));
+  const f1 = v => v.toFixed(1);
+  const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
+
+  // ── 헤드라인 카드
+  const card = sv => {
+    const pmi = items(sv).find(r => r.ko === 'PMI');
+    if (!pmi) return '';
+    const con = items(sv).find(r => r.ko === 'PMI 컨센서스');
+    const ds = [...pmi.m.keys()].sort();
+    const d = ds[ds.length - 1], v = pmi.m.get(d);
+    const p = ds.length > 1 ? pmi.m.get(ds[ds.length - 2]) : null;
+    const chg = p == null ? null : v - p;
+    // 서프라이즈 = 실제 − 컨센서스.  다음 달 컨센서스가 먼저 올라와 있으면 같이 띄운다
+    const c = con && con.m.get(d);
+    const nx = con && [...con.m.keys()].sort().filter(x => x > d)[0];
+    const sgn = x => `<b style="color:${x >= 0 ? '#c0392b' : '#1a4fa0'}">${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}</b>`;
+    const conLine = (c == null ? '' : `<br>컨센서스 ${f1(c)} · 서프라이즈 ${sgn(v - c)}`)
+      + (nx ? `<br><span style="color:#8592a3">다음 ${ml(nx)} 컨센서스 <b>${f1(con.m.get(nx))}</b></span>` : '');
+    return '<div style="min-width:190px">'
+      + `<span style="font-size:13px;color:#8592a3">${sv} PMI · ${ml(d)}</span>`
+      + `<div style="font-size:30px;font-weight:700;line-height:1.2;color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</div>`
+      + '<div style="font-size:12.5px;color:#5a6b82">'
+      + `${v >= 50 ? '확장' : '위축'} · 전월 대비 `
+      + (chg == null ? '—' : `<b style="color:${chg >= 0 ? '#c0392b' : '#1a4fa0'}">`
+        + `${chg >= 0 ? '+' : '−'}${Math.abs(chg).toFixed(1)}</b>`) + conLine + '</div></div>';
+  };
+  let out = '<div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px">'
+    + ISM_SV.map(([sv]) => card(sv)).join('')
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.8;flex:1;min-width:260px">'
+    + '50 = 확장/위축 경계 · 제조업 PMI 47.5 이상이 이어지면 경제 전체는 확장으로 봅니다.<br>'
+    + 'ISM 원문은 자동수집이 막혀 있어 발표 후 반영합니다 (제조업 첫 영업일 · 서비스 셋째 영업일).</div></div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">'
+    + ISM_SV.map(([sv], i) => '<div style="flex:1;min-width:340px">'
+      + `<div class="genChips" data-sv="${sv}" style="display:flex;gap:6px;flex-wrap:wrap;min-height:22px;margin-bottom:4px"></div>`
+      + `<div class="cchart" style="height:300px"><canvas id="ismC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="font-size:12px;color:#8592a3;margin:4px 0 10px">표의 항목을 <b>우클릭</b>하면 차트에 넣고 뺍니다.</div>';
+
+  // ── 표: 조사별 블록, 월은 왼쪽→오른쪽 (처음엔 맨 오른쪽 = 최신)
+  out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + cols.map(d => `<th>${ml(d)}</th>`).join('') + '</tr></thead><tbody>';
+  ISM_SV.forEach(([sv], k) => {
+    // 조사 사이는 굵은 선으로만 끊는다 — 첫 행이 이미 '제조업 PMI'·'서비스 PMI'다
+    if (k) out += `<tr><td colspan="${cols.length + 1}" style="border-top:2px solid #9aa7b8;padding:0"></td></tr>`;
+    const all = items(sv);
+    const conR = all.find(r => r.ko === 'PMI 컨센서스');
+    const pmiR = all.find(r => r.ko === 'PMI');
+    all.filter(r => r !== conR).forEach(r => {
+      const head = r.ko === 'PMI';
+      const note = ISM_NOTE[r.ko];
+      out += `<tr class="${head ? 'lv0 sep-solid' : 'lv1'}">`
+        + `<td style="padding-left:${head ? 8 : 22}px"><span data-ism="${sv}|${r.ko}" style="cursor:context-menu"`
+        + `${note ? ` title="${note}"` : ''}>${ismSel[sv].has(r.ko) ? '● ' : ''}${head ? `<b>${sv} PMI</b>` : r.ko}`
+        + `${note ? '<span style="color:#b6bec9;font-size:11px"> ⓘ</span>' : ''}</span></td>`
+        + cols.map(d => {
+            const v = r.m.get(d);
+            if (v == null) return '<td></td>';
+            // 50 위는 빨강, 아래는 파랑 — 대시보드 공통 부호 색
+            return `<td style="color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</td>`;
+          }).join('') + '</tr>';
+      if (!head || !conR) return;
+      // 컨센서스(investing.com 예상치)와 서프라이즈 — 헤드라인 바로 아래
+      out += '<tr class="lv1"><td style="padding-left:22px">'
+        + `<span data-ism="${sv}|PMI 컨센서스" style="cursor:context-menu" title="investing.com 발표 이력의 예상치">`
+        + `${ismSel[sv].has('PMI 컨센서스') ? '● ' : ''}컨센서스</span></td>`
+        + cols.map(d => { const v = conR.m.get(d);
+            return `<td style="color:#8592a3">${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
+        + '<tr class="lv1"><td style="padding-left:22px">서프라이즈 <span style="color:#b6bec9;font-size:11px">실제−컨센</span></td>'
+        + cols.map(d => { const a = pmiR && pmiR.m.get(d), c = conR.m.get(d);
+            if (a == null || c == null) return '<td></td>';
+            const x = a - c;
+            return `<td style="color:${x >= 0 ? '#c0392b' : '#1a4fa0'}">${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}</td>`;
+          }).join('') + '</tr>';
+    });
+  });
+  out += '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+  box.querySelectorAll('[data-ism]').forEach(el => el.oncontextmenu = e => {
+    e.preventDefault(); e.stopPropagation();
+    const [sv, ko] = el.dataset.ism.split('|');
+    ismSel[sv].has(ko) ? ismSel[sv].delete(ko) : ismSel[sv].add(ko);
+    renderIsm();
+  });
+
+  // ── 차트 2개: 조사별로 선택 항목 + 50 기준선
+  ismCharts.forEach((c, i) => { if (c) { c.destroy(); ismCharts[i] = null; } });
+  ISM_SV.forEach(([sv], i) => {
+    const rows = items(sv).filter(r => ismSel[sv].has(r.ko));
+    const chips = box.querySelector(`.genChips[data-sv="${sv}"]`);
+    chips.innerHTML = rows.length ? '' : '<span style="color:#aaa;font-size:12px">표에서 우클릭으로 항목 선택</span>';
+    rows.forEach((r, j) => {
+      const el = document.createElement('span');
+      el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;'
+        + 'border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
+      if (r.ko === 'PMI 컨센서스') el.style.color = '#8592a3';
+      el.innerHTML = `${r.ko === 'PMI 컨센서스' ? '컨센서스' : r.ko} <b style="cursor:pointer">×</b>`;
+      el.querySelector('b').onclick = () => { ismSel[sv].delete(r.ko); renderIsm(); };
+      chips.appendChild(el);
+    });
+    const sets = rows.map((r, j) => r.ko === 'PMI 컨센서스'
+      // 컨센서스는 회색 점선 + 속 빈 점 — 실제치(PMI)와 겹쳐도 구분되게
+      ? { label: '컨센서스', data: cols.map(d => r.m.get(d) ?? null),
+          borderColor: '#8592a3', backgroundColor: '#fff', borderDash: [4, 3],
+          borderWidth: 1.4, pointRadius: 3, pointBorderWidth: 1.4, tension: 0.15, spanGaps: true }
+      : { label: r.ko, data: cols.map(d => r.m.get(d) ?? null),
+          borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+          borderWidth: r.ko === 'PMI' ? 2.8 : 1.8, pointRadius: 2.5, tension: 0.15, spanGaps: true });
+    sets.push({ label: '50', data: cols.map(() => 50), borderColor: '#9aa7b8',
+      borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, _ref: true });
+    ismCharts[i] = new Chart(box.querySelector('#ismC' + i), {
+      type: 'line',
+      data: { labels: cols, datasets: sets },
+      options: { responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { boxWidth: 12, font: { size: 11 }, filter: it => it.text !== '50' } },
+          title: { display: true, text: `ISM ${sv} (지수, 50 = 경계)`, font: { size: 12 } },
+          tooltip: { filter: it => !it.dataset._ref,
+            callbacks: { title: it => ml(it[0].label),
+              label: it => ` ${it.dataset.label} ${it.parsed.y == null ? '-' : f1(it.parsed.y)}` } } },
+        scales: { x: { ticks: { font: { size: 10 }, callback: function (v) { return ml(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } } } },
+    });
+  });
+}
+
 // 한 지표에 두 주기가 섞여 있다 — 분기말 값과 일별 빈티지. 범용 표로는 못 읽어서
 // 전용 화면을 둔다 (물가 나우캐스트와 같은 이유).
 const GDPNOW = { id: 'gdpnow', name: 'GDP 나우캐스트', ids: ['us_gdpnow'] };
@@ -16524,6 +16696,12 @@ document.getElementById('endSel').onchange = e => {
       if (item.id === 'us_gdpnow') {  // GDP 나우캐스트 → 전용 화면
         const b = document.createElement('button');
         b.id = 'gnBtn'; b.textContent = GDPNOW.name; b.onclick = enterGdpNow;
+        nav.appendChild(b);
+        return;
+      }
+      if (item.id === 'us_ism') {     // ISM PMI → 전용 화면 (제조업·서비스)
+        const b = document.createElement('button');
+        b.id = 'ismBtn'; b.textContent = ISM.name; b.onclick = enterIsm;
         nav.appendChild(b);
         return;
       }

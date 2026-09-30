@@ -125,6 +125,7 @@ const chkHas = (name, elId, needle) => {
   // 렌더 함수는 남아 있으니, 되살릴 때 이 자리에 검사도 같이 되살릴 것.
 
   await ev('enterUsEmp()').catch(() => {}); chk('미국 고용', 'retailWrap');
+  await ev('enterIsm()').catch(() => {}); chk('미국 ISM PMI', 'retailWrap'); chkHas('ISM > 서비스 블록', 'retailWrap', '서비스 PMI');
   for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow', 'jolts', 'lmci']) {
     ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');
   }

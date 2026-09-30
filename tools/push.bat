@@ -17,6 +17,12 @@ cd /d "%PROJ%" || exit /b 1
 
 REM  Never sit at an invisible credential prompt - fail fast instead.
 set GIT_TERMINAL_PROMPT=0
+REM  Never sit at a pager either. "git diff --cached --stat" below paged
+REM  through less.exe once the staged list outgrew one screen, and the
+REM  script waited for a keypress forever - staged, never committed
+REM  (2026-09-30: 200+ data files staged, log had "push start" and nothing
+REM  after it). GIT_PAGER=cat disables paging for every git call here.
+set GIT_PAGER=cat
 
 set MSG=%~1
 if "%MSG%"=="" set MSG=code: update
@@ -63,7 +69,15 @@ if errorlevel 1 (
 
 echo.
 echo ---- staged ----
-git diff --cached --stat
+REM  --no-pager belt-and-braces on top of GIT_PAGER above. Code files get
+REM  listed in full; docs\data is summarised, since a data refresh stages
+REM  200+ files and that wall of text is what pushed the old --stat past
+REM  one screen in the first place.
+git --no-pager diff --cached --name-only -- . ":(exclude)docs/data"
+for /f %%n in ('git --no-pager diff --cached --name-only -- docs/data ^| find /c /v ""') do (
+    if not "%%n"=="0" echo   docs/data/ ... %%n files
+)
+git --no-pager diff --cached --shortstat
 echo ----------------
 echo.
 

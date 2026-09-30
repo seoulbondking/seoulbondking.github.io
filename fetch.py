@@ -250,134 +250,149 @@ def main():
     last_dates: dict[str, str] = {}      # 발표 배지용 {지표id: 마지막 관측일}
 
     this_year = datetime.now(KST).year
-    for ind in indicators:
-        out_path = DATA_DIR / f"{ind['id']}.json"
-        incremental = False
+    # 지표 하나의 예상 못 한 오류가 뒤 지표 전부를 막지 않게 한다.
+    #   fetch_fn 은 안쪽에서 이미 잡지만, 병합·저장·배지 계산에서 터지면
+    #   프로세스가 그대로 죽어 남은 지표가 아예 실행되지 않았다
+    #   (2026-09-21~30: us_gdpnow 의 data 없는 시리즈 → 뒤 25개가 9일간 정지).
+    crashed_at = None
+    try:
+        for ind in indicators:
+            out_path = DATA_DIR / f"{ind['id']}.json"
+            incremental = False
 
-        if ind["source"] == "derived":
-            # 파생 지표: 다른 지표의 아카이브에서 계산 (예: 분기 → 연간 합산)
-            base_path = DATA_DIR / f"{ind['params']['from']}.json"
-            try:
-                base = json.loads(base_path.read_text(encoding="utf-8"))
-                series = derive_annual(base)
-            except Exception as e:
-                print(f"[fail] {ind['id']}: 기반 지표({ind['params']['from']}) 오류 - {e}")
-                failures.append(ind["id"])
-                continue
-            ind["_start_year"] = archive_start_year({"series": series}) or "-"
-        else:
-            fetch_fn = SOURCES.get(ind["source"])
-            if fetch_fn is None:
-                print(f"[skip] {ind['id']}: 알 수 없는 source '{ind['source']}'")
-                continue
-
-            # 수집 시작 연도 결정: 아카이브가 있으면 최근만(증분), 없으면 전체
-            target_start = ind.get("start_year") or this_year - ind.get("lookback_years", 10)
-            old = None
-            if not force_full and out_path.exists():
+            if ind["source"] == "derived":
+                # 파생 지표: 다른 지표의 아카이브에서 계산 (예: 분기 → 연간 합산)
+                base_path = DATA_DIR / f"{ind['params']['from']}.json"
                 try:
-                    old = json.loads(out_path.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    old = None
-            # 아카이브가 설정된 시작연도보다 늦게 시작하면 (예: 2011 > 2000) 전체 재수집
-            #
-            # always_full: 매번 전 이력을 통째로 받아 아카이브를 갈아엎는다.
-            #   소스 파일 자체가 작아서 증분이 의미 없고, 계열 이름이 시간에 따라
-            #   바뀌는 경우(클리블랜드 나우캐스트의 '빈티지 · 2026-09 · …')에 필요하다.
-            #   병합하면 지나간 계열이 영원히 쌓인다.
-            incremental = (not ind.get("always_full")) and old is not None \
-                and (archive_start_year(old) or 9999) <= target_start
-            ind["_start_year"] = (
-                this_year - ind.get("refetch_years", 2) if incremental else target_start
+                    base = json.loads(base_path.read_text(encoding="utf-8"))
+                    series = derive_annual(base)
+                except Exception as e:
+                    print(f"[fail] {ind['id']}: 기반 지표({ind['params']['from']}) 오류 - {e}")
+                    failures.append(ind["id"])
+                    continue
+                ind["_start_year"] = archive_start_year({"series": series}) or "-"
+            else:
+                fetch_fn = SOURCES.get(ind["source"])
+                if fetch_fn is None:
+                    print(f"[skip] {ind['id']}: 알 수 없는 source '{ind['source']}'")
+                    continue
+
+                # 수집 시작 연도 결정: 아카이브가 있으면 최근만(증분), 없으면 전체
+                target_start = ind.get("start_year") or this_year - ind.get("lookback_years", 10)
+                old = None
+                if not force_full and out_path.exists():
+                    try:
+                        old = json.loads(out_path.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        old = None
+                # 아카이브가 설정된 시작연도보다 늦게 시작하면 (예: 2011 > 2000) 전체 재수집
+                #
+                # always_full: 매번 전 이력을 통째로 받아 아카이브를 갈아엎는다.
+                #   소스 파일 자체가 작아서 증분이 의미 없고, 계열 이름이 시간에 따라
+                #   바뀌는 경우(클리블랜드 나우캐스트의 '빈티지 · 2026-09 · …')에 필요하다.
+                #   병합하면 지나간 계열이 영원히 쌓인다.
+                incremental = (not ind.get("always_full")) and old is not None \
+                    and (archive_start_year(old) or 9999) <= target_start
+                ind["_start_year"] = (
+                    this_year - ind.get("refetch_years", 2) if incremental else target_start
+                )
+                ind["_full"] = force_full      # 수집기가 '이미 받은 날짜 건너뛰기'를 무시할 수 있게
+                ind["_has_archive"] = old is not None
+
+                try:
+                    series = fetch_fn(ind)
+                except Exception as e:  # 한 지표 실패가 전체를 막지 않도록
+                    print(f"[fail] {ind['id']}: {e}")
+                    failures.append(ind["id"])
+                    continue
+
+                # merge_always: 일별 소스(FREESIS 등)는 최근치만 받아도 항상 아카이브에 병합
+                if incremental or (ind.get("merge_always") and old is not None):
+                    # 새로 받은 게 없으면(예: KRX '남을 날짜 0일') 아카이브를 그대로 둔다.
+                    # merge_series 는 신규 목록 기준이라 빈 결과가 오면 아카이브가 통째로 지워진다.
+                    if not series and old.get("series"):
+                        print(f"  [keep] {ind['id']}: 신규 수집 0건 — 기존 아카이브 유지")
+                        series = old["series"]
+                        if old.get("_checked"):
+                            ind["_krx_checked"] = old["_checked"]
+                    else:
+                        # 기존 지표에 시리즈를 새로 추가하면, 증분 수집이라 그 시리즈만
+                        # 최근 refetch_years 치로 짧게 들어온다. 조용히 지나가면 나중에
+                        # "왜 이 계열만 2년치지?" 로 되돌아온다 (2026-09: us_lmci 임금추적기).
+                        if incremental:
+                            known = {s["name"] for s in old.get("series", [])}
+                            fresh = [s["name"] for s in series if s["name"] not in known]
+                            if fresh:
+                                print(f"  [warn] {ind['id']}: 아카이브에 없던 시리즈 {fresh} —"
+                                      f" 증분이라 최근 {ind.get('refetch_years', 2)}년치만 들어옵니다."
+                                      f" 전체 이력이 필요하면 'python fetch.py {ind['id']} --full'")
+                        series = merge_series(old["series"], series)
+
+            # drop_before: 이 날짜 이전 관측치는 버린다.
+            #   과거 수집분이 지금과 다른 통계였을 때 쓴다. 아카이브에 이미 들어간
+            #   값도 매번 걸러내므로, 파일을 손으로 고쳐도 다시 살아나지 않는다.
+            #   (2026-09: kr_repo_flow 의 2026-01 두 점이 895조 — 이후 260~280조대와
+            #    3배 차이가 나고 사이에 195일 공백이 있어 다른 계열로 판단해 버렸다.)
+            cut_d = ind.get("drop_before")
+            if cut_d:
+                n_before = sum(len(s["data"]) for s in series)
+                for s in series:
+                    s["data"] = [p for p in s["data"] if p["d"] >= cut_d]
+                series = [s for s in series if s["data"]]
+                n_after = sum(len(s["data"]) for s in series)
+                if n_before != n_after:
+                    print(f"  [drop] {ind['id']}: {cut_d} 이전 관측치 {n_before - n_after}개 제외")
+
+            # series_first 에 지정된 항목(총계 등)을 맨 앞으로 정렬
+            pinned = ind.get("series_first", [])
+            if pinned:
+                def sort_key(s, pinned=pinned):
+                    return pinned.index(s["name"]) if s["name"] in pinned else len(pinned)
+                series = sorted(series, key=sort_key)
+
+            payload = {
+                "id": ind["id"],
+                "name": ind["name"],
+                "unit": ind.get("unit", ""),
+                "freq": ind["freq"],
+                "updated_at": datetime.now(KST).strftime("%Y-%m-%d %H:%M KST"),
+                "series": series,
+            }
+            # ECOS 가중치·대분류 (with_weights 지표) — 대시보드 기여도 계산용
+            meta = ind.get("_weights_meta")
+            if meta:
+                payload["weights"] = meta.get("weights")
+                payload["top_level"] = meta.get("top_level")
+                if meta.get("parents"):
+                    payload["parents"] = meta["parents"]      # 항목명 → 상위 항목명 (트리)
+                if meta.get("level_of"):
+                    payload["level_of"] = meta["level_of"]     # 항목명 → 계층 레벨
+            if ind.get("_acm_meta"):
+                payload["acm"] = ind["_acm_meta"]                      # ACM 추정 진단 (주성분·지속성·적합도)
+            if ind.get("_krx_checked"):
+                payload["_checked"] = ind["_krx_checked"]              # KRX 조회 완료일 (휴장일 재조회 방지)
+            body = json.dumps(payload, ensure_ascii=False)
+            out_path.write_text(body, encoding="utf-8")
+            # 더블클릭(file://)으로도 대시보드가 열리도록 JS 버전도 함께 저장
+            (DATA_DIR / f"{ind['id']}.js").write_text(
+                f"window.__MACRO__=window.__MACRO__||{{}};window.__MACRO__[{json.dumps(ind['id'])}]={body};",
+                encoding="utf-8",
             )
-            ind["_full"] = force_full      # 수집기가 '이미 받은 날짜 건너뛰기'를 무시할 수 있게
-            ind["_has_archive"] = old is not None
+            n_points = sum(len(s.get("data") or []) for s in series)
+            tag = f"증분 {ind['_start_year']}~" if incremental else f"전체 {ind['_start_year']}~"
+            print(f"[ok]   {ind['id']}: 시리즈 {len(series)}개, 관측치 {n_points}개 ({tag})")
+            # 발표 배지용: 이 지표의 마지막 관측일
+            #   data 없이 name+notes 만 있는 시리즈가 섞일 수 있다 (us_gdpnow 의
+            #   '사유 · 2026 Q3' 말풍선). s["data"] 로 쓰면 KeyError 로 루프가 끊긴다
+            #   — 2026-09-21~30 에 이걸로 #65 이후 25개 지표가 9일간 멈췄다.
+            last_dates[ind["id"]] = max(
+                (p["d"] for s in series for p in (s.get("data") or [])), default=None)
 
-            try:
-                series = fetch_fn(ind)
-            except Exception as e:  # 한 지표 실패가 전체를 막지 않도록
-                print(f"[fail] {ind['id']}: {e}")
-                failures.append(ind["id"])
-                continue
-
-            # merge_always: 일별 소스(FREESIS 등)는 최근치만 받아도 항상 아카이브에 병합
-            if incremental or (ind.get("merge_always") and old is not None):
-                # 새로 받은 게 없으면(예: KRX '남을 날짜 0일') 아카이브를 그대로 둔다.
-                # merge_series 는 신규 목록 기준이라 빈 결과가 오면 아카이브가 통째로 지워진다.
-                if not series and old.get("series"):
-                    print(f"  [keep] {ind['id']}: 신규 수집 0건 — 기존 아카이브 유지")
-                    series = old["series"]
-                    if old.get("_checked"):
-                        ind["_krx_checked"] = old["_checked"]
-                else:
-                    # 기존 지표에 시리즈를 새로 추가하면, 증분 수집이라 그 시리즈만
-                    # 최근 refetch_years 치로 짧게 들어온다. 조용히 지나가면 나중에
-                    # "왜 이 계열만 2년치지?" 로 되돌아온다 (2026-09: us_lmci 임금추적기).
-                    if incremental:
-                        known = {s["name"] for s in old.get("series", [])}
-                        fresh = [s["name"] for s in series if s["name"] not in known]
-                        if fresh:
-                            print(f"  [warn] {ind['id']}: 아카이브에 없던 시리즈 {fresh} —"
-                                  f" 증분이라 최근 {ind.get('refetch_years', 2)}년치만 들어옵니다."
-                                  f" 전체 이력이 필요하면 'python fetch.py {ind['id']} --full'")
-                    series = merge_series(old["series"], series)
-
-        # drop_before: 이 날짜 이전 관측치는 버린다.
-        #   과거 수집분이 지금과 다른 통계였을 때 쓴다. 아카이브에 이미 들어간
-        #   값도 매번 걸러내므로, 파일을 손으로 고쳐도 다시 살아나지 않는다.
-        #   (2026-09: kr_repo_flow 의 2026-01 두 점이 895조 — 이후 260~280조대와
-        #    3배 차이가 나고 사이에 195일 공백이 있어 다른 계열로 판단해 버렸다.)
-        cut_d = ind.get("drop_before")
-        if cut_d:
-            n_before = sum(len(s["data"]) for s in series)
-            for s in series:
-                s["data"] = [p for p in s["data"] if p["d"] >= cut_d]
-            series = [s for s in series if s["data"]]
-            n_after = sum(len(s["data"]) for s in series)
-            if n_before != n_after:
-                print(f"  [drop] {ind['id']}: {cut_d} 이전 관측치 {n_before - n_after}개 제외")
-
-        # series_first 에 지정된 항목(총계 등)을 맨 앞으로 정렬
-        pinned = ind.get("series_first", [])
-        if pinned:
-            def sort_key(s, pinned=pinned):
-                return pinned.index(s["name"]) if s["name"] in pinned else len(pinned)
-            series = sorted(series, key=sort_key)
-
-        payload = {
-            "id": ind["id"],
-            "name": ind["name"],
-            "unit": ind.get("unit", ""),
-            "freq": ind["freq"],
-            "updated_at": datetime.now(KST).strftime("%Y-%m-%d %H:%M KST"),
-            "series": series,
-        }
-        # ECOS 가중치·대분류 (with_weights 지표) — 대시보드 기여도 계산용
-        meta = ind.get("_weights_meta")
-        if meta:
-            payload["weights"] = meta.get("weights")
-            payload["top_level"] = meta.get("top_level")
-            if meta.get("parents"):
-                payload["parents"] = meta["parents"]      # 항목명 → 상위 항목명 (트리)
-            if meta.get("level_of"):
-                payload["level_of"] = meta["level_of"]     # 항목명 → 계층 레벨
-        if ind.get("_acm_meta"):
-            payload["acm"] = ind["_acm_meta"]                      # ACM 추정 진단 (주성분·지속성·적합도)
-        if ind.get("_krx_checked"):
-            payload["_checked"] = ind["_krx_checked"]              # KRX 조회 완료일 (휴장일 재조회 방지)
-        body = json.dumps(payload, ensure_ascii=False)
-        out_path.write_text(body, encoding="utf-8")
-        # 더블클릭(file://)으로도 대시보드가 열리도록 JS 버전도 함께 저장
-        (DATA_DIR / f"{ind['id']}.js").write_text(
-            f"window.__MACRO__=window.__MACRO__||{{}};window.__MACRO__[{json.dumps(ind['id'])}]={body};",
-            encoding="utf-8",
-        )
-        n_points = sum(len(s["data"]) for s in series)
-        tag = f"증분 {ind['_start_year']}~" if incremental else f"전체 {ind['_start_year']}~"
-        print(f"[ok]   {ind['id']}: 시리즈 {len(series)}개, 관측치 {n_points}개 ({tag})")
-        # 발표 배지용: 이 지표의 마지막 관측일
-        last_dates[ind["id"]] = max(
-            (p["d"] for s in series for p in s["data"]), default=None)
+    except Exception:
+        import traceback
+        crashed_at = ind["id"]
+        print(f"\n[CRASH] {crashed_at} 처리 중 루프가 중단되었습니다:\n"              + traceback.format_exc())
+        failures.append(f"(중단){crashed_at}")
 
     # 대시보드 메뉴 목록: 항상 전체 지표 기준으로, 데이터 파일이 있는 것만 수록.
     # (일부만 수집해도 메뉴가 갱신되고, 이번에 실패해도 기존 지표는 유지된다)
@@ -401,6 +416,12 @@ def main():
         # 전부 실패했을 때만 오류로 종료 → 일부만 실패하면 성공분은 커밋되도록
         if len(failures) >= len(indicators):
             sys.exit(1)
+    if crashed_at:
+        # 루프가 끊겼으면 남은 지표는 손도 못 댔다 — 조용히 성공으로 끝내면 안 된다
+        skipped = [i["id"] for i in indicators].index(crashed_at)
+        print(f"\n⚠ {crashed_at} 에서 중단 — 뒤따르는 지표"
+              f" {len(indicators) - skipped - 1}개는 이번 실행에서 수집되지 않았습니다.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

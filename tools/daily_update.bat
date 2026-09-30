@@ -20,6 +20,9 @@ set PYTHONIOENCODING=utf-8
 set PYTHONUNBUFFERED=1
 REM  Never sit at an invisible credential prompt - fail fast instead.
 set GIT_TERMINAL_PROMPT=0
+REM  ...nor at a pager. See the note in push.bat: a paged git command
+REM  hangs the whole scheduled job with no error anywhere.
+set GIT_PAGER=cat
 
 echo ================================================================>>"%LOG%"
 call :say "update start"
@@ -47,12 +50,20 @@ if errorlevel 1 call :say "WARNING: git pull failed - continuing with local stat
 REM --- fetch all indicators ---------------------------------------
 echo.
 echo ---- fetch ----
-python fetch.py
+REM  Capture the run to a file as well as the screen. Until 2026-09-30 only the
+REM  "exited 1" status line was logged, so a crash that froze 25 indicators for
+REM  9 days left no trace of WHY. Keep the full output, and copy the [fail] /
+REM  [CRASH] lines into update.log so a glance at the log is enough.
+REM  (Safe to redirect now that PYTHONIOENCODING=utf-8 is pinned above.)
+set FOUT=%PROJ%\tools\fetch.out
+python fetch.py >"%FOUT%" 2>&1
 set FETCH_RC=%errorlevel%
+type "%FOUT%"
 echo ---- fetch end ----
 echo.
 if not "%FETCH_RC%"=="0" (
     call :say "WARNING: fetch.py exited %FETCH_RC% - some indicators may be missing"
+    findstr /c:"[fail]" /c:"[CRASH]" /c:"실패한 지표" /c:"에서 중단" "%FOUT%" >>"%LOG%"
 ) else (
     call :say "fetch ok"
 )

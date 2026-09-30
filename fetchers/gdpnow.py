@@ -38,8 +38,16 @@ from pathlib import Path
 import openpyxl
 import requests
 
-URL = ("https://www.atlantafed.org/-/media/Project/Atlanta/FRBA/Documents/cqer/"
-       "researchcq/gdpnow/GDPTrackingModelDataAndForecasts.xlsx")
+_BASE = "https://www.atlantafed.org/-/media/Project/Atlanta/FRBA/Documents"
+# 2026-09-22 무렵 애틀랜타 연준이 미디어 경로를 옮겼다
+#   cqer/researchcq/gdpnow  →  research-and-data/data/gdpnow
+# 옛 주소는 404 를 주는데 _fallback 이 조용히 캐시를 쓰는 바람에 8일간 9/17
+# 빈티지에 멈춰 있었다. 새 주소를 먼저, 옛 주소를 예비로 둔다.
+URLS = [
+    f"{_BASE}/research-and-data/data/gdpnow/GDPTrackingModelDataAndForecasts.xlsx",
+    f"{_BASE}/cqer/researchcq/gdpnow/GDPTrackingModelDataAndForecasts.xlsx",
+]
+URL = URLS[0]
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "GDPTrackingModelDataAndForecasts.xlsx"
 GROWTH_SHEET, CONTRIB_SHEET = "TrackingArchives", "ContribArchives"
@@ -94,16 +102,26 @@ def _download(max_age_h: float) -> Path:
             return CACHE
         headers["If-Modified-Since"] = datetime.fromtimestamp(
             CACHE.stat().st_mtime, timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    try:
-        r = requests.get(URL, headers=headers, timeout=180, stream=True)
-    except Exception as e:
-        return _fallback(f"내려받기 실패({type(e).__name__})")
+    r, why = None, "주소 후보 없음"
+    for i, url in enumerate(URLS):
+        try:
+            r = requests.get(url, headers=headers, timeout=180, stream=True)
+        except Exception as e:
+            r, why = None, f"내려받기 실패({type(e).__name__})"
+            continue
+        if r.status_code in (200, 304):
+            if i:
+                print(f"  [gdpnow] 예비 주소로 받음 — 새 주소가 {URLS[0]} 에서 바뀐 듯합니다")
+            break
+        why = f"HTTP {r.status_code}"
+        print(f"  [gdpnow] {why} — {url}")
+        r = None
+    if r is None:
+        return _fallback(why)
     if r.status_code == 304:
         print("  [gdpnow] 서버 기준 변경 없음(304) — 캐시 사용")
         os.utime(CACHE, None)
         return CACHE
-    if r.status_code != 200:
-        return _fallback(f"HTTP {r.status_code}")
 
     tmp = CACHE.with_suffix(".part")
     with open(tmp, "wb") as f:
@@ -128,7 +146,14 @@ def _download(max_age_h: float) -> Path:
 def _fallback(why: str) -> Path:
     """다운로드가 안 되면 캐시 → 수동 사본 순으로 물러선다."""
     if CACHE.exists() and CACHE.stat().st_size > 1_000_000:
-        print(f"  [gdpnow] {why} — 기존 캐시를 쓴다")
+        age_d = (time.time() - CACHE.stat().st_mtime) / 86400
+        print(f"  [gdpnow] {why} — 기존 캐시를 쓴다 ({age_d:.1f}일 전 파일)")
+        # 캐시는 조용히 성공한 것처럼 보인다. 8일간 9/17 빈티지에 멈춰 있던 걸
+        # 아무도 몰랐던 이유가 이것이라, 오래된 캐시는 눈에 띄게 경고한다.
+        if age_d > 3:
+            print(f"  [gdpnow] ⚠ 캐시가 {age_d:.0f}일 지났습니다 — 나우캐스트가 갱신되지"
+                  f" 않고 있습니다. 주소가 바뀌었는지 확인하세요:\n"
+                  f"           https://www.atlantafed.org/research-and-data/data/gdpnow")
         return CACHE
     loc = _local_copy()
     if loc:

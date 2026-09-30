@@ -10397,8 +10397,8 @@ async function enterIsm() {
 function renderIsm() {
   const box = document.getElementById('retailWrap');
   if (ismSel === null) ismSel = {
-    '제조업': new Set(['PMI', 'PMI 컨센서스', '신규주문', '가격']),
-    '서비스': new Set(['PMI', 'PMI 컨센서스', '사업활동', '가격']),
+    '제조업': new Set(['PMI', 'PMI 컨센서스']),
+    '서비스': new Set(['PMI', 'PMI 컨센서스']),
   };
   const cols = periodDates.filter(inRange);
   const items = sv => ismData.series.filter(s => s.name.startsWith(sv + ' · '))

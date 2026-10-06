@@ -54,11 +54,16 @@ REM  Capture the run to a file as well as the screen. Until 2026-09-30 only the
 REM  "exited 1" status line was logged, so a crash that froze 25 indicators for
 REM  9 days left no trace of WHY. Keep the full output, and copy the [fail] /
 REM  [CRASH] lines into update.log so a glance at the log is enough.
-REM  (Safe to redirect now that PYTHONIOENCODING=utf-8 is pinned above.)
+REM  fetch.py itself tees to FETCH_LOG (screen + file at the same time).
+REM  Redirecting with ">file" and typing it afterwards left the window blank
+REM  at "---- fetch ----" for 5-7 minutes, so it looked frozen and got closed
+REM  mid-run (2026-10-06, twice). Do NOT close this window while it runs.
 set FOUT=%PROJ%\tools\fetch.out
-python fetch.py >"%FOUT%" 2>&1
+echo  (5-7 min. live output below; also saved to tools\fetch.out)
+set FETCH_LOG=%FOUT%
+python fetch.py
 set FETCH_RC=%errorlevel%
-type "%FOUT%"
+set FETCH_LOG=
 echo ---- fetch end ----
 echo.
 if not "%FETCH_RC%"=="0" (

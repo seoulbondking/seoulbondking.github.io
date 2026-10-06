@@ -430,5 +430,30 @@ def main():
         sys.exit(1)
 
 
+class _Tee:
+    """화면과 파일에 동시에 쓴다 — daily_update.bat 이 FETCH_LOG 로 켠다.
+
+    2026-09-30 부터 bat 이 출력을 파일로 돌리고 끝난 뒤에 type 으로 보여줬는데,
+    그러면 5~7분 동안 '---- fetch ----' 에서 멈춘 것처럼 보였다 (10-06).
+    """
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, s):
+        for f in self.streams:
+            f.write(s)
+            f.flush()
+        return len(s)
+
+    def flush(self):
+        for f in self.streams:
+            f.flush()
+
+
 if __name__ == "__main__":
+    _log = os.environ.get("FETCH_LOG")
+    if _log:
+        _fh = open(_log, "w", encoding="utf-8")
+        sys.stdout = _Tee(sys.__stdout__, _fh)
+        sys.stderr = _Tee(sys.__stderr__, _fh)
     main()

@@ -11291,6 +11291,7 @@ const IRS_APP = (function () {
 
   let rowsNow = DEFAULT_ROWS, M = null, quotes = {}, cdQuote = null,
       n = 8, path = [], adj = [], rcvQ = 4, rcvWant = 4, NM = 25,
+      rcvOn = true,   // 'RCV 포함' 토글 — 끄면 PAY 단독으로 만기까지 본다
       SY = 2026, SMO = 9, YMIN = 2, YMAX = 5.5;
   let pasteText = '', pasteQText = '', booted = false, svg = null;
 
@@ -11495,22 +11496,25 @@ const IRS_APP = (function () {
   const cdAt = t => autoCD(t) + adjAt(t);
 
   function compute() {
-    const q = rcvQ, C = num('fixed'), N = num('notional') * 10000, tp = num('tp') / 100, TAU = M.TAU, S = M.SCHED;
+    const q = rcvOn ? rcvQ : n, C = num('fixed'), N = num('notional') * 10000, tp = num('tp') / 100, TAU = M.TAU, S = M.SCHED;
     const fix = [num('cd0')]; for (let k = 1; k < n; k++) fix.push(cdAt(S[k]));
     let fv = 0;
     for (let i = 1; i <= q; i++) { if (i > 1) fv *= 1 + fix[i - 1] / 100 * TAU[i]; fv += N * (fix[i - 1] - C) / 100 * TAU[i]; }
     let df = 1, ann = 0, flt = 0;
     for (let i = q + 1; i <= n; i++) { const f = fix[i - 1] + (i - 1 > q ? tp : 0); df /= 1 + f / 100 * TAU[i]; ann += TAU[i] * df; flt += TAU[i] * df * f; }
-    const R = flt / ann, unwind = N * (R - C) / 100 * ann;
+    // RCV 를 끄면 q = n 이라 위 루프가 돌지 않는다 (ann = 0) — RCV 금리·청산가치 없음
+    const R = ann ? flt / ann : null, unwind = R == null ? 0 : N * (R - C) / 100 * ann;
     const cf = []; let cum = 0;
     for (let i = 1; i <= n; i++) {
       const t = TAU[i], f = fix[i - 1];
       const payFix = -N * C / 100 * t, payFlt = N * f / 100 * t;
-      const rcvFix = i > q ? N * R / 100 * t : null, rcvFlt = i > q ? -N * f / 100 * t : null;
+      const on = R != null && i > q;
+      const rcvFix = on ? N * R / 100 * t : null, rcvFlt = on ? -N * f / 100 * t : null;
       const net = payFix + payFlt + (rcvFix || 0) + (rcvFlt || 0); cum += net;
       cf.push({ i, start: S[i - 1], end: S[i], days: Math.round(t * 365), f, payFix, payFlt, rcvFix, rcvFlt, net, cum });
     }
-    return { q, C, N, fix, fv, R, ann, unwind, total: fv + unwind, beR: C - fv / (N / 100 * ann), Rmkt: swapRate(q, n), cf };
+    return { q, C, N, fix, fv, R, ann, unwind, total: fv + unwind,
+             beR: ann ? C - fv / (N / 100 * ann) : null, Rmkt: R == null ? null : swapRate(q, n), cf };
   }
 
   // ---------- chart ----------
@@ -11654,6 +11658,7 @@ const IRS_APP = (function () {
     G.mktLine.setAttribute('points', mp.map(p => `${xT(p.t)},${cy(p.v)}`).join(' '));
     mp.forEach((p, i) => setA(G.mktDots[i], { cx: xT(p.t), cy: cy(p.v) }));
     for (let k = 1; k < n; k++) { const y = cy(M.MKT[k]); setA(G.mktCDSeg[k - 1], { x1: cx(S[k]) + 2, x2: cx(S[k + 1]) - 2, y1: y, y2: y }); }
+    ['shade', 'rcvLine', 'rcvH'].forEach(k => G[k].setAttribute('visibility', rcvOn ? 'visible' : 'hidden'));
     const xr = cx(S[rcvQ]);
     setA(G.shade, { x: xr, width: cx(S[n]) - xr }); setA(G.rcvLine, { x1: xr, x2: xr });
     G.rcvTx.textContent = `RCV ${fmtD(S[rcvQ])}`;
@@ -11678,11 +11683,68 @@ const IRS_APP = (function () {
   const cls = v => Math.round(v) > 0 ? 'gain' : Math.round(v) < 0 ? 'loss' : '';
   const bp = v => { const r = v * 100; return (r >= 0.05 ? '+' : r <= -0.05 ? '−' : '') + Math.abs(r).toFixed(1) + 'bp'; };
 
+  // RCV 를 끈 화면 — PAY 스왑 하나를 만기까지 들고 가는 현금흐름만 본다.
+  //   순현금 = 명목 × (CD 확정치 − 고정금리) × 일수/365.  RCV 열·체결 행·청산가치가 없다.
+  function renderPayOnly(r, ten) {
+    const S = M.SCHED, MKT = M.MKT;
+    const sum = r.cf.reduce((a, c) => a + c.net, 0);
+    const vcls = v => cls(v) ? ' ' + cls(v) : '';
+    // 일수 가중 평균 CD — 고정금리와 비교하면 PAY 가 이기는지 바로 보인다
+    const days = r.cf.reduce((a, c) => a + c.days, 0);
+    const avgCD = r.cf.reduce((a, c) => a + c.f * c.days, 0) / days;
+    const gap = avgCD - r.C;
+    const firstPos = r.cf.find(c => c.cum > 0);
+    $('keys').innerHTML =
+      `<div class="key horizon"><div class="lab">${ten} PAY 고정금리</div><div class="val">${r.C.toFixed(3)}%</div>` +
+        `<div class="sub" style="color:var(--ink-soft)">${fmtD(S[0])} ~ ${fmtD(S[n])} · ${n}개 구간</div></div>` +
+      `<div class="key"><div class="lab">시나리오 평균 CD (일수 가중)</div><div class="val">${avgCD.toFixed(3)}%</div>` +
+        `<div class="sub ${gap > 0 ? 'gain' : gap < 0 ? 'loss' : ''}">고정금리 대비 ${bp(gap)}</div></div>` +
+      `<div class="key"><div class="lab">누적 순현금 흑자 전환</div><div class="val">${firstPos ? fmtD(firstPos.end) : '없음'}</div>` +
+        `<div class="sub" style="color:var(--ink-soft)">${firstPos ? firstPos.i + '번째 구간 지급일' : '만기까지 누적 순현금이 음수'}</div></div>` +
+      `<div class="key"><div class="lab">최종 순현금 (${fmtD(S[n])} 만기)</div><div class="val${vcls(sum)}">${manW(sum)}</div>` +
+        `<div class="sub" style="color:var(--ink-soft)">할인 전 합, 재투자 시 ${manW(r.fv)}</div></div>`;
+
+    $('pl').innerHTML =
+      `<tr><td>${ten} PAY ${r.C.toFixed(4)}%, ${n}개 구간 순현금 단순합</td><td class="${cls(sum)}">${manW(sum)}</td></tr>` +
+      `<tr class="total"><td>CD로 재투자한 만기 가치 (${fmtD(S[n])})</td><td class="${cls(r.fv)}">${manW(r.fv)}</td></tr>`;
+    $('plnote').textContent = `RCV 없이 만기까지 보유합니다. 일수 가중 평균 CD가 ${r.C.toFixed(3)}%를 넘으면 손익이 플러스이고, 평균 CD 1bp당 약 ${Math.round(r.N / 100 * days / 365 / 100).toLocaleString('ko-KR')}만원입니다.`;
+
+    let t = '<tr><th>구간</th><th>확정일</th><th>시나리오 CD</th><th>연동분</th><th>조정분</th><th>시장 선도</th><th>차이</th></tr>';
+    for (let k = 0; k < n; k++) {
+      const a = k ? autoCD(S[k]) : null, ad = k ? adjAt(S[k]) : null, df = r.fix[k] - MKT[k];
+      t += `<tr><td>${k + 1}</td><td>${fmtD(S[k])}</td><td>${r.fix[k].toFixed(3)}%${k ? '' : ' 확정'}</td><td>${k ? a.toFixed(3) + '%' : '−'}</td><td>${k ? (ad >= -0.0005 ? '+' : '−') + Math.abs(ad * 100).toFixed(1) + 'bp' : '−'}</td><td>${MKT[k].toFixed(3)}%</td><td class="${k === 0 ? '' : df > 0.00005 ? 'gain' : df < -0.00005 ? 'loss' : ''}">${k ? bp(df) : '−'}</td></tr>`;
+    }
+    $('fx').innerHTML = t;
+
+    let c = `<tr><th rowspan="2" class="l">구간</th><th rowspan="2" class="l">기간 (지급일 = 종료일)</th><th rowspan="2">일수</th><th rowspan="2">CD 확정치</th>` +
+      `<th class="grp" colspan="2">${ten} PAY 스왑</th><th rowspan="2">순현금</th><th rowspan="2">누적 순현금</th></tr>` +
+      `<tr><th>고정 지급<br><span class="r">${r.C.toFixed(4)}%</span></th><th>변동 수취<br><span class="r">CD</span></th></tr>`;
+    const tot = { pf: 0, pl: 0, net: 0 };
+    r.cf.forEach(x => {
+      tot.pf += x.payFix; tot.pl += x.payFlt; tot.net += x.net;
+      c += `<tr><td class="l">${x.i}</td><td class="l">${fmtD(x.start)} ~ ${fmtD(x.end)}</td><td>${x.days}</td><td>${x.f.toFixed(3)}%</td>` +
+        `<td>${man(x.payFix)}</td><td>${man(x.payFlt)}</td>` +
+        `<td class="net ${cls(x.net)}">${man(x.net)}</td><td class="${cls(x.cum)}">${man(x.cum)}</td></tr>`;
+    });
+    c += `<tr class="tot"><td colspan="4" class="l">합계 (할인 전 단순합)</td><td>${man(tot.pf)}</td><td>${man(tot.pl)}</td><td class="${cls(tot.net)}">${man(tot.net)}</td><td></td></tr>`;
+    $('cf').innerHTML = c;
+    $('cfnote').textContent = '고정 이자 = 명목금액 × 고정금리 × 일수/365, 변동 이자 = 명목금액 × CD 확정치 × 일수/365입니다. 첫 구간 뒤의 CD는 시나리오 기대치입니다.';
+
+    let tsv = '월\t기준금리(%)\t월초 CD(%)\tCD 조정(bp)\n' + path.map((v, m) => `${ym(m).y}-${String(ym(m).mo).padStart(2, '0')}\t${v.toFixed(2)}\t${m ? cdAt(cdDate(m)).toFixed(3) : ''}\t${m ? Math.round(adj[m] * 100) : ''}`).join('\n');
+    tsv += '\n\n구간\t시작일\t종료일\t일수\tCD 확정치(%)\t시장 선도(%)\tPAY 고정 지급\tPAY 변동 수취\t순현금\t누적 순현금\n';
+    tsv += r.cf.map(x => [x.i, iso(x.start), iso(x.end), x.days, x.f.toFixed(5), MKT[x.i - 1].toFixed(5), Math.round(x.payFix), Math.round(x.payFlt), Math.round(x.net), Math.round(x.cum)].join('\t')).join('\n');
+    tsv += `\n\nPAY 만기\t${ten}\nPAY 고정금리(%)\t${r.C.toFixed(4)}\nRCV\t없음\n순현금 합계(만원)\t${Math.round(sum)}\n재투자 만기가치(만원)\t${Math.round(r.fv)}`;
+    $('tsv').value = tsv;
+  }
+
   function render() {
     // 차트 뼈대가 아직 없거나(DOM 이 갈아엎힌 직후) 화면에서 떨어져 있으면 그리지 않는다
     if (!svg || !svg.isConnected || !G.line) return;
     const r = compute(), S = M.SCHED, MKT = M.MKT, q = r.q, ten = tenorLabel(n * 3), rem = tenorLabel((n - q) * 3);
     drawChart(r);
+    $('rcvSel').disabled = !rcvOn; $('tp').disabled = !rcvOn;
+    $('plTitle').textContent = rcvOn ? 'RCV 시점 손익' : 'PAY 만기 손익';
+    if (!rcvOn) { renderPayOnly(r, ten); return; }
     const preSum = r.cf.filter(c => c.i <= q).reduce((a, c) => a + c.net, 0);
     const postSum = r.cf.filter(c => c.i > q).reduce((a, c) => a + c.net, 0);
     const finSum = preSum + postSum, dR = r.R - r.Rmkt;
@@ -11765,6 +11827,7 @@ const IRS_APP = (function () {
     <label>첫 CD 확정치(%)<input id="irs_cd0" type="number" step="0.001" value="3.120"></label>
     <label>CD − 기준금리(bp)<input id="irs_spread" type="number" step="1" value="12"></label>
     <label>RCV 이후 텀프리미엄(bp)<input id="irs_tp" type="number" step="1" value="0"></label>
+    <label class="check"><input id="irs_useRcv" type="checkbox" checked>RCV 포함</label>
     <label>RCV 시점<select id="irs_rcvSel"></select></label>
     <label class="check"><input id="irs_prop" type="checkbox" checked>기준금리는 뒤 달도 함께 이동</label>
     <div class="btns">
@@ -11786,7 +11849,7 @@ const IRS_APP = (function () {
   <div class="keys" id="irs_keys"></div>
   <div class="two">
     <div>
-      <h2>RCV 시점 손익</h2>
+      <h2 id="irs_plTitle">RCV 시점 손익</h2>
       <table class="pl" id="irs_pl"></table>
       <p class="note" id="irs_plnote"></p>
     </div>
@@ -11820,6 +11883,8 @@ const IRS_APP = (function () {
     $('tenorSel').addEventListener('change', () => setTenor(+$('tenorSel').value, true));
     ['showCD', 'showMktCD', 'showImp'].forEach(id => $(id).addEventListener('change', applyToggles));
     $('rcvSel').addEventListener('change', () => setRcv(+$('rcvSel').value));
+    $('useRcv').checked = rcvOn;
+    $('useRcv').addEventListener('change', () => { rcvOn = $('useRcv').checked; render(); });
     $('b0').addEventListener('change', () => {
       const nb = Math.round(num('b0') / STEP) * STEP, d = nb - path[0];
       $('b0').value = nb.toFixed(2);

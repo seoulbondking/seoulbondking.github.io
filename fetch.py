@@ -308,6 +308,21 @@ def main():
                     failures.append(ind["id"])
                     continue
 
+                # 전체 재수집인데 0건이면 실패로 보고 아카이브를 지킨다.
+                #   여러 표를 잇는 KOSIS 지표는 표마다 오류를 '건너뜀'으로 삼키고 빈 목록을
+                #   돌려준다. 2026-10-07 KOSIS 인증키 만료 때 kr_vacancy 가 이 경로로
+                #   빈 파일로 덮여 그대로 푸시됐다 (증분 지표는 아래 [keep] 이 막아 줬다).
+                if not series and not incremental and not ind.get("merge_always") \
+                        and out_path.exists():
+                    try:
+                        had = json.loads(out_path.read_text(encoding="utf-8")).get("series")
+                    except (OSError, json.JSONDecodeError):
+                        had = None
+                    if had:
+                        print(f"[fail] {ind['id']}: 수집 결과 0건 — 기존 아카이브 유지")
+                        failures.append(ind["id"])
+                        continue
+
                 # merge_always: 일별 소스(FREESIS 등)는 최근치만 받아도 항상 아카이브에 병합
                 if incremental or (ind.get("merge_always") and old is not None):
                     # 새로 받은 게 없으면(예: KRX '남을 날짜 0일') 아카이브를 그대로 둔다.

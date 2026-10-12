@@ -179,6 +179,12 @@
   #irs_root .controls select#irs_rcvSel { width:210px; }
   #irs_root .controls select#irs_tenorSel { width:190px; }
   #irs_root .controls .check { flex-direction:row; align-items:center; gap:6px; color:var(--ink); }
+  /* RCV 포함 토글 — 체크박스는 눈에 안 띄어서 입력칸 높이의 버튼으로 둔다 */
+  #irs_root button.rcvtog { min-width:150px; padding:6px 14px; font-size:14px; font-weight:700;
+    border:1.5px solid var(--rcv); color:var(--rcv); background:#fff; border-radius:6px; }
+  #irs_root button.rcvtog.on { background:var(--rcv); color:#fff; }
+  #irs_root button.rcvtog:hover { filter:brightness(.95); }
+  #irs_root button.rcvtog.on:hover { background:var(--rcv); }
   #irs_root .paygrp { display:flex; gap:10px; align-items:flex-end; padding:6px 10px 8px;
     border:1px solid var(--grid-strong); border-radius:6px; background:#fff; }
   #irs_root .paynote { font-size:11.5px; color:var(--ink-soft); margin-top:2px; min-height:16px; }
@@ -11827,7 +11833,7 @@ const IRS_APP = (function () {
     <label>첫 CD 확정치(%)<input id="irs_cd0" type="number" step="0.001" value="3.120"></label>
     <label>CD − 기준금리(bp)<input id="irs_spread" type="number" step="1" value="12"></label>
     <label>RCV 이후 텀프리미엄(bp)<input id="irs_tp" type="number" step="1" value="0"></label>
-    <label class="check"><input id="irs_useRcv" type="checkbox" checked>RCV 포함</label>
+    <div style="display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--ink-soft)">RCV<button id="irs_useRcv" class="rcvtog on" type="button" aria-pressed="true">● RCV 포함</button></div>
     <label>RCV 시점<select id="irs_rcvSel"></select></label>
     <label class="check"><input id="irs_prop" type="checkbox" checked>기준금리는 뒤 달도 함께 이동</label>
     <div class="btns">
@@ -11883,8 +11889,14 @@ const IRS_APP = (function () {
     $('tenorSel').addEventListener('change', () => setTenor(+$('tenorSel').value, true));
     ['showCD', 'showMktCD', 'showImp'].forEach(id => $(id).addEventListener('change', applyToggles));
     $('rcvSel').addEventListener('change', () => setRcv(+$('rcvSel').value));
-    $('useRcv').checked = rcvOn;
-    $('useRcv').addEventListener('change', () => { rcvOn = $('useRcv').checked; render(); });
+    const paintRcv = () => {
+      const b = $('useRcv');
+      b.classList.toggle('on', rcvOn);
+      b.setAttribute('aria-pressed', rcvOn);
+      b.textContent = rcvOn ? '● RCV 포함' : '○ RCV 없음 (PAY만)';
+    };
+    paintRcv();
+    $('useRcv').addEventListener('click', () => { rcvOn = !rcvOn; paintRcv(); render(); });
     $('b0').addEventListener('change', () => {
       const nb = Math.round(num('b0') / STEP) * STEP, d = nb - path[0];
       $('b0').value = nb.toFixed(2);

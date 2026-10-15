@@ -169,6 +169,20 @@ def _parse_sheet(ws):
     return found or None
 
 
+_NOTES: list[str] = []      # 이번 수집에서 본 '※' 각주 (미입수 안내 등)
+
+
+def _sheet_notes(ws):
+    """표 아래 '※ …' 각주 줄. 한은이 자료를 못 받으면 여기에 적는다
+    (2026-10: '※ 예금은행 및 은행신탁 자료는 9.30 이후 잔액 미입수')."""
+    out = []
+    for row in ws.iter_rows(values_only=True):
+        for v in row:
+            if isinstance(v, str) and v.strip().startswith("※"):
+                out.append(re.sub(r"\s+", " ", v.strip()))
+    return out
+
+
 def _parse_workbook(data):
     import io
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
@@ -179,6 +193,7 @@ def _parse_workbook(data):
         res = _parse_sheet(wb[name])
         if not res:
             continue
+        _NOTES.extend(n for n in _sheet_notes(wb[name]) if n not in _NOTES)
         for disp, (d, v) in res.items():
             if d and v is not None:
                 out.setdefault(disp, {})[d] = v
@@ -205,6 +220,20 @@ def fetch(indicator: dict) -> list[dict]:
         for disp, by_date in parsed.items():
             collected.setdefault(disp, {}).update(by_date)
         got += 1
+
+    # 같은 엑셀에서 받는데 항목마다 최신일이 다르면 원자료에 빈칸('..')이 있다는 뜻이다.
+    #   2026-10 에 은행 5항목만 9/29 에서 멈췄다 — 코드가 아니라 한은 미입수였다.
+    #   조용히 지나가면 '업데이트가 안 된다' 로 되돌아오므로 각주와 함께 찍는다.
+    last = {k: max(v) for k, v in collected.items() if v}
+    if last:
+        newest = max(last.values())
+        stale = sorted(k for k, d in last.items()
+                       if (date.fromisoformat(newest) - date.fromisoformat(d)).days > 3)
+        if stale:
+            print(f"  [bok] ⚠ 최신 {newest} 인데 멈춘 항목: "
+                  + ", ".join(f"{k} {last[k]}" for k in stale))
+            for n in _NOTES:
+                print(f"  [bok]   한은 각주: {n}")
 
     if not collected:
         raise BokError("BOK 게시글에서 자금흐름 항목을 얻지 못했습니다 (게시판/엑셀 구조 확인)")

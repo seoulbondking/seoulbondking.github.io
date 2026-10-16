@@ -721,7 +721,7 @@ function refresh() {
   const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
   const isAuc = view === 'auction';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce', isUGdp = view === 'usgdp';
-  const isGn = view === 'gdpnow', isFis = view === 'usfiscal', isIsm = view === 'ism';
+  const isGn = view === 'gdpnow', isFis = view === 'usfiscal', isIsm = view === 'ism', isM2h = view === 'm2h';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -743,7 +743,7 @@ function refresh() {
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   // '금리 흐름'·'채권 계산' 은 한 화면뿐이라 탭 막대를 감춘다
   document.getElementById('yieldTabs').style.display = (isYld && yldMode === 'full') ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -756,13 +756,13 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   // 금리 흐름·채권 계산은 차트뿐이라 표 좌우 스크롤 버튼이 할 일이 없다 ('금리 분해'는 원자료 표가 있어 남긴다)
   const isYldTbl = isYld && yldMode === 'full';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   // IRS 시나리오·채권 계산은 기간 선택기를 안 쓴다 (평가일 두 개가 기준이라 기간 개념이 없다).
   // 툴바 자체는 남겨서 제목이 계속 보이게 하고, 선택기만 감춘다.
@@ -797,6 +797,7 @@ function refresh() {
   else if (isUGdp) renderUsGdp();
   else if (isGn) renderGdpNow();
   else if (isIsm) renderIsm();
+  else if (isM2h) renderM2h();
   else if (isFis) renderUsFiscal();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
@@ -10364,6 +10365,149 @@ function renderUsFiscal() {
 }
 
 // ── GDP 나우캐스트 (애틀랜타 연준 GDPNow) ──────────────────────
+// M2 경제주체별 보유 — 가계 vs 기업. 가계 M2 는 한은(2018)이 물가와 인과관계를 확인한
+//   지표라 금통위에서도 본다. 증가율은 원계열 전년동월비(한은·기사 인용과 같은 기준),
+//   전월비는 계절조정계열. ECOS 161Y010(원계열)·161Y009(계절조정), 평잔.
+//   ※ 항목명 끝의 각주 번호가 두 표에서 다르다('가계 및 비영리단체 1)' vs '… 2)').
+//     이름 전체로 찾지 말고 접두어 + 키워드로 찾는다.
+const M2H = { id: 'm2h', name: 'M2 경제주체별', ids: ['kr_m2_holder', 'kr_cpi', 'kr_cpi_core'] };
+const M2H_ROWS = [            // [키워드, 표시명, 색]
+  ['가계', '가계 및 비영리단체', '#d9534f'],
+  ['비금융기업', '비금융기업', '#1a4fa0'],
+  ['기타금융기관', '기타금융기관', '#2e8b57'],
+  ['기타부문', '기타부문', '#8592a3'],
+  ['M2(', 'M2 전체', '#1a2b4a'],
+];
+let m2hData = null, m2hCharts = [null, null, null];
+
+async function enterM2h() {
+  const got = await Promise.all(M2H.ids.map(id => loadIndicator(id).catch(() => null)));
+  m2hData = {}; M2H.ids.forEach((id, i) => m2hData[id] = got[i]);
+  const m = m2hData['kr_m2_holder'];
+  if (!m) { alert('M2 데이터가 없습니다. python fetch.py kr_m2_holder 실행 필요.'); return; }
+  current = { id: M2H.id, name: M2H.name, freq: 'M', unit: '조원·%', updated_at: m.updated_at, series: [] };
+  view = 'm2h';
+  document.getElementById('title').textContent = M2H.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + m.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'm2hBtn'));
+  const ds = new Set();
+  m.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates.find(d => d >= '2007-01') || periodDates[0];   // 2008 금융위기가 보이게
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderM2h() {
+  const box = document.getElementById('retailWrap');
+  const m = m2hData['kr_m2_holder'];
+  const ym = d => d.slice(0, 7);
+  // 월(YYYY-MM) 키로 맞춘다 — ECOS·KOSIS 날짜 표기가 달라도 같은 달끼리 붙도록
+  const find = (pref, kw) => {
+    const s = m.series.find(x => x.name.startsWith(pref + ' ') && x.name.includes(kw));
+    return s ? new Map(s.data.map(p => [ym(p.d), p.v])) : new Map();
+  };
+  const RAW = {}, SA = {};
+  M2H_ROWS.forEach(([kw]) => { RAW[kw] = find('원계열', kw); SA[kw] = find('계절조정', kw); });
+  const prevY = k => `${+k.slice(0, 4) - 1}${k.slice(4)}`;
+  const prevM = k => { const y = +k.slice(0, 4), mo = +k.slice(5, 7);
+    return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`; };
+  const yoy = (mp, k) => { const a = mp.get(k), b = mp.get(prevY(k)); return a != null && b ? (a / b - 1) * 100 : null; };
+  const mom = (mp, k) => { const a = mp.get(k), b = mp.get(prevM(k)); return a != null && b ? (a / b - 1) * 100 : null; };
+  const cpiMap = (id, nm) => { const ind = m2hData[id]; const s = ind && ind.series.find(x => x.name === nm);
+    return s ? new Map(s.data.map(p => [ym(p.d), p.v])) : new Map(); };
+  const CPI = cpiMap('kr_cpi', '총지수'), CORE = cpiMap('kr_cpi_core', '식료품 및 에너지제외 지수');
+
+  const cols = periodDates.filter(inRange), ks = cols.map(ym);
+  const f1 = v => v == null ? '' : v.toFixed(1), f2 = v => v == null ? '' : v.toFixed(2);
+  const tj = v => v == null ? '' : (v / 1000).toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const sg = v => v == null ? '' : `<span style="color:${v >= 0 ? '#c0392b' : '#1a4fa0'}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}</span>`;
+  const ml = k => `'${k.slice(2, 4)}.${k.slice(5, 7)}`;
+
+  // 카드 — 최신월 가계·기업 증가율과 '편제 이후 몇 번째로 낮은지'
+  const lastK = [...RAW['가계'].keys()].sort().pop();
+  const hhY = yoy(RAW['가계'], lastK), coY = yoy(RAW['비금융기업'], lastK), totY = yoy(RAW['M2('], lastK);
+  const hist = [...RAW['가계'].keys()].map(k => yoy(RAW['가계'], k)).filter(v => v != null);
+  const rank = hist.filter(v => v < hhY).length + 1;
+  const card = (lab, v, sub, col) => '<div style="min-width:170px">'
+    + `<span style="font-size:12.5px;color:#8592a3">${lab}</span>`
+    + `<div style="font-size:28px;font-weight:700;line-height:1.25;color:${col}">${v == null ? '—' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'}</div>`
+    + `<div style="font-size:12px;color:#5a6b82">${sub}</div></div>`;
+  let out = '<div style="display:flex;gap:36px;flex-wrap:wrap;margin-bottom:10px">'
+    + card(`가계 보유 M2 · ${ml(lastK)}`, hhY, `전년동월비 · 2003년 이후 ${rank === 1 ? '<b>최저</b>' : rank + '번째로 낮음'}`, '#d9534f')
+    + card(`비금융기업 보유 M2 · ${ml(lastK)}`, coY, '전년동월비', '#1a4fa0')
+    + card(`M2 전체 · ${ml(lastK)}`, totY, '전년동월비', '#1a2b4a')
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.8;margin-bottom:10px">'
+    + '한국은행(2018) 분석에서 <b>가계 보유 M2 는 물가와 인과관계</b>가 있고 기업 보유 M2 는 없었습니다. '
+    + '증가율은 원계열 전년동월비(한은 인용 기준), 전월비는 계절조정계열 · 평잔 · ECOS 161Y010/161Y009.</div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="m2C${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:260px"><canvas id="m2C2"></canvas></div></div></div>';
+
+  // 표 — 경제주체별 잔액·전년동월비·전월비
+  // 블록 머리는 공용 sec-head 행 (colspan 'grp' 행은 첫 열 고정 때문에 글자가 안 보였다)
+  const blk = (title, fn) => `<tr class="lv0 sec-head"><td>${title}</td>${ks.map(() => '<td></td>').join('')}</tr>`
+    + M2H_ROWS.map(([kw, nm], i) => `<tr class="${kw === 'M2(' ? 'lv0 sep-solid' : 'lv1'}"><td style="padding-left:${kw === 'M2(' ? 8 : 18}px">${nm}</td>`
+      + ks.map(k => `<td>${fn(kw, k)}</td>`).join('') + '</tr>').join('');
+  out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + ks.map(k => `<th>${ml(k)}</th>`).join('') + '</tr></thead><tbody>'
+    + blk('전년동월비 (%, 원계열)', (kw, k) => sg(yoy(RAW[kw], k)))
+    + blk('전월비 (%, 계절조정)', (kw, k) => sg(mom(SA[kw], k)))
+    + blk('잔액 (조원, 평잔·원계열)', (kw, k) => tj(RAW[kw].get(k)))
+    + '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  m2hCharts.forEach((c, i) => { if (c) { c.destroy(); m2hCharts[i] = null; } });
+  const xT = { maxTicksLimit: 10, font: { size: 10 },
+    callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const zeroGrid = { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.06)' };
+  const opt = (title, extra) => ({ responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+      title: { display: true, font: { size: 13 }, text: title },
+      tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+        label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}%` } } },
+    scales: { x: { ticks: xT }, y: { grid: zeroGrid, ticks: { font: { size: 10 }, callback: v => axFmt(v) } }, ...(extra || {}) } });
+  const line = (label, fn, c, w, ax, dash) => ({ label, data: ks.map(fn), borderColor: c, backgroundColor: c,
+    borderWidth: w, pointRadius: 0, pointHitRadius: 8, tension: .12, spanGaps: true,
+    yAxisID: ax || 'y', borderDash: dash || [] });
+
+  m2hCharts[0] = new Chart(box.querySelector('#m2C0'), { type: 'line', plugins: [LINE_POP],
+    data: { labels: cols, datasets: [
+      { ...line('가계 및 비영리단체', k => yoy(RAW['가계'], k), '#d9534f', 2.6), pop: true },
+      line('비금융기업', k => yoy(RAW['비금융기업'], k), '#1a4fa0', 2),
+      line('M2 전체', k => yoy(RAW['M2('], k), '#8592a3', 1.4, 'y', [4, 3]),
+    ] }, options: opt('경제주체별 M2 전년동월비 (%, 원계열)') });
+
+  // 가계 M2 vs 물가 — 축이 달라 물가는 오른쪽에 둔다
+  m2hCharts[1] = new Chart(box.querySelector('#m2C1'), { type: 'line', plugins: [LINE_POP],
+    data: { labels: cols, datasets: [
+      { ...line('가계 M2 (좌)', k => yoy(RAW['가계'], k), '#d9534f', 2.6), pop: true },
+      line('CPI 총지수 (우)', k => yoy(CPI, k), '#1a2b4a', 1.8, 'y2'),
+      line('근원 CPI (우)', k => yoy(CORE, k), '#e8930c', 1.6, 'y2', [4, 3]),
+    ] }, options: opt('가계 보유 M2 vs 소비자물가 (전년동월비, %)', {
+      y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, callback: v => axFmt(v) } } }) });
+
+  // 전월비(계절조정) — 막대는 가계, 선은 3개월 평균. 9월 반등 여부를 바로 보려는 용도
+  const hhM = ks.map(k => mom(SA['가계'], k));
+  const ma3 = hhM.map((v, i) => i < 2 || [hhM[i], hhM[i - 1], hhM[i - 2]].some(x => x == null)
+    ? null : (hhM[i] + hhM[i - 1] + hhM[i - 2]) / 3);
+  m2hCharts[2] = new Chart(box.querySelector('#m2C2'), {
+    data: { labels: cols, datasets: [
+      { type: 'line', label: '3개월 평균', data: ma3, borderColor: '#1a2b4a', backgroundColor: '#1a2b4a',
+        borderWidth: 2, pointRadius: 0, tension: .15, spanGaps: true, order: 0 },
+      { type: 'bar', label: '가계 M2 전월비', data: hhM, order: 1,
+        backgroundColor: hhM.map(v => v == null ? '#ccc' : v >= 0 ? 'rgba(217,83,79,0.75)' : 'rgba(26,79,160,0.75)') },
+    ] }, options: opt('가계 보유 M2 전월비 (%, 계절조정)') });
+}
+
 // ISM 제조업·서비스 PMI — 두 조사를 나란히 본다.
 //   원문(ismworld.org)은 reCAPTCHA 로 자동수집이 막혀 있어, 발표 후 브라우저로 표를 뽑아
 //   tools/ism_add.py 로 data/us_ism.csv 에 넣는다. 공개 페이지가 최근 2개월치뿐이라
@@ -16738,6 +16882,12 @@ document.getElementById('endSel').onchange = e => {
           b.id = 'totBtn'; b.textContent = TOT.name; b.onclick = enterTot;
           nav.appendChild(b); totInserted = true;
         }
+        return;
+      }
+      if (item.id === 'kr_m2_holder') {   // M2 경제주체별 → 전용 화면 (가계 vs 기업, 물가)
+        const b = document.createElement('button');
+        b.id = 'm2hBtn'; b.textContent = M2H.name; b.onclick = enterM2h;
+        nav.appendChild(b);
         return;
       }
       if (item.id === 'kr_household_loan') {   // 가계부채 → 전용 화면 (월간/분기 토글)

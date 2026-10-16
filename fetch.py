@@ -142,6 +142,7 @@ RELEASE_BADGE = {
     "kr_emp_total":      {"btn": "krEmpBtn",     "kind": "month"},
     "kr_retail":         {"btn": "retailBtn",    "kind": "month"},
     "kr_household_loan": {"btn": "hdBtn",        "kind": "month"},
+    "kr_m2_holder":      {"btn": "m2hBtn",       "kind": "month"},
     "kr_terms_trade":    {"btn": "totBtn",       "kind": "month"},
     "kr_card_weekly":    {"btn": "cardBtn",      "kind": "plain"},
     "kr_apt_sale_idx":   {"btn": "aptComboBtn",  "kind": "plain"},

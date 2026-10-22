@@ -82,6 +82,12 @@ def fetch(indicator: dict) -> list[dict]:
                 q["aggregation_method"] = p.get("aggregation_method", "avg")
             r = requests.get(URL, params=q, timeout=60)
             r.raise_for_status()
+            # 점검 중이면 200 + HTML('Site Maintenance | St. Louis Fed')을 준다.
+            #   그대로 r.json() 하면 'Expecting value' 만 찍혀 원인이 안 보인다 (2026-10-22).
+            if "json" not in r.headers.get("content-type", ""):
+                if "Maintenance" in r.text[:2000]:
+                    raise RuntimeError("FRED 점검 중 (Site Maintenance) — 끝나면 자동 복구")
+                raise RuntimeError(f"JSON 이 아닌 응답 ({r.headers.get('content-type')})")
             data = r.json()
         except Exception as e:
             print(f"  [fred {indicator.get('id','?')}] {sid} 실패(무시): {e}")

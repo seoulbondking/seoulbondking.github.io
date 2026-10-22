@@ -421,6 +421,20 @@ indicators:
   # M2 경제주체별 보유 (평잔) — 가계 M2 는 한은(2018)이 물가와 인과관계를 확인한 지표.
   #   기사·한은 인용 증가율은 원계열 전년동월비, 전월비는 계절조정계열로 본다.
   #   (101Y0xx '1.7.3.2' 는 2001~2004 구계열이라 쓰지 않는다)
+  # 금융취약성지수(FVI)·금융불안지수(FSI) — 한은 금융안정보고서 (ECOS 에 없음)
+  #   보고서 '그림 원본데이터' 엑셀 → tools/bok_fsr_import.py → data/kr_fvi.csv
+  #   3·9월 '금융안정 상황' 값은 data/kr_fvi_manual.csv 에 손으로 적는다.
+  - id: kr_fvi
+    name: 금융취약성·불안지수
+    source: bokfsr
+    unit: 지수
+    freq: Q
+    always_full: true
+    badge_skip: ['FSI', '국고채', '인상후', '2000~']   # 배지는 FVI 분기 기준으로만
+    params:
+      path: data/kr_fvi.csv
+      manual: data/kr_fvi_manual.csv
+
   - id: kr_m2_holder
     name: M2 경제주체별 보유 (평잔)
     source: ecos

@@ -22,7 +22,7 @@ import yaml
 
 from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos,
                       reb, bls, freesis, bok, seibro, fred, infomax, acm, krx,
-                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow, ism)
+                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow, ism, bokfsr)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -52,6 +52,7 @@ SOURCES = {
     "fiscaldata": fiscaldata.fetch,
     "gdpnow": gdpnow.fetch,
     "ism": ism.fetch,
+    "bokfsr": bokfsr.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -143,6 +144,7 @@ RELEASE_BADGE = {
     "kr_retail":         {"btn": "retailBtn",    "kind": "month"},
     "kr_household_loan": {"btn": "hdBtn",        "kind": "month"},
     "kr_m2_holder":      {"btn": "m2hBtn",       "kind": "month"},
+    "kr_fvi":            {"btn": "fviBtn",       "kind": "quarter"},
     "kr_terms_trade":    {"btn": "totBtn",       "kind": "month"},
     "kr_card_weekly":    {"btn": "cardBtn",      "kind": "plain"},
     "kr_apt_sale_idx":   {"btn": "aptComboBtn",  "kind": "plain"},

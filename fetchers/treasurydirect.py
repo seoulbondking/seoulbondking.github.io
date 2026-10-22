@@ -2,8 +2,8 @@
 
 https://www.treasurydirect.gov/auctions/ 가 쓰는 공개 API 를 그대로 부른다. 키 불필요.
 
-  /TA_WS/securities/search?format=json&startDate=&endDate=&dateFieldName=auctionDate
-      과거 입찰 결과. 2010년부터 있고 한 번에 5,700건까지 받아진다.
+  /TA_WS/securities/search?format=json&type=Note|Bond
+      과거 입찰 결과 (종류별 전 이력). ※ 날짜 범위 조회는 2026-10-16 부터 500 을 낸다.
   /TA_WS/securities/upcoming?format=json     앞으로 예정된 입찰 (조건 미확정 포함)
   /TA_WS/securities/announced?format=json&days=N   발표된 입찰 (발행액 확정)
 
@@ -31,7 +31,6 @@ import requests
 
 BASE = "https://www.treasurydirect.gov/TA_WS/securities"
 TIMEOUT = 90
-CHUNK_YEARS = 4          # search 를 한 번에 부를 연수 (응답이 너무 커지지 않게)
 BN = 1e9                 # 달러 → 십억달러
 
 
@@ -44,6 +43,29 @@ def _f(x):
         return float(x) if x not in (None, "", "null") else None
     except (TypeError, ValueError):
         return None
+
+
+# 2026-10-16 무렵 TA_WS 응답 필드가 바뀌었다 (옛 이름이 빠지고 새 이름이 생김).
+#   같은 값을 가리키는 두 이름을 차례로 본다 — 옛 이름이 다시 오면 그쪽을 쓴다.
+#   새 이름은 기존 아카이브 값과 대조해 정했다 (2026-09 7Y: 낙찰 50.624·응찰 113.216 일치).
+ALIAS = {
+    "auctionDate": ("auctionDate", "competitiveAuctionCloseDate"),
+    "tips": ("tips", "inflationProtected"),
+    "totalAccepted": ("totalAccepted", "grandTotalParAwarded"),          # SOMA 포함
+    "totalTendered": ("totalTendered", "grandTotalParRecognized"),
+    "indirectBidderAccepted": ("indirectBidderAccepted", "indirectBiddersCompetitiveParAwarded"),
+    "directBidderAccepted": ("directBidderAccepted", "directBiddersCompetitiveParAwarded"),
+    "primaryDealerAccepted": ("primaryDealerAccepted", "primaryDealersCompetitiveParAwarded"),
+}
+
+
+def _g(rec: dict, key: str):
+    """옛 이름 → 새 이름 순으로 처음 비어 있지 않은 값."""
+    for k in ALIAS.get(key, (key,)):
+        v = rec.get(k)
+        if v not in (None, ""):
+            return v
+    return None
 
 
 def _d(x):
@@ -71,7 +93,7 @@ def term_label(rec: dict) -> str | None:
             lab = f"{y}Y"
     if not lab:
         return None
-    if (rec.get("tips") or "").lower() == "yes":
+    if (_g(rec, "tips") or "").lower() == "yes":
         lab += " TIPS"
     elif (rec.get("floatingRate") or "").lower() == "yes":
         lab += " FRN"
@@ -80,13 +102,13 @@ def term_label(rec: dict) -> str | None:
 
 def _row(rec: dict) -> dict | None:
     """입찰 한 건 → 표에 쓸 얇은 점. 원본 90개 필드 중 12개만 남긴다."""
-    d = _d(rec.get("auctionDate"))
+    d = _d(_g(rec, "auctionDate"))
     lab = term_label(rec)
     if not d or not lab:
         return None
-    acc = _f(rec.get("totalAccepted"))
-    share = lambda k: (round(_f(rec.get(k)) / acc * 100, 2)
-                       if acc and _f(rec.get(k)) is not None else None)
+    acc = _f(_g(rec, "totalAccepted"))
+    share = lambda k: (round(_f(_g(rec, k)) / acc * 100, 2)
+                       if acc and _f(_g(rec, k)) is not None else None)
     off = _f(rec.get("offeringAmount"))
     out = {
         "d": d,
@@ -104,7 +126,7 @@ def _row(rec: dict) -> dict | None:
         out["btc"] = round(btc, 3)
     if hy is not None:
         out["hy"] = round(hy, 4)
-    tot = _f(rec.get("totalTendered"))
+    tot = _f(_g(rec, "totalTendered"))
     if tot:
         out["tend"] = round(tot / BN, 3)
     if acc:
@@ -180,7 +202,7 @@ def fetch(indicator: dict) -> list[dict]:
             return True
         if want_tips:
             return False
-        return ((rec.get("tips") or "").lower() == "yes"
+        return ((_g(rec, "tips") or "").lower() == "yes"
                 or (rec.get("floatingRate") or "").lower() == "yes")
 
     s = requests.Session()
@@ -190,26 +212,25 @@ def fetch(indicator: dict) -> list[dict]:
         "Referer": "https://www.treasurydirect.gov/auctions/",
     })
 
-    # ── 과거 결과 (연도 구간을 나눠서)
+    # ── 과거 결과 (종류별로 통째로)
+    #   2026-10-16 부터 search 의 날짜 범위 조회(startDate·endDate·dateFieldName)가
+    #   어떤 기간이든 500 을 낸다. 종류만 주는 search?type=Note|Bond 는 전 이력을
+    #   돌려줘서 그쪽으로 바꿨다 — 시작연도는 여기서 거른다. (그 사이 20Y 입찰 누락)
     seen, hist = set(), []
-    y = start_year
-    while y <= today.year:
-        z = min(y + CHUNK_YEARS - 1, today.year)
-        rows = _get(s, "search", startDate=f"{y}-01-01",
-                    endDate=f"{z}-12-31" if z < today.year else today.isoformat(),
-                    dateFieldName="auctionDate")
+    since = f"{start_year}-01-01"
+    for typ in ("Note", "Bond"):
+        rows = _get(s, "search", type=typ)
         got = 0
         for rec in rows:
-            if skip(rec):
+            if skip(rec) or (_d(_g(rec, "auctionDate")) or "") < since:
                 continue
-            key = (rec.get("cusip"), _d(rec.get("auctionDate")))
+            key = (rec.get("cusip"), _d(_g(rec, "auctionDate")))
             if key in seen:
-                continue          # 재발행이 여러 구간에 걸쳐 중복으로 올 수 있다
+                continue
             r = _row(rec)
             if r:
                 seen.add(key); hist.append(r); got += 1
-        print(f"  [treasurydirect {indicator['id']}] {y}~{z}: 이표물 {got}건 (원자료 {len(rows)}건)")
-        y = z + 1
+        print(f"  [treasurydirect {indicator['id']}] {typ}: 이표물 {got}건 (원자료 {len(rows)}건, {start_year}~)")
     if not hist:
         raise TreasuryDirectError(
             "입찰 결과를 받지 못했습니다. treasurydirect.gov 의 TA_WS 경로가 바뀌었는지 확인하세요.")

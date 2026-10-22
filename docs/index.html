@@ -721,7 +721,7 @@ function refresh() {
   const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
   const isAuc = view === 'auction';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce', isUGdp = view === 'usgdp';
-  const isGn = view === 'gdpnow', isFis = view === 'usfiscal', isIsm = view === 'ism', isM2h = view === 'm2h';
+  const isGn = view === 'gdpnow', isFis = view === 'usfiscal', isIsm = view === 'ism', isM2h = view === 'm2h', isFvi = view === 'fvi';
   const tab = isCombo ? comboTab : null;
   document.getElementById('aptTabs').style.display = isCombo ? '' : 'none';
   document.getElementById('cpiTabs').style.display = isCpiC ? '' : 'none';
@@ -743,7 +743,7 @@ function refresh() {
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   // '금리 흐름'·'채권 계산' 은 한 화면뿐이라 탭 막대를 감춘다
   document.getElementById('yieldTabs').style.display = (isYld && yldMode === 'full') ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -756,13 +756,13 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   // 금리 흐름·채권 계산은 차트뿐이라 표 좌우 스크롤 버튼이 할 일이 없다 ('금리 분해'는 원자료 표가 있어 남긴다)
   const isYldTbl = isYld && yldMode === 'full';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isAuc || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   // IRS 시나리오·채권 계산은 기간 선택기를 안 쓴다 (평가일 두 개가 기준이라 기간 개념이 없다).
   // 툴바 자체는 남겨서 제목이 계속 보이게 하고, 선택기만 감춘다.
@@ -798,6 +798,7 @@ function refresh() {
   else if (isGn) renderGdpNow();
   else if (isIsm) renderIsm();
   else if (isM2h) renderM2h();
+  else if (isFvi) renderFvi();
   else if (isFis) renderUsFiscal();
   else if (isCpiC) renderCpiCombo();
   else if (isCombo) {
@@ -1803,7 +1804,8 @@ async function enterFundFlow() {
   const opts = periodDates.map(d => `<option value="${d}">${fundDlab(d)}</option>`).join('');
   const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
   sSel.innerHTML = opts; eSel.innerHTML = opts;
-  startD = periodDates[Math.max(0, periodDates.length - 30)];
+  // 기본 기간: 2026년 1월 첫 영업일부터 (그 전 데이터가 없으면 처음부터)
+  startD = periodDates.find(d => d >= '2026-01-01') || periodDates[0];
   endD = periodDates[periodDates.length - 1];
   if (periodDates.length) { sSel.value = startD; eSel.value = endD; }
   refresh();
@@ -1841,7 +1843,8 @@ function renderFundFlow() {
   const selPair = fundSel[fundMode];
   if (selPair[0] === null) selPair[0] = new Set(['MMF']);        // 왼쪽 차트 기본
   if (selPair[1] === null) selPair[1] = new Set(['채권형']);      // 오른쪽 차트 기본
-  if (fundCollapsed === null) fundCollapsed = new Set();
+  // 기본은 투신 하위 3종을 접어 둔다 — 채권형·MMF·주식형 합계 한 줄씩만 보인다
+  if (fundCollapsed === null) fundCollapsed = new Set(['채권형', 'MMF', '주식형']);
   if (fundMode === 'season') { renderFundSeason(box, bal, rows, selPair); return; }
   if (fundMode === 'intra') { renderFundIntra(box, chg, rows, selPair, cols); return; }
   // 셀 강조: 배경 대신 굵은 글씨 + 진하기(증감 크기에 비례) — 초록=증가 · 빨강=감소
@@ -10365,6 +10368,149 @@ function renderUsFiscal() {
 }
 
 // ── GDP 나우캐스트 (애틀랜타 연준 GDPNow) ──────────────────────
+// 금융취약성지수(FVI)·금융불안지수(FSI) — 한은 금융안정보고서.
+//   FVI 는 쌓여 있는 불균형(중장기·분기), FSI 는 지금의 시장 스트레스(단기·월).
+//   둘은 따로 움직인다 — 2022년 금리 급등 때 FSI 는 치솟았지만 FVI 는 내려갔다.
+//   FSI 단계: 주의 12 · 위기 24 (2023년 12월 개편). FVI 장기평균 = 2008년 이후 평균.
+const FVI = { id: 'fvi', name: '금융취약성·불안지수', ids: ['kr_fvi'] };
+const FSI_WARN = 12, FSI_CRISIS = 24;
+let fviData = null, fviCharts = [null, null, null, null];
+
+async function enterFvi() {
+  fviData = await loadIndicator('kr_fvi').catch(() => null);
+  if (!fviData) { alert('FVI 데이터가 없습니다. python tools/bok_fsr_import.py 후 python fetch.py kr_fvi 실행 필요.'); return; }
+  current = { id: FVI.id, name: FVI.name, freq: 'M', unit: '지수', updated_at: fviData.updated_at, series: [] };
+  view = 'fvi';
+  document.getElementById('title').textContent = FVI.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + fviData.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'fviBtn'));
+  // 가로축은 월 — 분기 계열은 분기말 달에 점이 찍힌다
+  const ds = new Set();
+  fviData.series.filter(s => !s.name.startsWith('인상후')).forEach(s => s.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  startD = periodDates.find(d => d >= '2008-01') || periodDates[0];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderFvi() {
+  const box = document.getElementById('retailWrap');
+  const S = n => { const s = fviData.series.find(x => x.name === n); return s ? s.data : []; };
+  const M = n => new Map(S(n).map(p => [p.d, p.v]));
+  const FV = M('FVI'), FV0 = M('FVI (2000~)'), FSm = M('FSI (월)'), G3 = M('국고채 3년 (분기)');
+  // 2000~ 계열로 2008년 이전을 메운다 (겹치는 구간은 값이 같다)
+  const fvi = new Map([...FV0, ...FV]);
+  const fv08 = [...FV.entries()].filter(([d]) => d >= '2008-01');
+  const AVG = fv08.reduce((a, [, v]) => a + v, 0) / fv08.length;
+  const cols = periodDates.filter(inRange);
+  const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
+  const ql = d => `'${d.slice(2, 4)}.${Math.ceil(+d.slice(5, 7) / 3)}Q`;
+  const f1 = v => v == null ? '' : v.toFixed(1);
+
+  const fk = [...fvi.keys()].sort(), lastF = fk[fk.length - 1], prevF = fk[fk.length - 2];
+  let up = 0; for (let i = fk.length - 1; i > 0 && fvi.get(fk[i]) > fvi.get(fk[i - 1]); i--) up++;
+  const sk = [...FSm.keys()].sort(), lastS = sk[sk.length - 1];
+  const fsiV = FSm.get(lastS);
+  const stage = v => v >= FSI_CRISIS ? ['위기', '#c0392b'] : v >= FSI_WARN ? ['주의', '#e8930c'] : ['안정', '#1f9e5a'];
+  // 보고서 사이(3·9월 '금융안정 상황')에 손으로 넣은 값이면 '잠정' 표시
+  const isManual = M('FVI · 수동').has(lastF);
+  const card = (lab, val, sub, col) => '<div style="min-width:190px">'
+    + `<span style="font-size:12.5px;color:#8592a3">${lab}</span>`
+    + `<div style="font-size:28px;font-weight:700;line-height:1.25;color:${col}">${val}</div>`
+    + `<div style="font-size:12px;color:#5a6b82">${sub}</div></div>`;
+  const dF = fvi.get(lastF) - fvi.get(prevF);
+  let out = '<div style="display:flex;gap:36px;flex-wrap:wrap;margin-bottom:10px">'
+    + card(`금융취약성지수 FVI · ${ql(lastF)}`, f1(fvi.get(lastF)),
+        `장기평균 ${AVG.toFixed(1)} 대비 ${(fvi.get(lastF) - AVG >= 0 ? '+' : '−') + Math.abs(fvi.get(lastF) - AVG).toFixed(1)} · 전분기 ${(dF >= 0 ? '+' : '−') + Math.abs(dF).toFixed(1)}`
+        + (up >= 2 ? ` · <b>${up}분기 연속 상승</b>` : ''), fvi.get(lastF) >= AVG ? '#c0392b' : '#1a4fa0')
+    + card(`금융불안지수 FSI · ${ml(lastS)}`, f1(fsiV),
+        `<b style="color:${stage(fsiV)[1]}">${stage(fsiV)[0]} 단계</b> (주의 ${FSI_WARN} · 위기 ${FSI_CRISIS})`, stage(fsiV)[1])
+    + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.8;margin-bottom:10px">'
+    + '<b>FVI</b> = 신용·자산가격·금융기관 복원력 64개 지표로 본 <b>쌓여 있는 취약성</b>(분기, 2025.12 개편). '
+    + '<b>FSI</b> = 금융시장·실물·대외 등 20개 지표로 본 <b>지금의 스트레스</b>(월, 2023.12 개편). '
+    + '출처: 한국은행 금융안정보고서 그림 원본데이터'
+    + (isManual ? ` · ${ql(lastF)} FVI 는 9월 「금융안정 상황」 잠정치` : '') + '.</div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="fvC${i}"></canvas></div></div>`).join('')
+    + '</div><div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
+    + [2, 3].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:270px"><canvas id="fvC${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // 표 — 분기 (FVI · FSI 분기평균 · 국고채 3년)
+  const qcols = cols.filter(d => [3, 6, 9, 12].includes(+d.slice(5, 7)));
+  const fsiQ = d => { const y = +d.slice(0, 4), q = +d.slice(5, 7);
+    const v = [q - 2, q - 1, q].map(mo => FSm.get(`${y}-${String(mo).padStart(2, '0')}-${new Date(y, mo, 0).getDate()}`)).filter(x => x != null);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const trow = (nm, fn, cls) => `<tr class="${cls}"><td>${nm}</td>` + qcols.map(d => `<td>${fn(d)}</td>`).join('') + '</tr>';
+  out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+    + qcols.map(d => `<th>${ql(d)}</th>`).join('') + '</tr></thead><tbody>'
+    + trow('FVI', d => f1(fvi.get(d)), 'lv0')
+    + trow('· 장기평균 대비', d => { const v = fvi.get(d); if (v == null) return '';
+        const x = v - AVG; return `<span style="color:${x >= 0 ? '#c0392b' : '#1a4fa0'}">${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}</span>`; }, 'lv1')
+    + trow('FSI (분기 평균)', d => f1(fsiQ(d)), 'lv0 sep-solid')
+    + trow('국고채 3년 (%)', d => f1(G3.get(d)), 'lv0')
+    + '</tbody></table></div>';
+  box.innerHTML = out;
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+
+  fviCharts.forEach((c, i) => { if (c) { c.destroy(); fviCharts[i] = null; } });
+  const xT = { maxTicksLimit: 10, font: { size: 10 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
+  const base = (title, extra, plug) => ({ responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+      title: { display: true, font: { size: 13 }, text: title },
+      tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+        label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}` } }, ...(plug || {}) },
+    scales: { x: { ticks: xT }, y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } }, ...(extra || {}) } });
+  const ln = (label, fn, c, w, o) => ({ label, data: cols.map(fn), borderColor: c, backgroundColor: c,
+    borderWidth: w, pointRadius: 0, pointHitRadius: 8, tension: .1, spanGaps: true, ...(o || {}) });
+
+  fviCharts[0] = new Chart(box.querySelector('#fvC0'), { type: 'line', plugins: [LINE_POP],
+    data: { labels: cols, datasets: [
+      ln('FVI', d => fvi.get(d) ?? null, '#c0392b', 2.6, { pop: true, pointRadius: cols.map(d => fvi.has(d) ? 2 : 0) }),
+      ln(`장기평균 ${AVG.toFixed(1)} (2008~)`, () => AVG, '#8592a3', 1.2, { borderDash: [5, 4] }),
+    ] }, options: base('금융취약성지수 FVI (분기) — 쌓여 있는 불균형') });
+
+  fviCharts[1] = new Chart(box.querySelector('#fvC1'), { type: 'line', plugins: [LINE_POP],
+    data: { labels: cols, datasets: [
+      ln('FSI', d => FSm.get(d) ?? null, '#1a4fa0', 2.2, { pop: true }),
+      ln(`주의 ${FSI_WARN}`, () => FSI_WARN, '#e8930c', 1.2, { borderDash: [5, 4] }),
+      ln(`위기 ${FSI_CRISIS}`, () => FSI_CRISIS, '#c0392b', 1.2, { borderDash: [5, 4] }),
+    ] }, options: base('금융불안지수 FSI (월) — 지금의 스트레스') });
+
+  // FVI vs 국고채 3년 (보고서 그림Ⅱ-1-26 구도) — 금리가 오르면 FVI 가 뒤따라 꺾이는지
+  fviCharts[2] = new Chart(box.querySelector('#fvC2'), { type: 'line', plugins: [LINE_POP],
+    data: { labels: cols, datasets: [
+      ln('FVI (좌)', d => fvi.get(d) ?? null, '#c0392b', 2.4, { pop: true }),
+      ln('국고채 3년 (%, 우)', d => G3.get(d) ?? null, '#1a2b4a', 1.8, { yAxisID: 'y2' }),
+    ] }, options: base('FVI vs 국고채 3년 (분기)', {
+      y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, callback: v => axFmt(v) } } }) });
+
+  // 기준금리 인상 후 FVI 반응 — 부문별 누적 막대 + FVI 선 (보고서 그림Ⅱ-1-25, 한은 시산)
+  const H = fviData.series.filter(s => s.name.startsWith('인상후 · '));
+  const hk = [...new Set(H.flatMap(s => s.data.map(p => p.d)))].sort((a, b) => +a.slice(1) - +b.slice(1));
+  const hv = nm => { const s = H.find(x => x.name === '인상후 · ' + nm); const m = new Map(s ? s.data.map(p => [p.d, p.v]) : []); return hk.map(k => m.get(k) ?? null); };
+  const HC = { '신용': '#1a4fa0', '자산가격': '#e8930c', '금융기관 복원력': '#2e8b57' };
+  fviCharts[3] = new Chart(box.querySelector('#fvC3'), {
+    data: { labels: hk.map(k => k === 'h0' ? '인상 시점' : `+${k.slice(1)}분기`), datasets: [
+      { type: 'line', label: 'FVI', data: hv('FVI'), borderColor: '#c0392b', backgroundColor: '#c0392b',
+        borderWidth: 2.4, pointRadius: 3, order: 0 },
+      ...Object.entries(HC).map(([nm, c]) => ({ type: 'bar', label: nm, data: hv(nm), backgroundColor: c + 'cc', stack: 's', order: 1 })),
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: '기준금리 인상 후 FVI 변화 (포인트, 과거 평균 · 한은 시산)' },
+        tooltip: { callbacks: { label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}` } } },
+      scales: { x: { stacked: true, ticks: { font: { size: 10 } } },
+        y: { stacked: true, ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+}
+
 // M2 경제주체별 보유 — 가계 vs 기업. 가계 M2 는 한은(2018)이 물가와 인과관계를 확인한
 //   지표라 금통위에서도 본다. 증가율은 원계열 전년동월비(한은·기사 인용과 같은 기준),
 //   전월비는 계절조정계열. ECOS 161Y010(원계열)·161Y009(계절조정), 평잔.
@@ -16882,6 +17028,12 @@ document.getElementById('endSel').onchange = e => {
           b.id = 'totBtn'; b.textContent = TOT.name; b.onclick = enterTot;
           nav.appendChild(b); totInserted = true;
         }
+        return;
+      }
+      if (item.id === 'kr_fvi') {   // 금융취약성·불안지수 → 전용 화면 (한은 금융안정보고서)
+        const b = document.createElement('button');
+        b.id = 'fviBtn'; b.textContent = FVI.name; b.onclick = enterFvi;
+        nav.appendChild(b);
         return;
       }
       if (item.id === 'kr_m2_holder') {   // M2 경제주체별 → 전용 화면 (가계 vs 기업, 물가)

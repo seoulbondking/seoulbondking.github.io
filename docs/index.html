@@ -1939,7 +1939,13 @@ function renderFundFlow() {
         plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
           title: { display: true, text: `${ci === 0 ? '◀' : '▶'} ${metric} (${unit})`, font: { size: 12 } },
           tooltip: { callbacks: { title: it => it[0].label, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR', numOpt)} ${unit}` } } },
-        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } }, y: { ticks: { font: { size: 10 } } } } },
+        scales: { x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return fundDlab(this.getLabelForValue(v)); } } },
+          // 전일 증감은 0 을 기준으로 읽으므로 0 격자선만 진하게 (잔액 탭은 그대로)
+          y: { ticks: { font: { size: 10 } },
+               grid: fundMode === 'change'
+                 ? { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.07)',
+                     lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }
+                 : {} } } },
     });
   });
 }

@@ -10666,7 +10666,12 @@ function renderM2h() {
 //   하위지수 이력은 2026-04 부터 쌓아 가는 중이다 (헤드라인은 12개월치를 받아 둠).
 const ISM = { id: 'ism', name: '미국 ISM PMI', ids: ['us_ism'] };
 const ISM_SV = [['제조업', 'mfg'], ['서비스', 'svc']];
-let ismData = null, ismCharts = [null, null];
+let ismData = null, ismCharts = [null, null, null];
+// 종합 PMI 가중치 — 미국 명목 GDP(BEA T10105) '유입 기준' 2008~2026 평균 47:53.
+//   제조업 = 개인소비 재화 + 비주거 고정투자 − 재화 수출 + 재화 수입
+//   서비스 = 개인소비 서비스 − 서비스 수출 + 서비스 수입
+//   분기별로도 44.6~49.4 라 고정해도 종합 PMI 차이는 0.2p 안팎이다 (tools/ism_weights.py --sign in).
+const ISM_W = { '제조업': 47, '서비스': 53 };
 let ismSel = null;               // { 제조업: Set, 서비스: Set } — 표에서 우클릭
 // 50 = 확장/위축 경계. 공급자 배송만 역지수라 50 초과가 '배송 지연'이다.
 const ISM_NOTE = {
@@ -10708,6 +10713,30 @@ function renderIsm() {
   const f1 = v => v.toFixed(1);
   const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
 
+  // ── 종합 PMI = (제조업 × 47 + 서비스 × 53) / 100. 두 조사가 다 나온 달만 만든다.
+  const pick = (sv, ko) => (items(sv).find(r => r.ko === ko) || { m: new Map() }).m;
+  const wsum = ISM_W['제조업'] + ISM_W['서비스'];
+  const blend = ko => {
+    const a = pick('제조업', ko), b = pick('서비스', ko), out = new Map();
+    a.forEach((v, d) => { if (b.has(d)) out.set(d, (v * ISM_W['제조업'] + b.get(d) * ISM_W['서비스']) / wsum); });
+    return out;
+  };
+  // ISM 은 종합 PMI 를 내지 않는다 — 직접 만든 지표라 컨센서스·서프라이즈는 붙이지 않는다
+  const COMP = blend('PMI');
+  const compCard = () => {
+    const ds = [...COMP.keys()].sort();
+    if (!ds.length) return '';
+    const d = ds[ds.length - 1], v = COMP.get(d), p = COMP.get(ds[ds.length - 2]);
+    const chg = p == null ? null : v - p;
+    const sg = x => `<b style="color:${x >= 0 ? '#c0392b' : '#1a4fa0'}">${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}</b>`;
+    return '<div style="min-width:190px;padding-right:28px;border-right:1px solid #e3e7ee">'
+      + `<span style="font-size:13px;color:#8592a3">종합 PMI · ${ml(d)}</span>`
+      + `<div style="font-size:30px;font-weight:700;line-height:1.2;color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</div>`
+      + '<div style="font-size:12.5px;color:#5a6b82">'
+      + `${v >= 50 ? '확장' : '위축'} · 전월 대비 ${chg == null ? '—' : sg(chg)}`
+      + `<br><span style="color:#8592a3">제조업 ${ISM_W['제조업']} : 서비스 ${ISM_W['서비스']} (명목 GDP 유입 기준)</span></div></div>`;
+  };
+
   // ── 헤드라인 카드
   const card = sv => {
     const pmi = items(sv).find(r => r.ko === 'PMI');
@@ -10732,10 +10761,11 @@ function renderIsm() {
         + `${chg >= 0 ? '+' : '−'}${Math.abs(chg).toFixed(1)}</b>`) + conLine + '</div></div>';
   };
   let out = '<div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px">'
-    + ISM_SV.map(([sv]) => card(sv)).join('')
+    + compCard() + ISM_SV.map(([sv]) => card(sv)).join('')
     + '<div style="font-size:12px;color:#8592a3;line-height:1.8;flex:1;min-width:260px">'
     + '50 = 확장/위축 경계 · 제조업 PMI 47.5 이상이 이어지면 경제 전체는 확장으로 봅니다.<br>'
     + 'ISM 원문은 자동수집이 막혀 있어 발표 후 반영합니다 (제조업 첫 영업일 · 서비스 셋째 영업일).</div></div>'
+    + '<div class="cchart" style="height:280px;margin-bottom:12px"><canvas id="ismC2"></canvas></div>'
     + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">'
     + ISM_SV.map(([sv], i) => '<div style="flex:1;min-width:340px">'
       + `<div class="genChips" data-sv="${sv}" style="display:flex;gap:6px;flex-wrap:wrap;min-height:22px;margin-bottom:4px"></div>`
@@ -10745,6 +10775,11 @@ function renderIsm() {
   // ── 표: 조사별 블록, 월은 왼쪽→오른쪽 (처음엔 맨 오른쪽 = 최신)
   out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
     + cols.map(d => `<th>${ml(d)}</th>`).join('') + '</tr></thead><tbody>';
+  const pc = v => v == null ? '<td></td>' : `<td style="color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</td>`;
+  out += `<tr class="lv0 sep-solid"><td style="padding-left:8px"><b>종합 PMI</b>`
+    + `<span style="color:#b6bec9;font-size:11px"> ${ISM_W['제조업']}:${ISM_W['서비스']}</span></td>`
+    + cols.map(d => pc(COMP.get(d))).join('') + '</tr>'
+    + `<tr><td colspan="${cols.length + 1}" style="border-top:2px solid #9aa7b8;padding:0"></td></tr>`;
   ISM_SV.forEach(([sv], k) => {
     // 조사 사이는 굵은 선으로만 끊는다 — 첫 행이 이미 '제조업 PMI'·'서비스 PMI'다
     if (k) out += `<tr><td colspan="${cols.length + 1}" style="border-top:2px solid #9aa7b8;padding:0"></td></tr>`;
@@ -10791,6 +10826,29 @@ function renderIsm() {
 
   // ── 차트 2개: 조사별로 선택 항목 + 50 기준선
   ismCharts.forEach((c, i) => { if (c) { c.destroy(); ismCharts[i] = null; } });
+  // 종합 PMI — 굵은 선이 종합, 가는 선이 두 조사
+  const mP = pick('제조업', 'PMI'), sP = pick('서비스', 'PMI');
+  ismCharts[2] = new Chart(box.querySelector('#ismC2'), {
+    type: 'line',
+    data: { labels: cols, datasets: [
+      { label: `종합 PMI (${ISM_W['제조업']}:${ISM_W['서비스']})`, data: cols.map(d => COMP.get(d) ?? null),
+        borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 3, pointRadius: 2.5, tension: 0.15, spanGaps: true },
+      { label: '제조업 PMI', data: cols.map(d => mP.get(d) ?? null), borderColor: '#1a4fa0', backgroundColor: '#1a4fa0',
+        borderWidth: 1.4, pointRadius: 0, tension: 0.15, spanGaps: true },
+      { label: '서비스 PMI', data: cols.map(d => sP.get(d) ?? null), borderColor: '#d9534f', backgroundColor: '#d9534f',
+        borderWidth: 1.4, pointRadius: 0, tension: 0.15, spanGaps: true },
+      { label: '50', data: cols.map(() => 50), borderColor: '#9aa7b8', borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, _ref: true },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 }, filter: it => it.text !== '50' } },
+        title: { display: true, font: { size: 12 },
+          text: `ISM 종합 PMI = 제조업 × ${ISM_W['제조업']}% + 서비스 × ${ISM_W['서비스']}% (명목 GDP 유입 기준 가중)` },
+        tooltip: { filter: it => !it.dataset._ref,
+          callbacks: { title: it => ml(it[0].label),
+            label: it => ` ${it.dataset.label} ${it.parsed.y == null ? '-' : f1(it.parsed.y)}` } } },
+      scales: { x: { ticks: { font: { size: 10 }, callback: function (v) { return ml(this.getLabelForValue(v)); } } },
+        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } } } },
+  });
   ISM_SV.forEach(([sv], i) => {
     const rows = items(sv).filter(r => ismSel[sv].has(r.ko));
     const chips = box.querySelector(`.genChips[data-sv="${sv}"]`);

@@ -1148,6 +1148,11 @@ indicators:
         - dataset: NIPA
           table: T10106
           prefix: "실질수준"
+        # 명목 수준(십억달러 SAAR) — 연쇄 실질은 더하거나 비중을 낼 수 없어서,
+        #   제조업·서비스 몫(종합 PMI 가중치) 같은 구성비는 이 표로 계산한다.
+        - dataset: NIPA
+          table: T10105
+          prefix: "명목수준"
         # 국내총구매 — 표 이름이 틀리면 수집기가 그 표만 건너뛰고 나머지는 살린다
         - dataset: NIPA
           table: T10401

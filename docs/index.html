@@ -10673,11 +10673,13 @@ let ismData = null, ismCharts = [null, null, null];
 //   분기별로도 44.6~49.4 라 고정해도 종합 PMI 차이는 0.2p 안팎이다 (tools/ism_weights.py --sign in).
 const ISM_W = { '제조업': 47, '서비스': 53 };
 let ismSel = null;               // { 제조업: Set, 서비스: Set } — 표에서 우클릭
+const ISM_FWD_K = 3, ISM_FWD = `신규주문 ${ISM_FWD_K}M 선행`;
 // 50 = 확장/위축 경계. 공급자 배송만 역지수라 50 초과가 '배송 지연'이다.
 const ISM_NOTE = {
   '공급자 배송': '역지수 — 50 초과면 배송 지연(수요 강함 또는 공급 병목)',
   '고객 재고': '50 미만 = 고객 재고 부족 → 향후 생산에 긍정적',
   '재고 체감': '50 초과 = 재고가 과하다고 느낌',
+  [ISM_FWD]: `신규주문을 ${ISM_FWD_K}개월 뒤로 민 값 — 이 칸의 숫자는 ${ISM_FWD_K}개월 전 신규주문. 차트에선 최신월 뒤로 ${ISM_FWD_K}개월 더 그린다`,
 };
 
 async function enterIsm() {
@@ -10704,12 +10706,21 @@ async function enterIsm() {
 function renderIsm() {
   const box = document.getElementById('retailWrap');
   if (ismSel === null) ismSel = {
-    '제조업': new Set(['PMI', 'PMI 컨센서스']),
-    '서비스': new Set(['PMI', 'PMI 컨센서스']),
+    '제조업': new Set(['PMI', 'PMI 컨센서스', '신규주문', ISM_FWD]),
+    '서비스': new Set(['PMI', 'PMI 컨센서스', '신규주문', ISM_FWD]),
   };
   const cols = periodDates.filter(inRange);
-  const items = sv => ismData.series.filter(s => s.name.startsWith(sv + ' · '))
-    .map(s => ({ ko: s.name.slice(sv.length + 3), m: new Map(s.data.map(p => [p.d, p.v])) }));
+  // 월말 날짜를 k개월 옮긴다 ('2026-10-31', 3 → '2027-01-31')
+  const addM = (d, k) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) + k, 0)).toISOString().slice(0, 10);
+  const items = sv => {
+    const rs = ismData.series.filter(s => s.name.startsWith(sv + ' · '))
+      .map(s => ({ ko: s.name.slice(sv.length + 3), m: new Map(s.data.map(p => [p.d, p.v])) }));
+    // 신규주문 3개월 선행 — 신규주문을 3개월 뒤로 밀어 그린다. PMI 를 앞서 가는지 겹쳐 보는 용도
+    const i = rs.findIndex(r => r.ko === '신규주문');
+    if (i >= 0) rs.splice(i + 1, 0, { ko: ISM_FWD, fwd: true,
+      m: new Map([...rs[i].m].map(([d, v]) => [addM(d, ISM_FWD_K), v])) });
+    return rs;
+  };
   const f1 = v => v.toFixed(1);
   const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
 
@@ -10722,7 +10733,8 @@ function renderIsm() {
     return out;
   };
   // ISM 은 종합 PMI 를 내지 않는다 — 직접 만든 지표라 컨센서스·서프라이즈는 붙이지 않는다
-  const COMP = blend('PMI');
+  const COMP = blend('PMI'), COMPN = blend('신규주문');
+  const COMPF = new Map([...COMPN].map(([d, v]) => [addM(d, ISM_FWD_K), v]));   // 종합 신규주문 3M 선행
   const compCard = () => {
     const ds = [...COMP.keys()].sort();
     if (!ds.length) return '';
@@ -10779,6 +10791,11 @@ function renderIsm() {
   out += `<tr class="lv0 sep-solid"><td style="padding-left:8px"><b>종합 PMI</b>`
     + `<span style="color:#b6bec9;font-size:11px"> ${ISM_W['제조업']}:${ISM_W['서비스']}</span></td>`
     + cols.map(d => pc(COMP.get(d))).join('') + '</tr>'
+    + '<tr class="lv1"><td style="padding-left:22px">종합 신규주문</td>'
+    + cols.map(d => pc(COMPN.get(d))).join('') + '</tr>'
+    + `<tr class="lv1"><td style="padding-left:22px" title="${ISM_NOTE[ISM_FWD]}">종합 ${ISM_FWD}`
+    + '<span style="color:#b6bec9;font-size:11px"> ⓘ</span></td>'
+    + cols.map(d => { const v = COMPF.get(d); return `<td style="color:#8592a3">${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
     + `<tr><td colspan="${cols.length + 1}" style="border-top:2px solid #9aa7b8;padding:0"></td></tr>`;
   ISM_SV.forEach(([sv], k) => {
     // 조사 사이는 굵은 선으로만 끊는다 — 첫 행이 이미 '제조업 PMI'·'서비스 PMI'다
@@ -10789,20 +10806,22 @@ function renderIsm() {
     all.filter(r => r !== conR).forEach(r => {
       const head = r.ko === 'PMI';
       const note = ISM_NOTE[r.ko];
-      out += `<tr class="${head ? 'lv0 sep-solid' : 'lv1'}">`
-        + `<td style="padding-left:${head ? 8 : 22}px"><span data-ism="${sv}|${r.ko}" style="cursor:context-menu"`
+      // 행 전체가 우클릭 대상 — 이름 글자뿐 아니라 숫자 칸에서도 켜고 끈다
+      out += `<tr class="${head ? 'lv0 sep-solid' : 'lv1'}" data-ism="${sv}|${r.ko}" style="cursor:context-menu">`
+        + `<td style="padding-left:${head ? 8 : 22}px"><span`
         + `${note ? ` title="${note}"` : ''}>${ismSel[sv].has(r.ko) ? '● ' : ''}${head ? `<b>${sv} PMI</b>` : r.ko}`
         + `${note ? '<span style="color:#b6bec9;font-size:11px"> ⓘ</span>' : ''}</span></td>`
         + cols.map(d => {
             const v = r.m.get(d);
             if (v == null) return '<td></td>';
+            if (r.fwd) return `<td style="color:#8592a3">${f1(v)}</td>`;
             // 50 위는 빨강, 아래는 파랑 — 대시보드 공통 부호 색
             return `<td style="color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</td>`;
           }).join('') + '</tr>';
       if (!head || !conR) return;
       // 컨센서스(investing.com 예상치)와 서프라이즈 — 헤드라인 바로 아래
-      out += '<tr class="lv1"><td style="padding-left:22px">'
-        + `<span data-ism="${sv}|PMI 컨센서스" style="cursor:context-menu" title="investing.com 발표 이력의 예상치">`
+      out += `<tr class="lv1" data-ism="${sv}|PMI 컨센서스" style="cursor:context-menu"><td style="padding-left:22px">`
+        + '<span title="investing.com 발표 이력의 예상치">'
         + `${ismSel[sv].has('PMI 컨센서스') ? '● ' : ''}컨센서스</span></td>`
         + cols.map(d => { const v = conR.m.get(d);
             return `<td style="color:#8592a3">${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
@@ -10826,18 +10845,20 @@ function renderIsm() {
 
   // ── 차트 2개: 조사별로 선택 항목 + 50 기준선
   ismCharts.forEach((c, i) => { if (c) { c.destroy(); ismCharts[i] = null; } });
-  // 종합 PMI — 굵은 선이 종합, 가는 선이 두 조사
-  const mP = pick('제조업', 'PMI'), sP = pick('서비스', 'PMI');
+  // 종합 PMI · 종합 신규주문 · 종합 신규주문 3M 선행 — 조사별 차트와 같은 색 규칙
+  const lastC = cols[cols.length - 1];
+  const cxs = lastC === periodDates[periodDates.length - 1]
+    ? cols.concat([...Array(ISM_FWD_K)].map((_, k) => addM(lastC, k + 1))) : cols;
   ismCharts[2] = new Chart(box.querySelector('#ismC2'), {
     type: 'line',
-    data: { labels: cols, datasets: [
-      { label: `종합 PMI (${ISM_W['제조업']}:${ISM_W['서비스']})`, data: cols.map(d => COMP.get(d) ?? null),
+    data: { labels: cxs, datasets: [
+      { label: `종합 PMI (${ISM_W['제조업']}:${ISM_W['서비스']})`, data: cxs.map(d => COMP.get(d) ?? null),
         borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 3, pointRadius: 2.5, tension: 0.15, spanGaps: true },
-      { label: '제조업 PMI', data: cols.map(d => mP.get(d) ?? null), borderColor: '#1a4fa0', backgroundColor: '#1a4fa0',
-        borderWidth: 1.4, pointRadius: 0, tension: 0.15, spanGaps: true },
-      { label: '서비스 PMI', data: cols.map(d => sP.get(d) ?? null), borderColor: '#d9534f', backgroundColor: '#d9534f',
-        borderWidth: 1.4, pointRadius: 0, tension: 0.15, spanGaps: true },
-      { label: '50', data: cols.map(() => 50), borderColor: '#9aa7b8', borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, _ref: true },
+      { label: '종합 신규주문', data: cxs.map(d => COMPN.get(d) ?? null), borderColor: '#2e8b57', backgroundColor: '#2e8b57',
+        borderWidth: 1.8, pointRadius: 2.5, tension: 0.15, spanGaps: true },
+      { label: `종합 ${ISM_FWD}`, data: cxs.map(d => COMPF.get(d) ?? null), borderColor: '#2e8b57', backgroundColor: '#fff',
+        borderDash: [6, 3], borderWidth: 1.8, pointRadius: 2.5, pointBorderWidth: 1.2, tension: 0.15, spanGaps: true },
+      { label: '50', data: cxs.map(() => 50), borderColor: '#9aa7b8', borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, _ref: true },
     ] },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 }, filter: it => it.text !== '50' } },
@@ -10858,23 +10879,34 @@ function renderIsm() {
       el.style.cssText = 'font-size:11.5px;padding:2px 7px;border:1px solid #d7dde8;'
         + 'border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
       if (r.ko === 'PMI 컨센서스') el.style.color = '#8592a3';
+      if (r.ko === '신규주문' || r.fwd) el.style.color = '#2e8b57';
       el.innerHTML = `${r.ko === 'PMI 컨센서스' ? '컨센서스' : r.ko} <b style="cursor:pointer">×</b>`;
       el.querySelector('b').onclick = () => { ismSel[sv].delete(r.ko); renderIsm(); };
       chips.appendChild(el);
     });
+    // 선행 계열을 켰고 기간 끝이 최신월이면 가로축을 3개월 더 늘린다 — 선행선만 그 구간에 그려진다
+    const fwdOn = rows.some(r => r.fwd) && cols[cols.length - 1] === periodDates[periodDates.length - 1];
+    const xs = fwdOn ? cols.concat([...Array(ISM_FWD_K)].map((_, k) => addM(cols[cols.length - 1], k + 1))) : cols;
+    // 신규주문과 선행선은 같은 초록 — 실선/점선으로만 가른다
+    const NO_C = '#2e8b57';
     const sets = rows.map((r, j) => r.ko === 'PMI 컨센서스'
       // 컨센서스는 회색 점선 + 속 빈 점 — 실제치(PMI)와 겹쳐도 구분되게
-      ? { label: '컨센서스', data: cols.map(d => r.m.get(d) ?? null),
+      ? { label: '컨센서스', data: xs.map(d => r.m.get(d) ?? null),
           borderColor: '#8592a3', backgroundColor: '#fff', borderDash: [4, 3],
           borderWidth: 1.4, pointRadius: 3, pointBorderWidth: 1.4, tension: 0.15, spanGaps: true }
-      : { label: r.ko, data: cols.map(d => r.m.get(d) ?? null),
-          borderColor: PALETTE[j % PALETTE.length], backgroundColor: PALETTE[j % PALETTE.length],
+      : r.fwd
+      ? { label: r.ko, data: xs.map(d => r.m.get(d) ?? null),
+          borderColor: NO_C, backgroundColor: '#fff', borderDash: [6, 3],
+          borderWidth: 1.8, pointRadius: 2.5, pointBorderWidth: 1.2, tension: 0.15, spanGaps: true }
+      : { label: r.ko, data: xs.map(d => r.m.get(d) ?? null),
+          borderColor: r.ko === '신규주문' ? NO_C : PALETTE[j % PALETTE.length],
+          backgroundColor: r.ko === '신규주문' ? NO_C : PALETTE[j % PALETTE.length],
           borderWidth: r.ko === 'PMI' ? 2.8 : 1.8, pointRadius: 2.5, tension: 0.15, spanGaps: true });
-    sets.push({ label: '50', data: cols.map(() => 50), borderColor: '#9aa7b8',
+    sets.push({ label: '50', data: xs.map(() => 50), borderColor: '#9aa7b8',
       borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, _ref: true });
     ismCharts[i] = new Chart(box.querySelector('#ismC' + i), {
       type: 'line',
-      data: { labels: cols, datasets: sets },
+      data: { labels: xs, datasets: sets },
       options: { responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {

@@ -7,3 +7,6 @@ node_modules/
 data/*.xlsx
 tools/update.log
 tools/fetch.out
+
+# Excel 이 파일을 열어 둘 때 만드는 잠금 파일
+~$*

@@ -9,7 +9,7 @@ ismworld.org 는 reCAPTCHA 로 막혀 있어 여기서 직접 받지 않는다. 
 CSV: month,survey,item,value   (survey = mfg | svc, item = ISM 영문 항목명)
   '… PMI Consensus' 는 investing.com 발표 이력의 예상치(컨센서스)다. ISM 원문에는 없다.
   2008-01 ~ 헤드라인·세부항목은 인포맥스 엑셀(개정 반영 현재 값)로 덮어썼다
-  (tools/ism_from_infomax.py — 인포맥스 서비스는 발표월로 찍혀 한 달 당긴다).
+  (tools/ism_from_infomax.py · tools/ism_update.bat — 날짜 밀림은 investing 과 대조해 자동 판별).
   그 전에 채워 둔 investing.com '처음 발표된 값'은 data/us_ism_investing_*.csv 에 남아 있다.
 내보내는 계열 이름: '제조업 · 신규주문' 처럼 '{조사} · {한글 항목}'.
 """

@@ -2931,6 +2931,7 @@ month,survey,item,value
 2026-07,svc,Backlog of Orders,50.9
 2026-08,svc,Backlog of Orders,55.6
 2026-09,svc,Backlog of Orders,56.6
+2026-10,svc,Backlog of Orders,58
 2008-01,svc,Business Activity,41.4
 2008-02,svc,Business Activity,52.1
 2008-03,svc,Business Activity,52
@@ -3156,6 +3157,7 @@ month,survey,item,value
 2026-07,svc,Business Activity,59.1
 2026-08,svc,Business Activity,61.7
 2026-09,svc,Business Activity,56.5
+2026-10,svc,Business Activity,53.8
 2008-01,svc,Employment,45.2
 2008-02,svc,Employment,46.9
 2008-03,svc,Employment,47
@@ -3381,6 +3383,7 @@ month,survey,item,value
 2026-07,svc,Employment,47.4
 2026-08,svc,Employment,47.8
 2026-09,svc,Employment,50.1
+2026-10,svc,Employment,51.4
 2008-01,svc,Imports,41.5
 2008-02,svc,Imports,49
 2008-03,svc,Imports,54.5
@@ -3606,6 +3609,7 @@ month,survey,item,value
 2026-07,svc,Imports,51.8
 2026-08,svc,Imports,56.3
 2026-09,svc,Imports,52.9
+2026-10,svc,Imports,54.2
 2008-01,svc,Inventories,44.5
 2008-02,svc,Inventories,50
 2008-03,svc,Inventories,51.5
@@ -3831,6 +3835,7 @@ month,survey,item,value
 2026-07,svc,Inventories,51.4
 2026-08,svc,Inventories,56.7
 2026-09,svc,Inventories,57.8
+2026-10,svc,Inventories,55.4
 2008-01,svc,Inventory Sentiment,57
 2008-02,svc,Inventory Sentiment,60.5
 2008-03,svc,Inventory Sentiment,60.5
@@ -4056,6 +4061,7 @@ month,survey,item,value
 2026-07,svc,Inventory Sentiment,52.5
 2026-08,svc,Inventory Sentiment,54.1
 2026-09,svc,Inventory Sentiment,51.7
+2026-10,svc,Inventory Sentiment,52.1
 2008-01,svc,New Export Orders,52
 2008-02,svc,New Export Orders,46.5
 2008-03,svc,New Export Orders,55
@@ -4281,6 +4287,7 @@ month,survey,item,value
 2026-07,svc,New Export Orders,52
 2026-08,svc,New Export Orders,56.3
 2026-09,svc,New Export Orders,46.9
+2026-10,svc,New Export Orders,55.2
 2008-01,svc,New Orders,43.5
 2008-02,svc,New Orders,50.5
 2008-03,svc,New Orders,49.4
@@ -4506,6 +4513,7 @@ month,survey,item,value
 2026-07,svc,New Orders,57.2
 2026-08,svc,New Orders,60.9
 2026-09,svc,New Orders,59.8
+2026-10,svc,New Orders,55.9
 2008-01,svc,Prices,71.6
 2008-02,svc,Prices,71.7
 2008-03,svc,Prices,72.7
@@ -4731,6 +4739,7 @@ month,survey,item,value
 2026-07,svc,Prices,70.3
 2026-08,svc,Prices,72.6
 2026-09,svc,Prices,74
+2026-10,svc,Prices,73
 2008-01,svc,Services PMI,44.8
 2008-02,svc,Services PMI,49.9
 2008-03,svc,Services PMI,49.4
@@ -4956,6 +4965,7 @@ month,survey,item,value
 2026-07,svc,Services PMI,54.1
 2026-08,svc,Services PMI,55.4
 2026-09,svc,Services PMI,54.9
+2026-10,svc,Services PMI,54.5
 2008-02,svc,Services PMI Consensus,47.6
 2008-03,svc,Services PMI Consensus,48.5
 2008-04,svc,Services PMI Consensus,49.1
@@ -5406,3 +5416,4 @@ month,survey,item,value
 2026-07,svc,Supplier Deliveries,52.8
 2026-08,svc,Supplier Deliveries,51.3
 2026-09,svc,Supplier Deliveries,53.2
+2026-10,svc,Supplier Deliveries,56.7

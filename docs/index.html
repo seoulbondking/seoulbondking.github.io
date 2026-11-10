@@ -13198,7 +13198,8 @@ function renderUsLmci() {
   if (!L) { box.innerHTML = '<div style="padding:24px;color:#888">고용압력 데이터가 없습니다. <b>python fetch.py us_lmci</b> 실행 필요.</div>'; return; }
   const M = n => { const x = L.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
   const JO = M('구인건수 (JOLTS)'), UN = M('실업자');
-  const WG = M('임금추적기 전체'), WSW = M('임금추적기 이직자'), WST = M('임금추적기 잔류자');
+  // 임금추적기 헤드라인은 3개월 이동평균(3MMA). 12개월(WG12)은 매끈한 추세 확인용 보조선
+  const WG = M('임금추적기 전체 (3MMA)'), WG12 = M('임금추적기 전체'), WSW = M('임금추적기 이직자'), WST = M('임금추적기 잔류자');
   const LA = M('KC연준 LMCI 활동수준'), MO = M('KC연준 LMCI 모멘텀');
   const allL = [...new Set(L.series.flatMap(s => s.data.map(p => p.d)))].sort();
   // 기간 선택기를 따른다. 선택 구간에 데이터가 없으면 전 기간으로 되돌린다.
@@ -13216,7 +13217,7 @@ function renderUsLmci() {
   let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
     + '<b>구인배율(V/U)</b> = JOLTS 구인건수 ÷ 실업자 — "실업자 한 명당 빈 일자리 수"입니다. '
     + '1을 넘으면 일자리가 구직자보다 많다는 뜻이라 임금 압력이 올라갑니다.<br>'
-    + '<b>임금추적기</b>(애틀랜타 연준)는 <b>같은 사람</b>의 전년비 임금상승률 중위값이라, 평균인 AHE 와 달리 '
+    + '<b>임금추적기</b>(애틀랜타 연준)는 <b>같은 사람</b>의 전년비 임금상승률 중위값(헤드라인 = 3개월 이동평균)이라, 평균인 AHE 와 달리 '
     + '고임금자 은퇴 같은 구성 변화에 덜 흔들립니다. <b>KC연준 LMCI</b> 는 24개 노동지표를 활동수준·모멘텀 두 축의 '
     + 'z-score(σ)로 요약한 지수로, 0이 장기평균입니다.<br>'
     + `최신 — 구인배율 <b>${f2(vv)}</b>(${dateLabel(dv)}) · 임금추적기 <b>${f1(wv)}%</b>(${dateLabel(dw)}) · LMCI 모멘텀 <b>${f2(mv)}σ</b>(${dateLabel(dm)})</div>`
@@ -13233,7 +13234,8 @@ function renderUsLmci() {
     + [['구인배율 V/U (배)', vu, f2, 0],
        ['구인건수 (천건)', g(JO), v => v == null ? '' : Math.round(v).toLocaleString('ko-KR'), 1],
        ['실업자 (천명)', g(UN), v => v == null ? '' : Math.round(v).toLocaleString('ko-KR'), 1],
-       ['임금추적기 전체 (%)', g(WG), f1, 0],
+       ['임금추적기 전체 3MMA (%)', g(WG), f1, 0],
+       ['12개월 이동평균 (%)', g(WG12), f1, 1],
        ['이직자 (%)', g(WSW), f1, 1],
        ['잔류자 (%)', g(WST), f1, 1],
        ['이직 프리미엄 (%p)', gap, f1, 1],
@@ -13272,7 +13274,8 @@ function renderUsLmci() {
   });
 
   usEmpCharts[0] = mk(0, '임금추적기 (%, 좌) · 구인배율 V/U (배, 우)', [
-    ['임금추적기 전체', '#3aa9e0', g(WG), 'y', true],
+    ['임금추적기 (3MMA)', '#3aa9e0', g(WG), 'y', true],
+    ['임금추적기 (12MMA)', '#a9d6ee', g(WG12), 'y'],
     ['구인배율 V/U', '#1a2b4a', vu, 'y2'],
   ], true);
   // 모멘텀은 2020년 봄에 −11.5σ 까지 빠져 축을 다 잡아먹는다. −4 에서 자른다.

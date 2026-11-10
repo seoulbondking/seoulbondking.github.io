@@ -1784,6 +1784,8 @@ indicators:
         UNEMPLOY: 실업자
         # 주의: '전체'만 ID 에 W 가 빠져 있다 (UMHGO). 하위 항목은 UMHWG+접미사.
         #   FRBATLWGT12MMUMHWGO 로 쓰면 400 이 난다 (2026-09 확인).
+        # 3개월 이동평균 = 애틀랜타 연준 헤드라인(보고서·언론이 쓰는 값). 12개월은 더 매끈한 보조선.
+        FRBATLWGT3MMAUMHWGO: 임금추적기 전체 (3MMA)
         FRBATLWGT12MMUMHGO: 임금추적기 전체
         FRBATLWGT12MMUMHWGJSW: 임금추적기 이직자
         FRBATLWGT12MMUMHWGJST: 임금추적기 잔류자

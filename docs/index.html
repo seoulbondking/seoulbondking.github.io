@@ -7372,7 +7372,10 @@ const DUR_ROWS = ['5주 미만', '5~14주', '15주 이상', '15~26주', '27주 �
 const CES_INDS = ['민간 전체', '재화생산', '광업·벌목', '건설', '제조업', '민간 서비스업',
   '도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
 let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
-let usEmpSel = null, usIndCharts = [null, null, null];
+let usIndCharts = [null, null, null];
+// 고용 구성(헬스케어·정부 vs 나머지 민간): 헬스케어 범위 · 이동평균 개월
+//   hcsa = 보건·사회복지(CES6562000001, 증권사 보고서 기준) · hc = 헬스케어, 사회복지 제외(CES6562000101)
+let usMixHc = 'hcsa', usMixMA = 1;
 // 미국 고용상황: 서브탭마다 기간 선택을 따로 기억한다.
 //   탭이 8개인데 선택기를 하나로 공유하면, 고용압력에서 2017년으로 늘려둔 뒤
 //   산업별로 넘어갔을 때 표가 116열이 된다.
@@ -7433,21 +7436,12 @@ const NFP_TREE = [
   ['운송·창고', 3], ['트럭운송', 4],
   ['유틸리티', 3], ['정보', 3], ['금융', 3],
   ['전문·비즈니스', 3], ['임시직알선', 4],
-  ['교육·보건', 3], ['보육서비스', 4],
+  ['교육·보건', 3], ['보건·사회복지', 4], ['헬스케어', 5], ['보육서비스', 5],
   ['레저·접객', 3], ['기타 서비스', 3],
   ['정부', 1],
 ];
 const NFP_LEAVES = ['광업·벌목', '건설', '제조업', '도매', '소매', '운송·창고', '유틸리티',
   '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스', '정부'];
-// 상위 묶음 → 하위 14산업. 우클릭하면 하위를 한꺼번에 선택/해제 (스택은 14분할 유지)
-const NFP_GOODS = ['광업·벌목', '건설', '제조업'];
-const NFP_PSVC = ['도매', '소매', '운송·창고', '유틸리티', '정보', '금융', '전문·비즈니스', '교육·보건', '레저·접객', '기타 서비스'];
-const NFP_GROUPS = {
-  '재화생산': NFP_GOODS,
-  '민간 서비스업': NFP_PSVC,
-  '민간': [...NFP_GOODS, ...NFP_PSVC],
-  '비농업 전체': NFP_LEAVES,
-};
 
 async function enterUsEmp() {
   const [nfp, labor, lf, hours, earn, dur, ahe, flows, lmci, jolts] = await Promise.all(US_EMP.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -10674,12 +10668,19 @@ let ismData = null, ismCharts = [null, null, null];
 const ISM_W = { '제조업': 47, '서비스': 53 };
 let ismSel = null;               // { 제조업: Set, 서비스: Set } — 표에서 우클릭
 const ISM_FWD_K = 3, ISM_FWD = `신규주문 ${ISM_FWD_K}M 선행`;
+// 신규주문 − 재고 스프레드 (포인트, 3개월 이동평균). 주문이 재고보다 빨리 쌓이면 생산을 늘려야 한다.
+//   3MMA(신규주문) − 3MMA(재고) 는 3MMA(신규주문 − 재고) 와 정확히 같다 (선형).
+//   월별 값은 한 달에 3~4p씩 출렁여서 3MMA 로 둔다. 선행성 검정: tools/ism_spread.py
+//   차트에서는 '50 + 스프레드'로 그려 0 이 50 선과 겹치게 하고, 오른쪽 축에 스프레드 눈금을 단다.
+const ISM_SPR = '신규주문−재고', ISM_SPRF = `신규주문−재고 ${ISM_FWD_K}M 선행`, ISM_SPR_C = '#d9822b';
 // 50 = 확장/위축 경계. 공급자 배송만 역지수라 50 초과가 '배송 지연'이다.
 const ISM_NOTE = {
   '공급자 배송': '역지수 — 50 초과면 배송 지연(수요 강함 또는 공급 병목)',
   '고객 재고': '50 미만 = 고객 재고 부족 → 향후 생산에 긍정적',
   '재고 체감': '50 초과 = 재고가 과하다고 느낌',
   [ISM_FWD]: `신규주문을 ${ISM_FWD_K}개월 뒤로 민 값 — 이 칸의 숫자는 ${ISM_FWD_K}개월 전 신규주문. 차트에선 최신월 뒤로 ${ISM_FWD_K}개월 더 그린다`,
+  [ISM_SPR]: '신규주문 − 재고 (포인트, 3개월 이동평균). + 면 주문이 재고보다 빨리 늘어 생산 확대 압력. 2008년 이후 제조업 평균 +5. 차트에선 오른쪽 축(0 = 50 선)',
+  [ISM_SPRF]: `신규주문−재고(3MMA)를 ${ISM_FWD_K}개월 뒤로 민 값`,
 };
 
 async function enterIsm() {
@@ -10706,8 +10707,9 @@ async function enterIsm() {
 function renderIsm() {
   const box = document.getElementById('retailWrap');
   if (ismSel === null) ismSel = {
-    '제조업': new Set(['PMI', 'PMI 컨센서스', '신규주문', ISM_FWD]),
-    '서비스': new Set(['PMI', 'PMI 컨센서스', '신규주문', ISM_FWD]),
+    // 기본 차트: PMI·컨센서스·신규주문−재고(3MMA)·그 3M 선행. 신규주문 자체는 표에서 우클릭으로 켠다
+    '제조업': new Set(['PMI', 'PMI 컨센서스', ISM_SPR, ISM_SPRF]),
+    '서비스': new Set(['PMI', 'PMI 컨센서스', ISM_SPR, ISM_SPRF]),
   };
   const cols = periodDates.filter(inRange);
   // 월말 날짜를 k개월 옮긴다 ('2026-10-31', 3 → '2027-01-31')
@@ -10719,8 +10721,24 @@ function renderIsm() {
     const i = rs.findIndex(r => r.ko === '신규주문');
     if (i >= 0) rs.splice(i + 1, 0, { ko: ISM_FWD, fwd: true,
       m: new Map([...rs[i].m].map(([d, v]) => [addM(d, ISM_FWD_K), v])) });
+    // 신규주문 − 재고 (3MMA) 와 그 3M 선행 — 재고 바로 아래
+    const no = rs.find(r => r.ko === '신규주문'), inv = rs.findIndex(r => r.ko === '재고');
+    if (no && inv >= 0) {
+      const sp = sprMA(no.m, rs[inv].m);
+      rs.splice(inv + 1, 0, { ko: ISM_SPR, spr: true, m: sp },
+        { ko: ISM_SPRF, spr: true, fwd: true, m: new Map([...sp].map(([d, v]) => [addM(d, ISM_FWD_K), v])) });
+    }
     return rs;
   };
+  // 3개월 이동평균 스프레드 — 세 달이 연달아 다 있어야 만든다
+  function sprMA(a, b) {
+    const ds = [...a.keys()].filter(d => b.has(d)).sort(), out = new Map();
+    ds.forEach((d, j) => {
+      if (j < 2 || ds[j - 2] !== addM(d, -2)) return;
+      out.set(d, [0, 1, 2].reduce((s, k) => s + a.get(ds[j - k]) - b.get(ds[j - k]), 0) / 3);
+    });
+    return out;
+  }
   const f1 = v => v.toFixed(1);
   const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
 
@@ -10735,6 +10753,9 @@ function renderIsm() {
   // ISM 은 종합 PMI 를 내지 않는다 — 직접 만든 지표라 컨센서스·서프라이즈는 붙이지 않는다
   const COMP = blend('PMI'), COMPN = blend('신규주문');
   const COMPF = new Map([...COMPN].map(([d, v]) => [addM(d, ISM_FWD_K), v]));   // 종합 신규주문 3M 선행
+  // 종합 신규주문 − 재고 = 가중합끼리의 차 = 조사별 스프레드의 가중합 (선형)
+  const COMPS = blend(ISM_SPR);
+  const COMPSF = new Map([...COMPS].map(([d, v]) => [addM(d, ISM_FWD_K), v]));
   const compCard = () => {
     const ds = [...COMP.keys()].sort();
     if (!ds.length) return '';
@@ -10788,6 +10809,9 @@ function renderIsm() {
   out += '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
     + cols.map(d => `<th>${ml(d)}</th>`).join('') + '</tr></thead><tbody>';
   const pc = v => v == null ? '<td></td>' : `<td style="color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</td>`;
+  // 스프레드는 0 이 경계 — 부호를 붙인다
+  const sg1 = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const sc = v => v == null ? '<td></td>' : `<td style="color:${v >= 0 ? '#c0392b' : '#1a4fa0'}">${sg1(v)}</td>`;
   out += `<tr class="lv0 sep-solid"><td style="padding-left:8px"><b>종합 PMI</b>`
     + `<span style="color:#b6bec9;font-size:11px"> ${ISM_W['제조업']}:${ISM_W['서비스']}</span></td>`
     + cols.map(d => pc(COMP.get(d))).join('') + '</tr>'
@@ -10796,6 +10820,11 @@ function renderIsm() {
     + `<tr class="lv1"><td style="padding-left:22px" title="${ISM_NOTE[ISM_FWD]}">종합 ${ISM_FWD}`
     + '<span style="color:#b6bec9;font-size:11px"> ⓘ</span></td>'
     + cols.map(d => { const v = COMPF.get(d); return `<td style="color:#8592a3">${v == null ? '' : f1(v)}</td>`; }).join('') + '</tr>'
+    + `<tr class="lv1"><td style="padding-left:22px" title="${ISM_NOTE[ISM_SPR]}">종합 ${ISM_SPR} <span style="color:#b6bec9;font-size:11px">3MMA ⓘ</span></td>`
+    + cols.map(d => sc(COMPS.get(d))).join('') + '</tr>'
+    + `<tr class="lv1"><td style="padding-left:22px" title="${ISM_NOTE[ISM_SPRF]}">종합 ${ISM_SPRF}`
+    + '<span style="color:#b6bec9;font-size:11px"> ⓘ</span></td>'
+    + cols.map(d => { const v = COMPSF.get(d); return `<td style="color:#8592a3">${v == null ? '' : sg1(v)}</td>`; }).join('') + '</tr>'
     + `<tr><td colspan="${cols.length + 1}" style="border-top:2px solid #9aa7b8;padding:0"></td></tr>`;
   ISM_SV.forEach(([sv], k) => {
     // 조사 사이는 굵은 선으로만 끊는다 — 첫 행이 이미 '제조업 PMI'·'서비스 PMI'다
@@ -10814,7 +10843,8 @@ function renderIsm() {
         + cols.map(d => {
             const v = r.m.get(d);
             if (v == null) return '<td></td>';
-            if (r.fwd) return `<td style="color:#8592a3">${f1(v)}</td>`;
+            if (r.fwd) return `<td style="color:#8592a3">${r.spr ? sg1(v) : f1(v)}</td>`;
+            if (r.spr) return `<td style="color:${v >= 0 ? '#c0392b' : '#1a4fa0'}">${sg1(v)}</td>`;
             // 50 위는 빨강, 아래는 파랑 — 대시보드 공통 부호 색
             return `<td style="color:${v >= 50 ? '#c0392b' : '#1a4fa0'}">${f1(v)}</td>`;
           }).join('') + '</tr>';
@@ -10845,7 +10875,17 @@ function renderIsm() {
 
   // ── 차트 2개: 조사별로 선택 항목 + 50 기준선
   ismCharts.forEach((c, i) => { if (c) { c.destroy(); ismCharts[i] = null; } });
-  // 종합 PMI · 종합 신규주문 · 종합 신규주문 3M 선행 — 조사별 차트와 같은 색 규칙
+  // 스프레드는 '50 + 값'으로 왼쪽 축에 그리고, 오른쪽 축은 왼쪽과 범위를 맞춘 뒤 눈금만 −50 해서 단다.
+  //   → 스프레드 0 이 50 선과 겹치고, 지수와 같은 1p 간격이라 크기를 그대로 비교할 수 있다.
+  const sprDs = (label, m, xs, fwd) => ({ label, _spr: true, data: xs.map(d => m.has(d) ? 50 + m.get(d) : null),
+    borderColor: ISM_SPR_C, backgroundColor: fwd ? '#fff' : ISM_SPR_C, borderDash: fwd ? [6, 3] : undefined,
+    borderWidth: 1.6, pointRadius: fwd ? 2.2 : 0, pointBorderWidth: 1.1, tension: 0.15, spanGaps: true });
+  const sprAxis = () => ({ position: 'right', grid: { drawOnChartArea: false },
+    afterDataLimits: sc => { const y = sc.chart.scales.y; if (y) { sc.min = y.min; sc.max = y.max; } },
+    title: { display: true, text: '신규주문−재고 (p)', font: { size: 10 }, color: ISM_SPR_C },
+    ticks: { font: { size: 10 }, color: ISM_SPR_C, callback: v => { const x = v - 50; return (x > 0 ? '+' : '') + x; } } });
+  const ttVal = it => it.parsed.y == null ? '-' : it.dataset._spr ? sg1(it.parsed.y - 50) : f1(it.parsed.y);
+  // 종합 PMI · 종합 신규주문−재고(3MMA) · 그 3M 선행
   const lastC = cols[cols.length - 1];
   const cxs = lastC === periodDates[periodDates.length - 1]
     ? cols.concat([...Array(ISM_FWD_K)].map((_, k) => addM(lastC, k + 1))) : cols;
@@ -10854,10 +10894,9 @@ function renderIsm() {
     data: { labels: cxs, datasets: [
       { label: `종합 PMI (${ISM_W['제조업']}:${ISM_W['서비스']})`, data: cxs.map(d => COMP.get(d) ?? null),
         borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 3, pointRadius: 2.5, tension: 0.15, spanGaps: true },
-      { label: '종합 신규주문', data: cxs.map(d => COMPN.get(d) ?? null), borderColor: '#2e8b57', backgroundColor: '#2e8b57',
-        borderWidth: 1.8, pointRadius: 2.5, tension: 0.15, spanGaps: true },
-      { label: `종합 ${ISM_FWD}`, data: cxs.map(d => COMPF.get(d) ?? null), borderColor: '#2e8b57', backgroundColor: '#fff',
-        borderDash: [6, 3], borderWidth: 1.8, pointRadius: 2.5, pointBorderWidth: 1.2, tension: 0.15, spanGaps: true },
+      // 종합 신규주문(초록)은 2026-11-11 차트에서 뺐다 — 표에는 남아 있다
+      sprDs(`종합 ${ISM_SPR} (3MMA, 우)`, COMPS, cxs, false),
+      sprDs(`종합 ${ISM_SPRF} (우)`, COMPSF, cxs, true),
       { label: '50', data: cxs.map(() => 50), borderColor: '#9aa7b8', borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, _ref: true },
     ] },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -10866,9 +10905,9 @@ function renderIsm() {
           text: `ISM 종합 PMI = 제조업 × ${ISM_W['제조업']}% + 서비스 × ${ISM_W['서비스']}% (명목 GDP 유입 기준 가중)` },
         tooltip: { filter: it => !it.dataset._ref,
           callbacks: { title: it => ml(it[0].label),
-            label: it => ` ${it.dataset.label} ${it.parsed.y == null ? '-' : f1(it.parsed.y)}` } } },
+            label: it => ` ${it.dataset.label} ${ttVal(it)}` } } },
       scales: { x: { ticks: { font: { size: 10 }, callback: function (v) { return ml(this.getLabelForValue(v)); } } },
-        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } } } },
+        y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } }, y2: sprAxis() } },
   });
   ISM_SV.forEach(([sv], i) => {
     const rows = items(sv).filter(r => ismSel[sv].has(r.ko));
@@ -10880,6 +10919,7 @@ function renderIsm() {
         + 'border-radius:10px;background:#fff;color:' + PALETTE[j % PALETTE.length];
       if (r.ko === 'PMI 컨센서스') el.style.color = '#8592a3';
       if (r.ko === '신규주문' || r.fwd) el.style.color = '#2e8b57';
+      if (r.spr) el.style.color = ISM_SPR_C;
       el.innerHTML = `${r.ko === 'PMI 컨센서스' ? '컨센서스' : r.ko} <b style="cursor:pointer">×</b>`;
       el.querySelector('b').onclick = () => { ismSel[sv].delete(r.ko); renderIsm(); };
       chips.appendChild(el);
@@ -10889,7 +10929,8 @@ function renderIsm() {
     const xs = fwdOn ? cols.concat([...Array(ISM_FWD_K)].map((_, k) => addM(cols[cols.length - 1], k + 1))) : cols;
     // 신규주문과 선행선은 같은 초록 — 실선/점선으로만 가른다
     const NO_C = '#2e8b57';
-    const sets = rows.map((r, j) => r.ko === 'PMI 컨센서스'
+    const sets = rows.map((r, j) => r.spr ? sprDs(r.ko + (r.fwd ? '' : ' (3MMA)') + ' (우)', r.m, xs, r.fwd)
+      : r.ko === 'PMI 컨센서스'
       // 컨센서스는 회색 점선 + 속 빈 점 — 실제치(PMI)와 겹쳐도 구분되게
       ? { label: '컨센서스', data: xs.map(d => r.m.get(d) ?? null),
           borderColor: '#8592a3', backgroundColor: '#fff', borderDash: [4, 3],
@@ -10914,9 +10955,10 @@ function renderIsm() {
           title: { display: true, text: `ISM ${sv} (지수, 50 = 경계)`, font: { size: 12 } },
           tooltip: { filter: it => !it.dataset._ref,
             callbacks: { title: it => ml(it[0].label),
-              label: it => ` ${it.dataset.label} ${it.parsed.y == null ? '-' : f1(it.parsed.y)}` } } },
+              label: it => ` ${it.dataset.label} ${ttVal(it)}` } } },
         scales: { x: { ticks: { font: { size: 10 }, callback: function (v) { return ml(this.getLabelForValue(v)); } } },
-          y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } } } },
+          y: { ticks: { font: { size: 10 }, callback: v => axFmt(v) } },
+          ...(rows.some(r => r.spr) ? { y2: sprAxis() } : {}) } },
     });
   });
 }
@@ -13326,20 +13368,14 @@ function renderUsNfpIndustry() {
   const prevOf = d => { const i = idx.get(d); return i >= 1 ? periodDates[i - 1] : null; };
   const delta = (name, d) => { const p = prevOf(d); if (!p) return null; const m = S[name]; if (!m) return null; const a = m.get(d), b = m.get(p); return a != null && b != null ? a - b : null; };
   const level = (name, d) => { const m = S[name]; return m ? (m.get(d) ?? null) : null; };
-  if (usEmpSel === null) usEmpSel = new Set(NFP_LEAVES);
 
   const k0 = v => v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
   const treeTable = (title, valFn) => {
     let h = `<div class="block-title">${title}</div><div class="tscroll"><table class="data vlines"><thead><tr><th>산업</th>`
       + cols.map(d => `<th>${dateLabel(d)}</th>`).join('') + '</tr></thead><tbody>';
     NFP_TREE.forEach(([name, lv]) => {
-      const isLeaf = NFP_LEAVES.includes(name);
-      const grp = NFP_GROUPS[name];
-      let mark = '', attr = '';
-      if (isLeaf) { mark = usEmpSel.has(name) ? '● ' : ''; attr = ` data-sel="${name}" style="cursor:context-menu"`; }
-      else if (grp) { const sc = grp.filter(x => usEmpSel.has(x)).length; mark = sc === grp.length ? '● ' : (sc > 0 ? '◐ ' : ''); attr = ` data-agg="${name}" style="cursor:context-menu"`; }
       const cls = lv === 0 ? 'lv0 sep-solid' : `lv${lv}`;
-      h += `<tr class="${cls}"${attr}><td style="padding-left:${8 + lv * 13}px">${mark}${name}</td>`
+      h += `<tr class="${cls}"><td style="padding-left:${8 + lv * 13}px">${name}</td>`
         + cols.map(d => { const v = valFn(name, d); const t = v == null ? '' : k0(v); return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${t}</td>`; }).join('') + '</tr>';
     });
     return h + '</tbody></table></div>';
@@ -13355,60 +13391,91 @@ function renderUsNfpIndustry() {
     + '</select><span style="color:#8592a3">파란 막대 = 증가 · 회색 막대 = 감소</span></div>'
     + '<div class="cchart" style="height:430px;margin-bottom:16px"><canvas id="usNfpBar"></canvas></div>';
 
-  out += '<div class="block-title">비농업 취업자 — 산업별 (천명)</div>'
-    + '<div style="font-size:12px;color:#8592a3;margin-bottom:6px">14개 산업의 합 = 총 비농업(검은 선). 표 항목 <b>우클릭</b>으로 두 차트에 넣고 빼기. 들여쓴 트럭운송·임시직알선·보육서비스는 상위 업종에 포함된 참고 세부업종.</div>'
-    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">'
-    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart0"></canvas></div></div>'
-    + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:300px"><canvas id="usNfpChart1"></canvas></div></div>'
-    + '</div>';
+  // 고용 구성 — 경기를 타지 않는 헬스케어·정부를 떼어내고 '나머지 민간'이 실제로 느는지 본다.
+  //   헤드라인이 무난해도 나머지 민간이 0 근처면 '좁은 고용'(경기민감 업종은 채용 정지)이다.
+  const hcName = usMixHc === 'hc' ? '헬스케어' : '보건·사회복지';
+  const hasMix = S[hcName] && S['정부'];
+  if (hasMix) {
+    const mb = (k, v, t) => `<button class="mini-btn${k === v ? ' on' : ''}" ${t}</button>`;
+    out += '<div class="block-title">고용 구성 — 헬스케어·정부 vs 나머지 민간 (전월 증감, 천명)</div>'
+      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 6px;font-size:12px">'
+      + '<b>헬스케어 범위</b>' + mb(usMixHc, 'hcsa', 'data-mixhc="hcsa">보건·사회복지') + mb(usMixHc, 'hc', 'data-mixhc="hc">헬스케어 (사회복지 제외)')
+      + '<b style="margin-left:10px">평균</b>' + mb(usMixMA, 1, 'data-mixma="1">당월') + mb(usMixMA, 3, 'data-mixma="3">3개월 평균')
+      + '<span style="color:#8592a3">헬스케어·정부는 고령화·예산이 결정해 경기를 거의 타지 않는다. 금리·수요에 반응하는 건 <b>나머지 민간</b>(파랑).</span></div>'
+      + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">'
+      + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:320px"><canvas id="usNfpMix"></canvas></div></div>'
+      + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:320px"><canvas id="usNfpShare"></canvas></div></div></div>';
+  }
 
+  out += '<div style="font-size:12px;color:#8592a3;margin:4px 0 6px">들여쓴 트럭운송·임시직알선·보건·사회복지·헬스케어·보육서비스는 상위 업종에 포함된 세부업종 (합계에 중복 가산하지 않는다).</div>';
   out += treeTable('전월 증감 (천명)', delta);
   out += treeTable('취업자 수 (천명)', level);
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
-  box.querySelectorAll('[data-sel]').forEach(tr => tr.oncontextmenu = e => {
-    e.preventDefault(); const n = tr.dataset.sel; usEmpSel.has(n) ? usEmpSel.delete(n) : usEmpSel.add(n); renderUsEmp();
-  });
-  box.querySelectorAll('[data-agg]').forEach(tr => tr.oncontextmenu = e => {
-    e.preventDefault(); const g = NFP_GROUPS[tr.dataset.agg];
-    const all = g.every(x => usEmpSel.has(x));   // 모두 선택돼 있으면 해제, 아니면 전체 선택
-    g.forEach(x => all ? usEmpSel.delete(x) : usEmpSel.add(x));
-    renderUsEmp();
-  });
-  const shown = NFP_LEAVES.filter(n => usEmpSel.has(n));
-  // 증감 차트: 스택 막대(합=총계). 취업자 수 차트: 선(lines) + 총계는 우측 보조축, 좌우축 모두 자동범위(추이 부각)
-  const mkChart = (cid, valFn, title, totLabel, o) => {
-    const dss = shown.map(n => ({ type: o.lines ? 'line' : 'bar', label: n, data: cols.map(d => valFn(n, d)),
-      borderColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length], backgroundColor: PALETTE[NFP_LEAVES.indexOf(n) % PALETTE.length],
-      borderWidth: o.lines ? 1.8 : 0, pointRadius: 0, tension: 0.15, spanGaps: true,
-      stack: o.stacked ? 's' : undefined, order: 2, yAxisID: 'y' }));
-    dss.push({ type: 'line', label: totLabel + (o.dual ? ' (우축)' : ''), data: cols.map(d => valFn('비농업 전체', d)),
-      borderColor: '#1a2b4a', borderWidth: 2, pointRadius: 0, tension: 0.1, order: 0, yAxisID: o.dual ? 'y2' : 'y' });
-    const scales = {
-      x: { stacked: !!o.stacked, ticks: { maxTicksLimit: 10, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
-      y: { stacked: !!o.stacked, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('ko-KR') } },
+  usIndCharts.forEach((c, i) => { if (c) { c.destroy(); usIndCharts[i] = null; } });
+
+  // 고용 구성 차트 — 나머지 민간 = 비농업 − 헬스케어 − 정부 (계절조정 합산 차이는 나머지에 묻힌다)
+  if (hasMix) {
+    const ma = (fn, d) => {
+      const i = idx.get(d); let sum = 0;
+      for (let k = 0; k < usMixMA; k++) { const dd = periodDates[i - k]; const v = dd ? fn(dd) : null; if (v == null) return null; sum += v; }
+      return sum / usMixMA;
     };
-    if (o.dual) scales.y2 = { position: 'right', grid: { drawOnChartArea: false },
-      ticks: { font: { size: 9 }, maxTicksLimit: 6, callback: v => v.toLocaleString('ko-KR') } };
-    return new Chart(box.querySelector('#' + cid), {
+    const hcD = d => delta(hcName, d), govD = d => delta('정부', d), totD = d => delta('비농업 전체', d);
+    const restD = d => { const t = totD(d), h = hcD(d), g = govD(d); return t == null || h == null || g == null ? null : t - h - g; };
+    const C = [['나머지 민간', restD, '#7fa7d9'], ['정부', govD, '#f2b01e'], [hcName, hcD, '#b5121b']];
+    const dss = C.map(([lb, fn, c], i) => ({ type: 'bar', label: lb, data: cols.map(d => ma(fn, d)),
+      backgroundColor: c, borderWidth: 0, stack: 's', order: 3 - i }));
+    dss.push({ type: 'line', label: '비농업 전체', data: cols.map(d => ma(totD, d)), borderColor: '#1a2b4a',
+      borderWidth: 1.6, pointRadius: 2, pointBackgroundColor: '#1a2b4a', showLine: false, order: 0 });
+    usIndCharts[1] = new Chart(box.querySelector('#usNfpMix'), {
       data: { labels: cols, datasets: dss },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 9 } },
-          title: { display: true, text: title, font: { size: 12 } },
-          tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toLocaleString('ko-KR')}` } } },
-        scales },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, font: { size: 12 },
+            text: `비농업 고용 증감 분해 (천명)${usMixMA > 1 ? ' — ' + usMixMA + '개월 평균' : ''} · 점 = 비농업 전체` },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : Math.round(it.parsed.y).toLocaleString('ko-KR')}` } } },
+        scales: {
+          x: { stacked: true, ticks: { maxTicksLimit: 12, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { stacked: true, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('ko-KR') },
+               grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.06)' } } } },
     });
-  };
-  usIndCharts.forEach((c, i) => { if (c) { c.destroy(); usIndCharts[i] = null; } });
-  usIndCharts[0] = mkChart('usNfpChart0', delta, '전월 증감 (천명)', '총 증감', { stacked: true });
-  usIndCharts[1] = mkChart('usNfpChart1', level, '취업자 수 (천명)', '총 취업자 수', { lines: true, dual: true });
+    // 오른쪽 — 전년동월비 증가율 (%). 처음엔 '증가분 중 헬스케어+정부 비중'을 그렸는데
+    //   분모(전체 증감)가 0 근처거나 음수인 달에 수백 %로 튀어 읽을 수 없었다.
+    //   증가율은 각 부문 자기 규모로 나누므로 튀지 않고, 나머지 민간이 0% 근처면 '좁은 고용'이다.
+    const lvl = n => d => level(n, d);
+    const restL = d => { const t = level('비농업 전체', d), h = level(hcName, d), g = level('정부', d);
+      return t == null || h == null || g == null ? null : t - h - g; };
+    const yoyOf = fn => d => { const i = idx.get(d), p = periodDates[i - 12];
+      if (!p) return null; const a = fn(d), b = fn(p); return a != null && b ? (a / b - 1) * 100 : null; };
+    const G = [['나머지 민간', restL, '#3a78c4', 2.6], ['정부', lvl('정부'), '#f2b01e', 1.6],
+               [hcName, lvl(hcName), '#b5121b', 1.6], ['비농업 전체', lvl('비농업 전체'), '#1a2b4a', 1.2]];
+    usIndCharts[2] = new Chart(box.querySelector('#usNfpShare'), {
+      type: 'line',
+      data: { labels: cols, datasets: G.map(([lb, fn, c, w], i) => ({ label: lb, data: cols.map(yoyOf(fn)),
+        borderColor: c, backgroundColor: c, borderWidth: w, pointRadius: 0, tension: 0.15,
+        borderDash: lb === '비농업 전체' ? [4, 3] : undefined, order: i })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+          title: { display: true, font: { size: 12 }, text: '부문별 고용 증가율 — 전년동월비 (%)' },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2) + '%'}` } } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 12, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { ticks: { font: { size: 10 }, callback: v => v.toFixed(1) + '%' },
+               grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.06)' } } } },
+    });
+    box.querySelectorAll('[data-mixhc]').forEach(b => b.onclick = () => { usMixHc = b.dataset.mixhc; renderUsEmp(); });
+    box.querySelectorAll('[data-mixma]').forEach(b => b.onclick = () => { usMixMA = +b.dataset.mixma; renderUsEmp(); });
+  }
 
   // 가로 막대 — 선택한 달의 14개 산업 전월비 증감
   const bd = usIndBarMonth;
   const vals = NFP_LEAVES.map(n => delta(n, bd));
   const mxAbs = Math.max(10, ...vals.filter(v => v != null).map(Math.abs));
   const tot = delta('비농업 전체', bd);
-  usIndCharts[2] = new Chart(box.querySelector('#usNfpBar'), {
+  usIndCharts[0] = new Chart(box.querySelector('#usNfpBar'), {
     type: 'bar', plugins: [BAR_END_LABEL],
     data: { labels: NFP_LEAVES, datasets: [{
       label: '전월 증감', data: vals,

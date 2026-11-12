@@ -10655,9 +10655,8 @@ function renderM2h() {
 }
 
 // ISM 제조업·서비스 PMI — 두 조사를 나란히 본다.
-//   원문(ismworld.org)은 reCAPTCHA 로 자동수집이 막혀 있어, 발표 후 브라우저로 표를 뽑아
-//   tools/ism_add.py 로 data/us_ism.csv 에 넣는다. 공개 페이지가 최근 2개월치뿐이라
-//   하위지수 이력은 2026-04 부터 쌓아 가는 중이다 (헤드라인은 12개월치를 받아 둠).
+//   데이터는 인포맥스 엑셀(ISM인포맥스.xlsx, 2008~ 헤드라인·하위지수)에서 가져온다
+//   — tools/ism_update.bat 한 번이면 반영. 컨센서스만 investing.com 에서 tools/ism_add.py 로 넣는다.
 const ISM = { id: 'ism', name: '미국 ISM PMI', ids: ['us_ism'] };
 const ISM_SV = [['제조업', 'mfg'], ['서비스', 'svc']];
 let ismData = null, ismCharts = [null, null, null];
@@ -10796,8 +10795,7 @@ function renderIsm() {
   let out = '<div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px">'
     + compCard() + ISM_SV.map(([sv]) => card(sv)).join('')
     + '<div style="font-size:12px;color:#8592a3;line-height:1.8;flex:1;min-width:260px">'
-    + '50 = 확장/위축 경계 · 제조업 PMI 47.5 이상이 이어지면 경제 전체는 확장으로 봅니다.<br>'
-    + 'ISM 원문은 자동수집이 막혀 있어 발표 후 반영합니다 (제조업 첫 영업일 · 서비스 셋째 영업일).</div></div>'
+    + '50 = 확장/위축 경계 · 제조업 PMI 47.5 이상이 이어지면 경제 전체는 확장으로 봅니다.</div></div>'
     + '<div class="cchart" style="height:280px;margin-bottom:12px"><canvas id="ismC2"></canvas></div>'
     + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">'
     + ISM_SV.map(([sv], i) => '<div style="flex:1;min-width:340px">'
@@ -13206,7 +13204,16 @@ function renderUsEmpMain() {
         x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
         y: { position: 'left', ticks: { font: { size: 10 } } },
         y2: { position: 'right', ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } } } });
-  mkChart(1, '비농업 취업자 전월 증감 (천명)', [{ type: 'bar', label: '전월 증감', data: cols.map(d => delta(nfpTot, d)), backgroundColor: PALETTE[2] }]);
+  // 전월 증감(막대) + 3개월 평균(굵은 선). 한 달 값은 파업·날씨·정부 셧다운에 크게 흔들려 추세는 3MMA 로 본다
+  const nfpMA3 = d => { let s = 0; for (let k = 0; k < 3; k++) { const dd = k ? prevN(d, k) : d;
+    const v = dd && delta(nfpTot, dd); if (v == null) return null; s += v; } return s / 3; };
+  mkChart(1, '비농업 취업자 전월 증감 (천명)', [
+    { type: 'bar', label: '전월 증감', data: cols.map(d => delta(nfpTot, d)), backgroundColor: '#b9c7d6', order: 2 },
+    { type: 'line', label: '3개월 평균', data: cols.map(nfpMA3), borderColor: PALETTE[2], backgroundColor: PALETTE[2],
+      borderWidth: 2.6, pointRadius: 0, tension: 0.2, spanGaps: true, order: 1 }],
+    { scales: {
+        x: { ticks: { maxTicksLimit: 9, font: { size: 9 }, callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+        y: { ticks: { font: { size: 10 } }, grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.06)' } } } });
   // 참가율(62%대)과 고용률(59%대)도 폭이 달라 한 축이면 한쪽이 눌린다 → 이중축
   mkChart(2, '경제활동참가율 · 고용률(우) (%)',
     [Object.assign(ln('경제활동참가율', part, PALETTE[3]), { yAxisID: 'y' }),

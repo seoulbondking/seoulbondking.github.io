@@ -375,6 +375,8 @@
         <select id="startSel"></select>
         <span style="font-size:12px;color:#888">~</span>
         <select id="endSel"></select>
+        <span title="차트 위에서 왼쪽→오른쪽으로 드래그하면 그 구간으로 확대, 오른쪽→왼쪽으로 드래그하면 한 단계씩 축소(보이는 폭 2배, 기간 선택 밖까지), 더블클릭하면 원래 범위로 돌아갑니다."
+          style="font-size:11px;color:#999;cursor:help">차트 드래그 → 확대 · ← 축소</span>
       </span>
       <span id="scrollBtns" style="display:none">
         <button id="scrollL" title="반 화면 왼쪽으로" style="padding:6px 10px;font-size:13px;
@@ -436,6 +438,87 @@
 </div>
 
 <script>
+// 차트 드래그 확대 (주식 차트처럼) — 날짜(category) x축 차트 전부에 자동 적용.
+//   왼쪽→오른쪽 드래그 : 고른 구간으로 확대 (여러 번 겹쳐 확대 가능)
+//   오른쪽→왼쪽 드래그 : 한 단계 축소 (보이는 폭 2배, 기간 선택 밖으로도) · 더블클릭 : 원래 범위로
+//   마우스만 처리한다 (터치는 화면 스크롤과 겹치므로 제외). 기간 선택기를 바꾸면 차트가
+//   새로 그려지므로 확대도 자연히 풀린다. y축은 Chart.js 가 보이는 구간 기준으로 다시 잡는다.
+const DRAG_ZOOM = {
+  id: 'dragZoom',
+  afterInit(c) {
+    const cv = c.canvas, xs = () => c.scales.x;
+    const ok = () => xs() && xs().type === 'category' && xs().isHorizontal() && c.options.indexAxis !== 'y';
+    const st = c.$dz = { x0: null, x1: null, zoomed: false, skipClick: false };
+    const inArea = x => x >= c.chartArea.left && x <= c.chartArea.right;
+    // c.options 는 Chart.js 가 해석한 프록시라 직접 쓰면 꼬인다 → 원본 설정(c.config.options)에 쓴다
+    const rawX = () => { const o = c.config.options; o.scales = o.scales || {}; return o.scales.x = o.scales.x || {}; };
+    const setRange = (min, max) => { const r = rawX(); r.min = min; r.max = max; c.update('none'); };
+    st.orig = [rawX().min, rawX().max];                // 차트 코드가 정해 둔 원래 범위 (보통 없음)
+    const down = e => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || !ok()) return;
+      const x = e.offsetX; if (!inArea(x)) return;
+      st.x0 = x; st.x1 = x; cv.setPointerCapture(e.pointerId);
+    };
+    const move = e => {
+      if (st.x0 == null) return;
+      st.x1 = Math.max(c.chartArea.left, Math.min(c.chartArea.right, e.offsetX)); c.draw();
+    };
+    const up = () => {
+      if (st.x0 == null) return;
+      const a = st.x0, b = st.x1; st.x0 = st.x1 = null;
+      if (Math.abs(b - a) < 8) { c.draw(); return; }   // 짧으면 그냥 클릭
+      st.skipClick = true;
+      if (b > a) {                                     // → 확대: 고른 구간으로
+        const i0 = Math.round(xs().getValueForPixel(a)), i1 = Math.round(xs().getValueForPixel(b));
+        if (i1 - i0 < 1) { c.draw(); return; }
+        st.zoomed = true; setRange(i0, i1);
+      } else zoomOut();                                // ← 축소: 한 단계(보이는 폭 2배)씩
+    };
+    // 오른쪽 끝(최근)은 그대로 두고 왼쪽으로 넓힌다. 차트에 있는 데이터를 다 보여줬는데도
+    // 모자라면 기간 선택기의 시작을 그만큼 앞당겨 다시 그린다 (기간과 무관하게 계속 축소).
+    const zoomOut = () => {
+      const n = c.data.labels.length, lo = xs().min, hi = xs().max, want = Math.max(2, (hi - lo) * 2);
+      let nMax = hi, nMin = hi - want;
+      if (nMin < 0) { nMax = Math.min(n - 1, hi - nMin); nMin = Math.max(0, nMax - want); }
+      const short = want - (nMax - nMin);
+      const pb = document.getElementById('periodBox');
+      const canExtend = short > 0 && typeof startD === 'string' && periodDates.length && periodDates[0] < startD
+        && pb && pb.offsetParent !== null && typeof refresh === 'function';
+      if (!canExtend) {
+        if (nMin <= 0 && nMax >= n - 1) { setRange(...st.orig); st.zoomed = false; } else setRange(nMin, nMax);
+        return;
+      }
+      const t = s => new Date(s.slice(0, 10)).getTime();
+      const s0 = t(startD), e0 = t(endD || periodDates[periodDates.length - 1]);
+      const iso = new Date(s0 - short * (e0 - s0) / Math.max(1, n - 1)).toISOString().slice(0, 10);
+      const k = periodDates.indexOf(startD);
+      let d = periodDates.find(x => x >= iso) || periodDates[0];
+      if (d >= startD) d = periodDates[Math.max(0, k - 1)];
+      startD = d; syncPeriodSel(); setTimeout(refresh, 0);   // 차트를 새로 만든다 (이 차트는 없어진다)
+    };
+    const dbl = () => { if (st.zoomed) { setRange(...st.orig); st.zoomed = false; } };
+    const clk = e => { if (st.skipClick && e.target === cv) { st.skipClick = false; e.stopImmediatePropagation(); } };
+    cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move);
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('dblclick', dbl); window.addEventListener('click', clk, true);
+    st.off = () => { cv.removeEventListener('pointerdown', down); cv.removeEventListener('pointermove', move);
+      cv.removeEventListener('pointerup', up); cv.removeEventListener('pointercancel', up);
+      cv.removeEventListener('dblclick', dbl); window.removeEventListener('click', clk, true); };
+  },
+  afterDraw(c) {
+    const st = c.$dz; if (!st || st.x0 == null || st.x0 === st.x1) return;
+    const { top, bottom } = c.chartArea, x = c.ctx, l = Math.min(st.x0, st.x1), w = Math.abs(st.x1 - st.x0);
+    x.save();
+    x.fillStyle = st.x1 > st.x0 ? 'rgba(58,120,196,0.12)' : 'rgba(150,150,150,0.12)';
+    x.fillRect(l, top, w, bottom - top);
+    x.strokeStyle = st.x1 > st.x0 ? 'rgba(58,120,196,0.6)' : 'rgba(150,150,150,0.6)';
+    x.lineWidth = 1; x.strokeRect(l + 0.5, top + 0.5, w - 1, bottom - top - 1);
+    x.restore();
+  },
+  afterDestroy(c) { c.$dz && c.$dz.off && c.$dz.off(); },
+};
+if (window.Chart && Chart.register) Chart.register(DRAG_ZOOM);
+
 // 막대와 겹치는 선을 또렷하게 — 데이터셋에 pop:true 를 주면 흰 후광을 두른다.
 //   Chart.js 는 order 가 큰 데이터셋부터 그린다(= order 가 작을수록 위). 그것만으로도
 //   가려짐은 풀리지만, 색이 비슷하면 여전히 묻히므로 그림자로 한 겹 더 띄운다.
@@ -7639,14 +7722,33 @@ function renderUsFlows() {
   usEmpCharts = [null, null, null, null];
   const xT = { maxTicksLimit: 12, font: { size: 10 },
     callback: function (v) { return dateLabel(this.getLabelForValue(v)); } };
-  const mk = (i, labels, title, sets, opts) => new Chart(box.querySelector('#usF' + i), {
+  // 1990년부터 400개월 넘게 그려 한 달 폭이 1~2px 이다. 마지막 달이 그림 영역 오른쪽 끝에 붙어
+  // 마우스를 대기 어려웠다. Chart.js 는 그림 영역 밖(여백)의 마우스를 무시하므로 padding 으로는
+  // 안 된다 → 가로축 뒤에 빈 달을 덧붙여 마지막 점을 안쪽으로 들인다 (빈 칸에 대면 마지막 달이 잡힌다).
+  const PAD_M = 8;
+  const padX = labels => { const d = labels[labels.length - 1], y = +d.slice(0, 4), m = +d.slice(5, 7);
+    return labels.concat([...Array(PAD_M)].map((_, k) =>
+      new Date(Date.UTC(y, m + k + 1, 0)).toISOString().slice(0, 10))); };
+  // 빈 달 위에서는 기본 'index' 모드가 아무것도 못 잡는다(빈 점은 건너뜀) → 가장 가까운 '값 있는 달'로 붙인다
+  // (스모크 테스트의 Chart 스텁에는 Interaction 이 없다 — 그땐 기본 index 모드)
+  const HOVER_MODE = Chart.Interaction ? 'indexClamp' : 'index';
+  if (Chart.Interaction && !Chart.Interaction.modes.indexClamp) Chart.Interaction.modes.indexClamp = (chart, e) => {
+    const pos = Chart.helpers.getRelativePosition(e, chart), xs = chart.scales.x;
+    const n = Math.max(...chart.data.datasets.map(ds => { let k = ds.data.length - 1; while (k >= 0 && ds.data[k] == null) k--; return k; }));
+    const i = Math.max(0, Math.min(n, Math.round(xs.getValueForPixel(pos.x))));
+    return chart.data.datasets.flatMap((ds, di) => {
+      const el = chart.isDatasetVisible(di) && chart.getDatasetMeta(di).data[i];
+      return el && ds.data[i] != null ? [{ element: el, datasetIndex: di, index: i }] : [];
+    });
+  };
+  const mk = (i, labels0, title, sets, opts) => { const labels = padX(labels0); return new Chart(box.querySelector('#usF' + i), {
     type: 'line', plugins: [REC_SHADE, LINE_POP],
     data: { labels, datasets: sets.map(([nm, col, fn, pop], j) => ({
       label: nm, data: labels.map(fn), borderColor: col, backgroundColor: col,
       borderWidth: pop ? 2.2 : 1.6, pointRadius: 0, pointHitRadius: 8,
       tension: .12, spanGaps: true, pop: !!pop, order: j })) },
     options: { responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
+      interaction: { mode: HOVER_MODE, intersect: false },
       plugins: { recShade: { bands: NBER_REC },
         legend: { display: sets.length > 1, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
         title: { display: true, font: { size: 13 }, text: title },
@@ -7654,7 +7756,7 @@ function renderUsFlows() {
           callbacks: { title: it => dateLabel(it[0].label),
             label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}%` } } },
       scales: { x: { ticks: xT }, y: { ticks: { font: { size: 10 } }, ...(opts || {}) } } },
-  });
+  }); };
 
   // ① 재취업률 3개월 평균 — 전 기간 (기간 선택기와 무관하게 1990년부터)
   usEmpCharts[0] = mk(0, all, '재취업률 — 실업자에서 취업으로 이동한 비율 (3개월 평균, %)',

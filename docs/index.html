@@ -129,6 +129,9 @@
   #multiWrap .block-title:first-child, #comboWrap .block-title:first-child { margin-top: 0; }
   .tscroll { overflow-x: auto; margin-bottom: 4px; }
   .cchart { position: relative; height: 300px; margin-bottom: 10px; }
+  /* 차트 고정 — 표를 스크롤해도 바로 위 차트가 툴바 아래에 붙어 있는다 (pinCharts 가 붙인다) */
+  .pin-chart { position: sticky; z-index: 15; }
+  .pin-chart.stuck { box-shadow: 0 8px 8px -8px rgba(20,40,80,.28); }
   /* 지역 카테고리 그룹 헤더 (접기/펴기) */
   table.data tr.grp td { background: #eaeef4; font-weight: 700; cursor: pointer;
     border-top: 2px solid #9aa7b8; color: #1a2b4a; position: sticky; left: 0; }
@@ -315,7 +318,6 @@
       </div>
       <div id="usCpiTabs" class="mode" style="display:none">
         <button data-uc="chg" class="active">증감률</button>
-        <button data-uc="idx">지수</button>
         <button data-uc="ctb">기여도</button>
       </div>
       <div id="cardTabs" class="mode" style="display:none">
@@ -386,6 +388,9 @@
       </span>
       <button id="restoreBtn" style="display:none;padding:6px 14px;font-size:13px;
         border:1px solid #c8d0dc;background:#fff;cursor:pointer;border-radius:4px"></button>
+      <label id="pinWrap" title="표를 내려 볼 때 바로 위 차트를 화면 위쪽에 붙여 둡니다 (모든 화면)"
+        style="margin-left:auto;font-size:12px;color:#5a6683;display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="pinChk" checked> 차트 고정</label>
     </div>
     <div id="compareBar" style="display:none;margin-bottom:12px;gap:8px;flex-wrap:wrap;align-items:center">
       <select id="cmpInd" style="padding:6px;font-size:13px;border:1px solid #c8d0dc;border-radius:4px"></select>
@@ -443,9 +448,25 @@
 //   오른쪽→왼쪽 드래그 : 한 단계 축소 (보이는 폭 2배, 기간 선택 밖으로도) · 더블클릭 : 원래 범위로
 //   마우스만 처리한다 (터치는 화면 스크롤과 겹치므로 제외). 기간 선택기를 바꾸면 차트가
 //   새로 그려지므로 확대도 자연히 풀린다. y축은 Chart.js 가 보이는 구간 기준으로 다시 잡는다.
+// 화면에 같이 떠 있는 차트끼리는 확대 구간을 맞춘다 (x 라벨의 날짜로 맞추므로 월·분기 차트도 섞여 맞는다).
+const DZ_CHARTS = new Set();
+// 라벨 → 정렬 가능한 날짜 키. ISO 날짜뿐 아니라 이미 표시용으로 바꾼 라벨('26.10 · '20.4Q · '26.3Q)도 읽는다.
+//   표시용 라벨은 월 단위 키(YYYY-MM, 분기는 분기말 월)가 되고, 비교는 두 키의 짧은 쪽 길이까지만 한다
+//   → 일별 차트끼리는 일 단위로, 월·분기 차트와 섞이면 월 단위로 맞는다.
+const dzKey = l => {
+  if (typeof l !== 'string') return null;
+  if (/^\d{4}-\d{2}/.test(l)) return l.slice(0, 10);
+  const y2 = y => (+y > 60 ? '19' : '20') + y;
+  let m = l.match(/^'(\d{2})\.(\d)Q$/); if (m) return `${y2(m[1])}-${String(m[2] * 3).padStart(2, '0')}`;
+  m = l.match(/^'(\d{2})\.(\d{1,2})$/); if (m) return `${y2(m[1])}-${m[2].padStart(2, '0')}`;
+  m = l.match(/^(\d{4})\s*Q(\d)$/); if (m) return `${m[1]}-${String(m[2] * 3).padStart(2, '0')}`;
+  return null;
+};
+const dzCmp = (a, b) => { const n = Math.min(a.length, b.length), x = a.slice(0, n), y = b.slice(0, n); return x < y ? -1 : x > y ? 1 : 0; };
 const DRAG_ZOOM = {
   id: 'dragZoom',
   afterInit(c) {
+    DZ_CHARTS.add(c);
     const cv = c.canvas, xs = () => c.scales.x;
     const ok = () => xs() && xs().type === 'category' && xs().isHorizontal() && c.options.indexAxis !== 'y';
     const st = c.$dz = { x0: null, x1: null, zoomed: false, skipClick: false };
@@ -454,6 +475,32 @@ const DRAG_ZOOM = {
     const rawX = () => { const o = c.config.options; o.scales = o.scales || {}; return o.scales.x = o.scales.x || {}; };
     const setRange = (min, max) => { const r = rawX(); r.min = min; r.max = max; c.update('none'); };
     st.orig = [rawX().min, rawX().max];                // 차트 코드가 정해 둔 원래 범위 (보통 없음)
+    st.ok = ok;
+    st.reset = () => { if (st.zoomed) { setRange(...st.orig); st.zoomed = false; } };
+    // 다른 차트가 보낸 날짜 구간 [k0, k1] 에 맞춘다
+    st.applyKeys = (k0, k1, t0, t1) => {
+      let i0, i1 = -1;
+      if (k0 && k1) {
+        const L = c.data.labels.map(dzKey);
+        i0 = L.findIndex(k => k && dzCmp(k, k0) >= 0);
+        L.forEach((k, i) => { if (k && dzCmp(k, k1) <= 0) i1 = i; });
+      } else {   // 날짜로 못 읽는 라벨(연도 '48 등) → 같은 글자의 라벨끼리 맞춘다
+        const L = c.data.labels.map(String);
+        i0 = L.indexOf(String(t0)); i1 = L.lastIndexOf(String(t1));
+      }
+      if (i0 < 0 || i1 - i0 < 1) return;
+      if (i0 === 0 && i1 >= L.length - 1) st.reset(); else { st.zoomed = true; setRange(i0, i1); }
+    };
+    const sync = (i0, i1, full) => {
+      const t0 = c.data.labels[i0], t1 = c.data.labels[i1], k0 = dzKey(t0), k1 = dzKey(t1);
+      for (const o of [...DZ_CHARTS]) {
+        // 화면을 갈아엎으며 destroy 없이 버려진 차트(캔버스가 문서에서 떨어짐)는 여기서 치운다
+        if (!o.canvas || !o.canvas.isConnected) { DZ_CHARTS.delete(o); continue; }
+        if (o === c || !o.$dz || !o.canvas.offsetParent) continue;
+        try { if (!o.$dz.ok()) continue; if (full) o.$dz.reset(); else o.$dz.applyKeys(k0, k1, t0, t1); }
+        catch (e) { console.warn('dragZoom sync', e); }   // 한 차트가 실패해도 나머지는 맞춘다
+      }
+    };
     const down = e => {
       if (e.pointerType !== 'mouse' || e.button !== 0 || !ok()) return;
       const x = e.offsetX; if (!inArea(x)) return;
@@ -471,7 +518,7 @@ const DRAG_ZOOM = {
       if (b > a) {                                     // → 확대: 고른 구간으로
         const i0 = Math.round(xs().getValueForPixel(a)), i1 = Math.round(xs().getValueForPixel(b));
         if (i1 - i0 < 1) { c.draw(); return; }
-        st.zoomed = true; setRange(i0, i1);
+        st.zoomed = true; setRange(i0, i1); sync(i0, i1, false);
       } else zoomOut();                                // ← 축소: 한 단계(보이는 폭 2배)씩
     };
     // 오른쪽 끝(최근)은 그대로 두고 왼쪽으로 넓힌다. 차트에 있는 데이터를 다 보여줬는데도
@@ -485,7 +532,8 @@ const DRAG_ZOOM = {
       const canExtend = short > 0 && typeof startD === 'string' && periodDates.length && periodDates[0] < startD
         && pb && pb.offsetParent !== null && typeof refresh === 'function';
       if (!canExtend) {
-        if (nMin <= 0 && nMax >= n - 1) { setRange(...st.orig); st.zoomed = false; } else setRange(nMin, nMax);
+        if (nMin <= 0 && nMax >= n - 1) { setRange(...st.orig); st.zoomed = false; sync(0, n - 1, true); }
+        else { setRange(nMin, nMax); sync(nMin, nMax, false); }
         return;
       }
       const t = s => new Date(s.slice(0, 10)).getTime();
@@ -496,7 +544,7 @@ const DRAG_ZOOM = {
       if (d >= startD) d = periodDates[Math.max(0, k - 1)];
       startD = d; syncPeriodSel(); setTimeout(refresh, 0);   // 차트를 새로 만든다 (이 차트는 없어진다)
     };
-    const dbl = () => { if (st.zoomed) { setRange(...st.orig); st.zoomed = false; } };
+    const dbl = () => { st.reset(); sync(0, 0, true); };
     const clk = e => { if (st.skipClick && e.target === cv) { st.skipClick = false; e.stopImmediatePropagation(); } };
     cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move);
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
@@ -515,9 +563,99 @@ const DRAG_ZOOM = {
     x.lineWidth = 1; x.strokeRect(l + 0.5, top + 0.5, w - 1, bottom - top - 1);
     x.restore();
   },
-  afterDestroy(c) { c.$dz && c.$dz.off && c.$dz.off(); },
+  afterDestroy(c) { DZ_CHARTS.delete(c); c.$dz && c.$dz.off && c.$dz.off(); },
 };
 if (window.Chart && Chart.register) Chart.register(DRAG_ZOOM);
+
+// ── 차트 고정 (모든 화면) ─────────────────────────────────────────
+// 화면마다 마크업이 제각각이라 화면별로 손대지 않고, 그려진 결과를 보고 붙인다:
+//   보이는 표마다 위로 거슬러 올라가며 '바로 앞 형제 중 캔버스를 품은 블록'을 찾아 sticky 로 만든다.
+//   그 사이에 다른 표가 먼저 나오면 앞 표의 차트가 이미 고정돼 있으니 멈춘다.
+//   차트 블록이 화면의 55% 보다 크면(차트 두 줄 등) 표 볼 자리가 없어지므로 고정하지 않는다.
+//   자체 세로 스크롤이 있는 표 상자(#tableWrap)는 고정된 차트만큼 높이를 줄여 머리행이 가려지지 않게 한다.
+let PIN_ON = true;
+try { PIN_ON = localStorage.getItem('pinCharts') !== '0'; } catch (e) {}
+const pinShown = el => el.getClientRects().length > 0;
+function pinCharts() {
+  const main = document.querySelector('main'); if (!main) return;
+  main.querySelectorAll('.pin-chart').forEach(el => {
+    el.classList.remove('pin-chart', 'stuck'); el.style.top = ''; el.style.background = '';
+  });
+  main.querySelectorAll('[data-pin-mh]').forEach(el => {
+    el.style.maxHeight = el.dataset.pinMh; delete el.dataset.pinMh;
+  });
+  if (!PIN_ON) return;
+  const tb = document.querySelector('.toolbar');
+  const top0 = tb ? Math.round(tb.getBoundingClientRect().height) : 0;
+  const maxH = (innerHeight - top0) * 0.55;
+  const done = new Set();
+  main.querySelectorAll('table').forEach(t => {
+    if (!pinShown(t) || t.closest('.pin-chart') || t.closest('#irs_root')) return;
+    let a = t, found = null;
+    outer: while (a && a !== main && a.parentElement) {
+      for (let s = a.previousElementSibling; s; s = s.previousElementSibling) {
+        if (!pinShown(s)) continue;
+        if (s.tagName === 'TABLE' || s.querySelector('table')) break outer;   // 앞 표의 차트가 이어서 고정됨
+        if (s.tagName === 'CANVAS' || s.querySelector('canvas')) { found = s; break outer; }
+      }
+      a = a.parentElement;
+    }
+    if (!found || done.has(found)) return;
+    done.add(found);
+    // 차트가 두 줄 이상이라 너무 크면 마지막 줄만 붙인다 (위 줄은 그대로 밀려 올라간다 — sticky top 을 음수로)
+    const fTop = found.getBoundingClientRect().top;
+    const rowTops = [...found.querySelectorAll('.cchart, canvas')].filter(pinShown)
+      .map(el => Math.round(el.getBoundingClientRect().top - fTop));
+    const lastRow = rowTops.length ? Math.max(...rowTops) : 0;
+    const hide = found.offsetHeight > maxH ? Math.max(0, lastRow - 6) : 0;
+    if (found.offsetHeight - hide > maxH) return;
+    // 붙을 높이: 툴바 아래. 그 화면에 sticky 그룹 바(.grpbar, top 62px)가 있으면 그 아래.
+    let top = top0;
+    const gb = [...main.querySelectorAll('.grpbar')].find(pinShown);
+    if (gb) top = Math.max(top, 62 + gb.offsetHeight);
+    top -= hide;
+    // 배경: 투명하면 뒤로 지나가는 표가 비치므로 가장 가까운 불투명 배경을 칠한다
+    let bg = 'rgb(255, 255, 255)';
+    for (let p = found; p; p = p.parentElement) {
+      const c = getComputedStyle(p).backgroundColor;
+      if (c && c !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(c)) { bg = c; break; }
+    }
+    found.classList.add('pin-chart');
+    found.style.top = top + 'px'; found.style.background = bg;
+    // 자체 세로 스크롤 표 상자는 고정 차트 아래로 다 들어오게 높이를 줄인다
+    const box = t.closest('#tableWrap');
+    if (box && !box.dataset.pinMh) {
+      box.dataset.pinMh = box.style.maxHeight || '';
+      box.style.maxHeight = Math.max(220, innerHeight - (top + hide) - (found.offsetHeight - hide) - 24) + 'px';
+    }
+  });
+  pinStuck();
+}
+// 실제로 붙어 있을 때만 아래 그림자
+function pinStuck() {
+  document.querySelectorAll('.pin-chart').forEach(el => {
+    el.classList.toggle('stuck', el.getBoundingClientRect().top <= parseFloat(el.style.top) + 1);
+  });
+}
+(function pinInit() {
+  let q = 0;
+  const raf = window.requestAnimationFrame ? f => requestAnimationFrame(f) : f => setTimeout(f, 16);
+  const later = () => { if (q) return; q = raf(() => { q = 0; pinCharts(); }); };
+  const go = () => {
+    const main = document.querySelector('main'); if (!main) return;
+    // 화면이 다시 그려질 때마다(innerHTML 교체·캔버스 생성) 다시 붙인다. 스타일 변경은 감시하지 않아 순환이 없다.
+    new MutationObserver(later).observe(main, { childList: true, subtree: true });
+    addEventListener('resize', later);
+    let s = 0; addEventListener('scroll', () => { if (!s) s = raf(() => { s = 0; pinStuck(); }); }, { passive: true });
+    const chk = document.getElementById('pinChk');
+    if (chk) {
+      chk.checked = PIN_ON;
+      chk.onchange = () => { PIN_ON = chk.checked; try { localStorage.setItem('pinCharts', PIN_ON ? '1' : '0'); } catch (e) {} pinCharts(); };
+    }
+    later();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+})();
 
 // 막대와 겹치는 선을 또렷하게 — 데이터셋에 pop:true 를 주면 흰 후광을 두른다.
 //   Chart.js 는 order 가 큰 데이터셋부터 그린다(= order 가 작을수록 위). 그것만으로도
@@ -7112,7 +7250,7 @@ function renderKrEmpDetail() {
 // 계열 선택:
 //   · 전월비(MoM)  → 계절조정(CUSR). 미국 헤드라인이 이 기준이다.
 //   · 전년동월비(YoY) → 원계열(CUUR). BLS 공표 관례가 원계열이다.
-//   지수 탭에서는 둘 다 보여준다.
+//   (지수 탭은 없앴다 — 지수 수준은 증감률·기여도 계산에만 쓴다.)
 // ── 국내총생산 ─────────────────────────────────────────────
 // 실질/명목 × 분기/연간 4개 지표를 메뉴 하나로 묶고, 전환 바로 갈아끼운다.
 // 화면 자체는 기존 범용 뷰(종합·차트·표)를 그대로 쓴다 — 모드 버튼·우클릭 선택이 다 살아 있다.
@@ -7148,25 +7286,71 @@ const US_CPI_ROWS = [
   ['CPI', 0, true],
   ['식료품', 1, true],
   ['가정식(식료품)', 2, false],
+  ['곡물·빵', 3, false],
+  ['육류·가금·생선·계란', 3, false],
+  ['유제품', 3, false],
+  ['과일·채소', 3, false],
+  ['비알코올 음료', 3, false],
+  ['기타 가정식', 3, false],
   ['외식', 2, false],
+  ['풀서비스 식당', 3, false],
+  ['간이식당', 3, false],
   ['에너지', 1, true],
   ['에너지 상품', 2, false],
+  ['휘발유', 3, false],
+  ['연료유', 3, false],
   ['에너지 서비스', 2, false],
   ['전기', 3, false],
   ['도시가스', 3, false],
   ['Core CPI', 1, true],
   ['상품 (식료품·에너지 제외)', 2, true],
+  ['가구·가정용품', 3, false],
   ['의류', 3, true],
-  ['신차', 3, true],
-  ['중고차', 3, true],
+  ['운송상품 (연료 제외)', 3, true],
+  ['신차', 4, true],
+  ['중고차', 4, true],
+  ['자동차 부품', 4, false],
+  ['의료용품', 3, false],
+  ['오락용품', 3, false],
+  ['교육·통신 상품', 3, false],
+  ['주류', 3, false],
+  ['기타 상품', 3, false],
   ['서비스 (에너지서비스 제외)', 2, true],
   ['주거', 3, true],
   ['임차료', 4, false],
   ['자가주거비 (OER)', 4, false],
+  ['숙박 (호텔 등)', 4, false],
   ['의료 서비스', 3, false],
+  ['의사 서비스', 4, false],
+  ['병원 서비스', 4, false],
+  ['건강보험', 4, false],
   ['교통 서비스', 3, false],
+  ['자동차보험', 4, false],
+  ['자동차 정비·수리', 4, false],
+  ['항공료', 4, false],
+  ['오락 서비스', 3, false],
+  ['교육·통신 서비스', 3, false],
+  ['상하수도·쓰레기 수거', 3, false],
+  ['기타 개인 서비스', 3, false],
   ['슈퍼코어 (근원서비스 − 주거)', 0, true],
 ];
+// 처음 열 때 접어 둘 항목 (한 단계 더 내린 세부 품목은 펼쳐야 보인다)
+const US_CPI_FOLD0 = ['가정식(식료품)', '외식', '에너지 상품', '에너지 서비스', '운송상품 (연료 제외)',
+                      '주거', '의료 서비스', '교통 서비스'];
+// 접힘 상태를 반영해 보이는 행만 고른다. 하위 항목이 있는 행에는 has=true 를 붙인다.
+function usCpiVisibleRows(rows, fold) {
+  const out = [];
+  let hideBelow = Infinity;
+  rows.forEach((r, i) => {
+    const [nm, lv] = r;
+    if (lv > hideBelow) return;
+    hideBelow = Infinity;
+    const nx = rows[i + 1], has = !!nx && nx[1] > lv;
+    out.push([nm, lv, r[2], has]);
+    if (has && fold.has(nm)) hideBelow = lv;
+  });
+  return out;
+}
 // 슈퍼코어 = 근원 서비스(에너지서비스 제외) − 주거.  파월이 말한 'core services ex housing'.
 //   BLS 는 이 조합을 지수로 공표하지 않는다(품목코드 목록에 없음). 그래서 파생한다.
 //     월별 변화율 r_t = [w_svc×(Isvc_t/Isvc_{t-1}−1) − w_sh×(Ish_t/Ish_{t-1}−1)] / (w_svc − w_sh)
@@ -7198,6 +7382,8 @@ function usCpiAddSupercore(M) {
 }
 let usCpiData = null, usCpiTab = 'chg', usCpiMain = false, usCpiCharts = [null, null];
 let usCpiSel = null;   // 차트에 표시할 항목
+let usCpiFold = new Set(US_CPI_FOLD0);   // 접힌 항목
+let usCpiAnnH = 6, usCpiCtbSeen = false;   // 기여도 차트 연율 기간(개월) · 기여도 탭 첫 진입 여부
 
 async function enterUsCpi() {
   const inds = await Promise.all(US_CPI.ids.map(id => loadIndicator(id).catch(() => null)));
@@ -7216,7 +7402,10 @@ async function enterUsCpi() {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'usCpiBtn'));
   if (!document.getElementById('usCpiTabs').dataset.bound) {
     document.getElementById('usCpiTabs').addEventListener('click', e => {
-      if (!e.target.dataset.uc) return; usCpiTab = e.target.dataset.uc; refresh();
+      if (!e.target.dataset.uc) return; usCpiTab = e.target.dataset.uc;
+      // 기여도 차트는 긴 흐름을 보는 그림이라 처음 열 때 2018년부터 펼친다
+      if (usCpiTab === 'ctb' && !usCpiCtbSeen) { usCpiCtbSeen = true; setPeriodStart('2018-01'); }
+      refresh();
     });
     document.getElementById('usCpiTabs').dataset.bound = '1';
   }
@@ -7239,13 +7428,17 @@ function usCpiMaps(ind) {
   return usCpiAddSupercore(M);
 }
 
+// 접기/펼치기 단추 (하위 항목이 없으면 같은 폭의 빈칸 — 이름 줄이 어긋나지 않게)
+const usCpiTog = (nm, has) => has
+  ? `<span data-uct="${nm}" title="${usCpiFold.has(nm) ? '펼치기' : '접기'}" style="display:inline-block;width:14px;color:#8592a3;cursor:pointer">${usCpiFold.has(nm) ? '▸' : '▾'}</span>`
+  : '<span style="display:inline-block;width:14px"></span>';
 function renderUsCpi() {
   const box = document.getElementById('retailWrap');
   const SA = usCpiMaps(usCpiData && usCpiData.sa), NSA = usCpiMaps(usCpiData && usCpiData.nsa);
   if (!Object.keys(SA).length && !Object.keys(NSA).length) {
     box.innerHTML = '<div style="padding:28px;color:#555;line-height:1.9">'
       + '미국 CPI 데이터가 없습니다.<br>PC에서 <b>python fetch.py us_cpi us_cpi_nsa</b> 실행 후 새로고침해 주세요.'
-      + '<br><span style="color:#8592a3;font-size:12.5px">BLS CUSR/CUUR · 품목 20개</span></div>';
+      + '<br><span style="color:#8592a3;font-size:12.5px">BLS CUSR/CUUR · 품목 49개</span></div>';
     return;
   }
   const cols = periodDates.filter(inRange);
@@ -7255,7 +7448,8 @@ function renderUsCpi() {
     const p = prevD(d, lag); if (!p) return null;
     const a = m.get(d), b = m.get(p);
     return a != null && b ? (a / b - 1) * 100 : null; };
-  const rows = US_CPI_ROWS.filter(r => !usCpiMain || r[2]);
+  const rows = usCpiMain ? US_CPI_ROWS.filter(r => r[2]).map(r => [...r, false])
+                         : usCpiVisibleRows(US_CPI_ROWS, usCpiFold);
   if (usCpiSel === null) usCpiSel = new Set(['CPI', 'Core CPI']);
 
   const fmt2 = v => v == null ? '' : v.toLocaleString('en-US',
@@ -7267,11 +7461,11 @@ function renderUsCpi() {
     `<div class="block-title" style="margin-top:20px">${title}`
     + `<span style="font-weight:400;color:#8592a3;font-size:12px"> — ${note}</span></div>`
     + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
-    + rows.map(([nm, lv]) => {
+    + rows.map(([nm, lv, , has]) => {
         const on = usCpiSel.has(nm);
         return `<tr class="flat lv${lv}" data-ucr="${nm}" style="cursor:pointer">`
           + `<td style="text-align:left;padding-left:${6 + lv * 14}px`
-          + `${lv === 0 ? ';font-weight:700' : ''}${on ? ';color:#1a4fa0;font-weight:700' : ''}">${nm}</td>`
+          + `${lv === 0 ? ';font-weight:700' : ''}${on ? ';color:#1a4fa0;font-weight:700' : ''}">${usCpiTog(nm, has)}${nm}</td>`
           + cols.map(d => { const v = lag ? chg(M, nm, d, lag) : (M[nm] ? (M[nm].get(d) ?? null) : null);
               return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${f(v)}</td>`; }).join('')
           + '</tr>'; }).join('')
@@ -7280,30 +7474,44 @@ function renderUsCpi() {
   let out = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
     + `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">`
     + `<input type="checkbox" id="ucMain"${usCpiMain ? ' checked' : ''}> 주요항목만 보기</label>`
+    + '<button id="ucOpenAll" style="font-size:12px;padding:3px 9px;border:1px solid #c8d0dc;background:#fff;border-radius:4px;cursor:pointer">모두 펼치기</button>'
+    + '<button id="ucFoldAll" style="font-size:12px;padding:3px 9px;border:1px solid #c8d0dc;background:#fff;border-radius:4px;cursor:pointer">모두 접기</button>'
     + '<span style="font-size:12px;color:#8592a3">항목을 <b>클릭</b>하면 차트에 추가/제거됩니다</span></div>'
     + '<div style="font-size:12px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
     + '<b>전월비는 계절조정(CUSR)</b>, '
     + '<b>전년동월비는 원계열(CUUR)</b>을 씁니다 — BLS 공표 관례입니다. '
-    + '<span style="color:#c0392b">외식은 원계열만 공표되고, 자가주거비(OER)는 1982-12=100 기준이라 '
-    + '다른 항목과 지수 <b>수준</b>을 직접 비교하면 안 됩니다. '
-    + `<b>${US_CPI_SUPER}</b>는 BLS 공표 지수가 없어 <b>파생</b>한 값입니다 — 지수는 첫 달=100 기준이라 `
-    + '수준에 의미가 없고 증감률만 보세요.</span></div>'
+    + '<span style="color:#c0392b">간이식당·건강보험·기타 개인 서비스는 원계열만 공표돼 전월비가 빈칸입니다. '
+    + `<b>${US_CPI_SUPER}</b>는 BLS 공표 지수가 없어 상대중요도로 <b>파생</b>한 값입니다.</span></div>`
+    + (usCpiTab === 'ctb'
+        ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:12px">'
+          + '<b>연율 기간</b>' + [[3, '3개월'], [6, '6개월'], [12, '12개월']].map(([h, l]) =>
+            `<button data-ucann="${h}" style="font-size:12px;padding:3px 10px;border:1px solid ${usCpiAnnH === h ? '#1a4fa0' : '#c8d0dc'};`
+            + `background:${usCpiAnnH === h ? '#1a4fa0' : '#fff'};color:${usCpiAnnH === h ? '#fff' : '#333'};border-radius:4px;cursor:pointer">${l}</button>`).join('')
+          + '<span style="color:#8592a3">계절조정 지수의 h개월 변화율을 연율로 바꿔 기여도로 나눕니다 (12개월은 연율화 없음)</span></div>'
+        : '')
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
-    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ucC${i}"></canvas></div></div>`).join('')
+    + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:${usCpiTab === 'ctb' ? 340 : 290}px"><canvas id="ucC${i}"></canvas></div></div>`).join('')
     + '</div>';
 
   if (usCpiTab === 'chg') {
     out += tbl('전월비 (%)', '계절조정 CUSR', SA, 1, fmt2)
          + tbl('전년동월비 (%)', '원계열 CUUR', NSA, 12, fmt2);
-  } else if (usCpiTab === 'idx') {
-    out += tbl('지수 (계절조정)', 'CUSR · 1982-84=100', SA, 0, fmt3)
-         + tbl('지수 (원계열)', 'CUUR · 1982-84=100', NSA, 0, fmt3);
   } else {
     out += usCpiContribHtml(SA, NSA, cols, rows, prevD, fmt2);
   }
   box.innerHTML = out;
   box.querySelectorAll('.tscroll').forEach(el => { el.scrollLeft = el.scrollWidth; });
   box.querySelector('#ucMain').onchange = e => { usCpiMain = e.target.checked; renderUsCpi(); };
+  box.querySelectorAll('[data-ucann]').forEach(b => b.onclick = () => { usCpiAnnH = +b.dataset.ucann; renderUsCpi(); });
+  const parents = US_CPI_ROWS.filter((r, i) => US_CPI_ROWS[i + 1] && US_CPI_ROWS[i + 1][1] > r[1]).map(r => r[0]);
+  box.querySelector('#ucOpenAll').onclick = () => { usCpiFold = new Set(); usCpiMain = false; renderUsCpi(); };
+  box.querySelector('#ucFoldAll').onclick = () => {   // CPI 아래 큰 묶음(식료품·에너지·근원)만 남긴다
+    usCpiFold = new Set(parents.filter(n => n !== 'CPI')); usCpiMain = false; renderUsCpi(); };
+  box.querySelectorAll('[data-uct]').forEach(t => t.onclick = e => {
+    e.stopPropagation();
+    const n = t.dataset.uct; usCpiFold.has(n) ? usCpiFold.delete(n) : usCpiFold.add(n);
+    renderUsCpi();
+  });
   box.querySelectorAll('[data-ucr]').forEach(tr => tr.onclick = () => {
     const n = tr.dataset.ucr;
     usCpiSel.has(n) ? usCpiSel.delete(n) : usCpiSel.add(n);
@@ -7332,9 +7540,6 @@ function renderUsCpi() {
   if (usCpiTab === 'chg') {
     usCpiCharts[0] = mk('#ucC0', '전월비 (%) — 계절조정', SA, 1, '%');
     usCpiCharts[1] = mk('#ucC1', '전년동월비 (%) — 원계열', NSA, 12, '%');
-  } else if (usCpiTab === 'idx') {
-    usCpiCharts[0] = mk('#ucC0', '지수 — 계절조정', SA, 0, '');
-    usCpiCharts[1] = mk('#ucC1', '지수 — 원계열', NSA, 0, '');
   } else {
     usCpiContribCharts(box, SA, NSA, cols, prevD);
   }
@@ -7378,11 +7583,11 @@ function usCpiContribHtml(SA, NSA, cols, rows, prevD, fmt2) {
     `<div class="block-title" style="margin-top:20px">${title}`
     + `<span style="font-weight:400;color:#8592a3;font-size:12px"> — ${note}</span></div>`
     + `<div class="tscroll"><table class="data vlines"><thead><tr>${th}</tr></thead><tbody>`
-    + rows.map(([nm, lv]) => {
+    + rows.map(([nm, lv, , has]) => {
         const on = usCpiSel.has(nm);
         return `<tr class="flat lv${lv}" data-ucr="${nm}" style="cursor:pointer">`
           + `<td style="text-align:left;padding-left:${6 + lv * 14}px`
-          + `${lv === 0 ? ';font-weight:700' : ''}${on ? ';color:#1a4fa0;font-weight:700' : ''}">${nm}</td>`
+          + `${lv === 0 ? ';font-weight:700' : ''}${on ? ';color:#1a4fa0;font-weight:700' : ''}">${usCpiTog(nm, has)}${nm}</td>`
           + `<td style="color:#8592a3">${RI[nm] == null ? '-' : RI[nm].toFixed(2)}</td>`
           + cols.map(d => { const v = usCpiContrib(M, nm, d, lag, prevD, RI);
               return `<td${v != null && v < 0 ? ' class="neg"' : ''}>${fmt2(v)}</td>`; }).join('')
@@ -7413,37 +7618,85 @@ function usCpiContribHtml(SA, NSA, cols, rows, prevD, fmt2) {
     + '개편을 걸치는 12개월 변화에는 근사 오차가 있습니다. 계층(식료품+에너지+Core=100)이 맞아 '
     + '합계는 총지수와 잘 맞지만, 소수점 둘째 자리는 BLS 공표치와 다를 수 있습니다.</span></div>';
 }
+// 기여도 차트 — h개월 연율 기여도 (헤드라인 / 근원 두 장)
+//   T  = 상위지수 h개월 변화율 (계절조정),  연율 = (1+T)^(12/h) − 1
+//   기여_i (h개월) = s_i(p) × (I_i,t / I_i,p − 1)
+//     s_i(p) = (RI_i / RI_상위) × (I_i,p / I_i,0) ÷ (I_상위,p / I_상위,0)   ← 시작월 p 의 가격변화로 갱신한 비중
+//     0 = 가중치 기준월(asof, 2025-12). BLS 가 연중에 RI 를 갱신하는 방식과 같다.
+//     과거로 갈수록 바구니(수량) 개편은 반영 못 하므로 근사다.
+//   연율 기여 = 기여_i × [(1+T)^(12/h) − 1] / T   ← 비례 배분이라 막대 합 = 선(연율)
+//   '기타'는 상위 묶음에서 이름 붙인 항목을 뺀 나머지 → 구성 합이 닫힌다.
+//   건강보험은 원계열만 공표된다(계절성 거의 없음) → 그 항목만 원계열을 쓴다.
+const US_CPI_CTB = {
+  head: { top: 'CPI', title: '헤드라인 CPI', line: '헤드라인 CPI',
+    parts: [  // [라벨, 색, 구성(항목·부호·원계열)]  위→아래 = 범례 순서, 마지막이 0선 쪽
+      ['에너지', '#a6a6a6', [['에너지', 1]]],
+      ['식료품', '#a9cdf0', [['식료품', 1]]],
+      ['근원 (Core)', '#0b2a5b', [['Core CPI', 1]]],
+    ] },
+  core: { top: 'Core CPI', title: '근원 CPI', line: '근원 CPI',
+    parts: [
+      ['신차·중고차', '#7cc242', [['신차', 1], ['중고차', 1]]],
+      ['기타 근원상품', '#5b8fd6', [['상품 (식료품·에너지 제외)', 1], ['신차', -1], ['중고차', -1]]],
+      ['건강보험', '#a6a6a6', [['건강보험', 1, 'nsa']]],
+      ['임차료 + OER', '#a9cdf0', [['임차료', 1], ['자가주거비 (OER)', 1]]],
+      ['기타 근원서비스', '#0b2a5b', [['서비스 (에너지서비스 제외)', 1], ['임차료', -1], ['자가주거비 (OER)', -1], ['건강보험', -1, 'nsa']]],
+    ] },
+};
+function usCpiAnnContrib(SA, NSA, def, cols, prevD, h, RI, asof) {
+  const base = M => { if (!M) return null; for (const k of M.keys()) if (k.startsWith(asof)) return M.get(k); return null; };
+  const P = SA[def.top], P0 = base(P), wP = RI[def.top];
+  const line = [], bars = def.parts.map(() => []);
+  cols.forEach(d => {
+    const p = prevD(d, h);
+    const Pt = P && P.get(d), Pp = p && P && P.get(p);
+    if (!Pt || !Pp || !P0 || !wP) { line.push(null); bars.forEach(b => b.push(null)); return; }
+    const T = Pt / Pp - 1, ann = Math.pow(1 + T, 12 / h) - 1;
+    const k = Math.abs(T) < 1e-9 ? 12 / h : ann / T;
+    line.push(ann * 100);
+    def.parts.forEach(([, , terms], j) => {
+      let c = 0;
+      for (const [nm, sg, src] of terms) {
+        const M = (src === 'nsa' ? NSA : SA)[nm], w = RI[nm];
+        const it = M && M.get(d), ip = M && M.get(p), i0 = base(M);
+        if (!it || !ip || !i0 || w == null) { c = null; break; }
+        c += sg * (w / wP) * (ip / i0) / (Pp / P0) * (it / ip - 1);
+      }
+      bars[j].push(c == null ? null : c * k * 100);
+    });
+  });
+  return { line, bars };
+}
 function usCpiContribCharts(box, SA, NSA, cols, prevD) {
   const W = window.__US_CPI_RI__;
   if (!W || !W.ri) return;
-  const RI = usCpiRI();
-  // 스택 순서 = 이 배열 순서. Chart.js 는 첫 데이터셋을 바닥에 깐다.
-  //   미국 물가의 중심은 '서비스'다(코어의 대부분, 임금에 연동돼 끈적하다).
-  //   0 축에 붙여 두면 막대 높이를 눈으로 재지 않고 바로 값을 읽을 수 있다.
-  const CAT = [['서비스 (에너지서비스 제외)', '#1a4fa0'],
-               ['상품 (식료품·에너지 제외)', '#8e44ad'],
-               ['식료품', '#c98a1a'], ['에너지', '#c0392b']];
-  const stack = (M, lag, title) => new Chart(box.querySelector(lag === 1 ? '#ucC0' : '#ucC1'), {
-    type: 'bar',
-    data: { labels: cols, datasets: CAT.map(([k, c]) => ({
-        label: k, data: cols.map(d => usCpiContrib(M, k, d, lag, prevD, RI)),
-        backgroundColor: c, borderWidth: 0, stack: 's' })).concat([{
-        label: '총지수 (%)', type: 'line',
-        data: cols.map(d => usCpiContrib(M, US_CPI_TOP, d, lag, prevD, RI)),
-        borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 2,
-        pointRadius: 2, tension: .1, order: -1 }]) },
-    options: { responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-        title: { display: true, font: { size: 13 }, text: title },
-        tooltip: { callbacks: { title: it => dateLabel(it[0].label),
-          label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
-      scales: { x: { stacked: true, ticks: { maxTicksLimit: 12, font: { size: 10 },
-                 callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
-        y: { stacked: true, ticks: { font: { size: 10 }, callback: v => axFmt(v, '%p') } } } },
-  });
-  usCpiCharts[0] = stack(SA, 1, '전월비 기여도 분해 (%p) — 계절조정');
-  usCpiCharts[1] = stack(NSA, 12, '전년동월비 기여도 분해 (%p) — 원계열');
+  const RI = usCpiRI(), h = usCpiAnnH;
+  const unit = h === 12 ? '전년동월비' : `${h}개월 연율`;
+  const mk = (sel, def) => {
+    const r = usCpiAnnContrib(SA, NSA, def, cols, prevD, h, RI, W.asof);
+    const n = def.parts.length;
+    return new Chart(box.querySelector(sel), {
+      type: 'bar',
+      data: { labels: cols, datasets: [{
+          label: def.line, type: 'line', data: r.line,
+          borderColor: '#d62728', backgroundColor: '#d62728', borderWidth: 2.2,
+          pointRadius: 0, pointHoverRadius: 3, tension: .1, order: 0 }]
+        .concat(def.parts.map(([lb, c], j) => ({
+          label: lb, data: r.bars[j], backgroundColor: c, borderWidth: 0,
+          stack: 's', order: n - j, barPercentage: .9, categoryPercentage: .9 }))) },
+      options: { responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+          title: { display: true, font: { size: 13 }, text: `${def.title} — ${unit} (%, 기여도 %p) · 계절조정` },
+          tooltip: { callbacks: { title: it => dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}${it.dataset.type === 'line' ? '%' : '%p'}` } } },
+        scales: { x: { stacked: true, ticks: { maxTicksLimit: 14, font: { size: 10 },
+                   callback: function (v) { return dateLabel(this.getLabelForValue(v)); } } },
+          y: { stacked: true, ticks: { font: { size: 10 }, callback: v => axFmt(v, '%') } } } },
+    });
+  };
+  usCpiCharts[0] = mk('#ucC0', US_CPI_CTB.head);
+  usCpiCharts[1] = mk('#ucC1', US_CPI_CTB.core);
 }
 
 const US_EMP = { id: 'us_emp', name: '미국 고용상황',
@@ -7458,7 +7711,7 @@ let usEmpData = null, usEmpTab = 'main', usEmpCharts = [null, null, null, null];
 let usIndCharts = [null, null, null];
 // 고용 구성(헬스케어·정부 vs 나머지 민간): 헬스케어 범위 · 이동평균 개월
 //   hcsa = 보건·사회복지(CES6562000001, 증권사 보고서 기준) · hc = 헬스케어, 사회복지 제외(CES6562000101)
-let usMixHc = 'hcsa', usMixMA = 1;
+let usMixHc = 'hcsa', usMixMA = 1, usMixBase = 'hc';   // usMixBase: 고용 구성 막대에서 맨 아래(0선 쪽)에 깔 부문
 // 미국 고용상황: 서브탭마다 기간 선택을 따로 기억한다.
 //   탭이 8개인데 선택기를 하나로 공유하면, 고용압력에서 2017년으로 늘려둔 뒤
 //   산업별로 넘어갔을 때 표가 116열이 된다.
@@ -13510,6 +13763,7 @@ function renderUsNfpIndustry() {
       + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 6px;font-size:12px">'
       + '<b>헬스케어 범위</b>' + mb(usMixHc, 'hcsa', 'data-mixhc="hcsa">보건·사회복지') + mb(usMixHc, 'hc', 'data-mixhc="hc">헬스케어 (사회복지 제외)')
       + '<b style="margin-left:10px">평균</b>' + mb(usMixMA, 1, 'data-mixma="1">당월') + mb(usMixMA, 3, 'data-mixma="3">3개월 평균')
+      + '<b style="margin-left:10px">맨 아래</b>' + mb(usMixBase, 'hc', 'data-mixbase="hc">헬스케어') + mb(usMixBase, 'gov', 'data-mixbase="gov">정부') + mb(usMixBase, 'rest', 'data-mixbase="rest">나머지 민간')
       + '<span style="color:#8592a3">헬스케어·정부는 고령화·예산이 결정해 경기를 거의 타지 않는다. 금리·수요에 반응하는 건 <b>나머지 민간</b>(파랑).</span></div>'
       + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">'
       + '<div style="flex:1;min-width:340px"><div class="cchart" style="height:320px"><canvas id="usNfpMix"></canvas></div></div>'
@@ -13532,9 +13786,12 @@ function renderUsNfpIndustry() {
     };
     const hcD = d => delta(hcName, d), govD = d => delta('정부', d), totD = d => delta('비농업 전체', d);
     const restD = d => { const t = totD(d), h = hcD(d), g = govD(d); return t == null || h == null || g == null ? null : t - h - g; };
-    const C = [['나머지 민간', restD, '#7fa7d9'], ['정부', govD, '#f2b01e'], [hcName, hcD, '#b5121b']];
-    const dss = C.map(([lb, fn, c], i) => ({ type: 'bar', label: lb, data: cols.map(d => ma(fn, d)),
-      backgroundColor: c, borderWidth: 0, stack: 's', order: 3 - i }));
+    const C = [['나머지 민간', restD, '#7fa7d9', 'rest'], ['정부', govD, '#f2b01e', 'gov'], [hcName, hcD, '#b5121b', 'hc']];
+    // 쌓는 순서 = order 오름차순 (Chart.js 가 order 로 정렬해 쌓는다 — 작을수록 0선 쪽).
+    //   고른 부문을 맨 아래(1)에, 나머지는 기본 순서(헬스케어 → 정부 → 나머지 민간)대로 위에 얹는다.
+    const STACK = [usMixBase, ...['hc', 'gov', 'rest'].filter(k => k !== usMixBase)];
+    const dss = C.map(([lb, fn, c, k]) => ({ type: 'bar', label: lb, data: cols.map(d => ma(fn, d)),
+      backgroundColor: c, borderWidth: 0, stack: 's', order: 1 + STACK.indexOf(k) }));
     dss.push({ type: 'line', label: '비농업 전체', data: cols.map(d => ma(totD, d)), borderColor: '#1a2b4a',
       borderWidth: 1.6, pointRadius: 2, pointBackgroundColor: '#1a2b4a', showLine: false, order: 0 });
     usIndCharts[1] = new Chart(box.querySelector('#usNfpMix'), {
@@ -13577,6 +13834,7 @@ function renderUsNfpIndustry() {
     });
     box.querySelectorAll('[data-mixhc]').forEach(b => b.onclick = () => { usMixHc = b.dataset.mixhc; renderUsEmp(); });
     box.querySelectorAll('[data-mixma]').forEach(b => b.onclick = () => { usMixMA = +b.dataset.mixma; renderUsEmp(); });
+    box.querySelectorAll('[data-mixbase]').forEach(b => b.onclick = () => { usMixBase = b.dataset.mixbase; renderUsEmp(); });
   }
 
   // 가로 막대 — 선택한 달의 14개 산업 전월비 증감

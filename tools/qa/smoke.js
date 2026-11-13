@@ -62,7 +62,7 @@ const chkHas = (name, elId, needle) => {
   for (const t of ['main', 'industry', 'sub', 'age', 'detail', 'wage', 'vu']) { ev(`krEmpTab='${t}'; refresh();`); chk('고용 > ' + t, 'retailWrap'); }
   if (w.__MACRO__ && w.__MACRO__.us_cpi) {
     await ev('enterUsCpi()');
-    for (const t of ['chg', 'idx']) { ev(`usCpiTab='${t}'; refresh();`); chk('미국 소비자물가 > ' + t, 'retailWrap'); }
+    for (const t of ['chg', 'ctb']) { ev(`usCpiTab='${t}'; refresh();`); chk('미국 소비자물가 > ' + t, 'retailWrap'); }
   } else {
     console.log('  미국 소비자물가              (데이터 없음 — python fetch.py us_cpi us_cpi_nsa)');
   }

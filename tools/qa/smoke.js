@@ -77,11 +77,16 @@ const chkHas = (name, elId, needle) => {
   if (w.__MACRO__ && w.__MACRO__.us_pce) {
     await ev('enterUsPce()');
     for (const t of ['price', 'real', 'income', 'mkt', 'sd']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
+    ev(`usPceTab='sd'; refresh();`); chkHas('미국 PCE > 공급 점검표', 'retailWrap', '공급 점검표'); chkHas('미국 PCE > 세 관점', 'retailWrap', '② 초과분'); chkHas('미국 PCE > 공급 품목', 'retailWrap', 'PPI 트럭 화물');
   } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
   if (w.__MACRO__ && w.__MACRO__.us_oil) {
     await ev('enterOil()');
-    for (const t of ['crack', 'retail', 'freight', 'base']) { ev(`oilTab='${t}'; refresh();`); chk('유가 흐름 > ' + t, 'retailWrap'); }
+    for (const t of ['crack', 'retail', 'refine', 'freight', 'base']) { ev(`oilTab='${t}'; refresh();`); chk('유가 흐름 > ' + t, 'retailWrap'); }
     chkHas('유가 흐름 > 기저효과 표', 'retailWrap', '가격 동결');
+    ev(`oilTab='refine'; refresh();`); chkHas('유가 흐름 > 정제설비', 'retailWrap', '유휴 정제능력 (천b/d)');
+    ev(`oilTab='retail'; oilDecomp='eia'; refresh();`); chkHas('유가 흐름 > EIA 분해', 'retailWrap', '휘발유 소매 · EIA');
+    ev(`oilDecomp='mkt'; refresh();`); chkHas('유가 흐름 > 시장가 분해', 'retailWrap', '시장가 추정:'); ev(`oilDecomp='eia';`);
+    ev(`oilTab='crack'; oilUnit='gal'; refresh();`); chkHas('유가 흐름 > 크랙 $/gal', 'retailWrap', '3-2-1 크랙 ($/gal)'); ev(`oilUnit='bbl';`);
   } else { console.log('  유가 흐름                    (데이터 없음 — python fetch.py us_oil)'); }
   await ev('enterFundFlow()');
   for (const m of ['change', 'balance']) { ev(`fundMode='${m}'; renderFundFlow();`); chk('자금흐름 > ' + m, 'retailWrap'); }

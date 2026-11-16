@@ -310,6 +310,7 @@
       <div id="oilTabs" class="mode" style="display:none">
         <button data-oil="crack" class="active">크랙스프레드</button>
         <button data-oil="retail">소매가·CPI</button>
+        <button data-oil="refine">정제설비</button>
         <button data-oil="freight">운송비</button>
         <button data-oil="base">기저효과</button>
       </div>
@@ -699,7 +700,7 @@ function applyNavOrder(nav) {
   btns.forEach(b => { prev.after(b); prev = b; });
   mark.remove();
 }
-const NAV_HIDE = ['kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
+const NAV_HIDE = ['us_pump', 'us_refinery', 'us_refinery_w', 'kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
                   // kr_yield(34MB)는 메뉴에서 내렸다 — 클릭하면 통째로 받느라 굳는다
                   'kr_yield', 'kr_policy_bei', 'mkt_oil_fx',
@@ -9396,7 +9397,10 @@ const US_PCE = { id: 'uspce', name: '미국 PCE',
                  ids: ['us_pce', 'us_pce_diffusion', 'us_pce_sd', 'us_polrate'] };
 let usPceData = null, usPceDiff = null, usPceSd = null, usPceRate = null,
     usPceTab = 'price', usPceCharts = [null, null, null, null];
-let usSdTab = 'core';   // 수요·공급 분해: 근원 / 헤드라인
+let usSdTab = 'core';
+// 수요·공급 점검표용 보조 데이터 (유가·PPI·CPI 원계열) — PCE 화면에 들어올 때 같이 받는다
+let usSdOil = null, usSdPpi = null, usSdCpi = null;
+const USSD_BASE = ['2015-01', '2019-12'];   // 비교 기준: 코로나 이전 5년   // 수요·공급 분해: 근원 / 헤드라인
 // 탭마다 다른 기본 시작 시점. 수요·공급 분해는 1969년부터 있어서 공통 기본 기간으로
 // 열면 가로축이 50년으로 늘어나 최근 국면이 안 보인다. 코로나 직전부터 잡는다.
 // **첫 진입 때만** 옮긴다 — 사용자가 기간을 고친 뒤 탭을 오가면 그 선택을 존중한다.
@@ -9456,6 +9460,8 @@ async function enterUsPce() {
   usPceDiff = await loadIndicator('us_pce_diffusion').catch(() => null);
   usPceSd = await loadIndicator('us_pce_sd').catch(() => null);
   usPceRate = await loadIndicator('us_polrate').catch(() => null);
+  [usSdOil, usSdPpi, usSdCpi] = await Promise.all(['us_oil', 'us_ppi_nsa', 'us_cpi_nsa']
+    .map(id => loadIndicator(id).catch(() => null)));
   if (!usPceData) { alert('PCE 데이터가 없습니다. python fetch.py us_pce 실행 필요.'); return; }
   current = { id: US_PCE.id, name: US_PCE.name, freq: 'M', unit: '지수·조달러',
               updated_at: usPceData.updated_at, series: [] };
@@ -9521,6 +9527,7 @@ function renderUsPceSd(box, xT) {
     return m;
   })();
   const allSd = [...new Set(usPceSd.series.flatMap(s => s.data.map(p => p.d)))].sort();
+  const DEMC = '#3f6fd8', SUPC = '#e8974a';
   // 기간 선택기를 따른다. 선택 구간에 분해 데이터가 없으면 전 기간으로 되돌린다.
   const inSel = allSd.filter(inRange);
   const all = inSel.length > 1 ? inSel : allSd;
@@ -9554,6 +9561,122 @@ function renderUsPceSd(box, xT) {
     + '</div>'
     + '<div class="cchart" style="height:300px;margin-bottom:14px"><canvas id="usSd2"></canvas></div>';
 
+  // ── 점검표: 3개월 평균이 코로나 이전(2015~19)보다 얼마나 높은가 ─────────────
+  //   월간연율 기여도는 단월 σ 가 1%p 안팎이라 한 달 값으로 판단하지 않는다.
+  //   ① 수준: 3MMA − 2015~19 평균, z = 차이 ÷ (2015~19 3MMA 의 σ)
+  //   ② 지속성: 3MMA 가 평균 + 1σ 를 몇 달 연속 넘었나
+  //   ③ 수요와 같이: 공급만 높으면 공급충격(넘겨볼 여지), 수요가 높으면 정책 대응 대상
+  //   ④ 원인: 브렌트 전년비와의 시차 상관 · 항공·운송 같은 대표 공급 품목
+  //   분석 스크립트: tools/pce_supply_check.py (같은 계산)
+  const ma3 = m => { const o = new Map();
+    allSd.forEach((d, i) => { if (i < 2) return; const v = [0, 1, 2].map(k => m.get(allSd[i - k]));
+      if (v.every(x => x != null)) o.set(d, (v[0] + v[1] + v[2]) / 3); }); return o; };
+  const inB = d => d.slice(0, 7) >= USSD_BASE[0] && d.slice(0, 7) <= USSD_BASE[1];
+  const stat = (m1, m3) => {
+    const b3 = [...m3].filter(([d]) => inB(d)).map(x => x[1]), b1 = [...m1].filter(([d]) => inB(d)).map(x => x[1]);
+    const mu3 = b3.reduce((a, x) => a + x, 0) / b3.length;
+    const sd = Math.sqrt(b3.reduce((a, x) => a + (x - mu3) ** 2, 0) / b3.length);
+    const mu = b1.reduce((a, x) => a + x, 0) / b1.length;
+    const cur = m3.get(last);
+    let run = 0;
+    for (let i = allSd.length - 1; i >= 0; i--) { const v = m3.get(allSd[i]); if (v != null && v > mu3 + sd) run++; else break; }
+    return { mu, mu3, sd, cur, z: (cur - mu3) / sd, run };
+  };
+  const a3S = ma3(aS), a3D = ma3(aD), a3A = ma3(aA);
+  const stS = stat(aS, a3S), stD = stat(aD, a3D), stA = stat(aA, a3A);
+  // 세 관점 — '주도'를 한 숫자로 정하지 않는다. 관점마다 답이 다를 수 있다.
+  //   ① 크기: 지금 3개월 평균에서 각 갈래의 비중
+  //   ② 초과분: 3개월 평균 − 2015~19 평균. 코로나 이전보다 높아진 몫이 누구 것인가
+  //   ③ 변화: 직전 3개월 평균(겹치지 않는 구간) 대비. 최근에 누가 끌어올렸나/내렸나
+  //   z 는 '평소 대비 얼마나 비정상인가'일 뿐이다 — 수요는 원래 덜 출렁여(σ 작음) 같은 폭이라도 z 가 크게 나온다.
+  const LN = [['공급', stS, a3S, SUPC], ['수요', stD, a3D, DEMC], ['모호', stA, a3A, '#5a6b82']];
+  const iL = allSd.indexOf(last), prev3 = iL >= 3 ? allSd[iL - 3] : null;
+  const L1 = LN.map(([, st]) => st.cur), T1 = L1.reduce((a, x) => a + x, 0);
+  const L2 = LN.map(([, st]) => st.cur - st.mu), T2 = L2.reduce((a, x) => a + x, 0);
+  const L3 = LN.map(([, , m3]) => prev3 && m3.get(prev3) != null ? m3.get(last) - m3.get(prev3) : null);
+  const T3 = L3.every(v => v != null) ? L3.reduce((a, x) => a + x, 0) : null;
+  const pc = (x, t) => t > 0 ? Math.round(x / t * 100) + '%' : '—';
+  const sgn2 = v => v == null ? '—' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+  const lz1 = Math.abs(L1[0] / T1 - L1[1] / T1) < 0.1 ? '공급·수요 비슷' : (L1[0] > L1[1] ? '공급' : '수요') + ' 쪽이 큼';
+  const iMax2 = L2.indexOf(Math.max(...L2));
+  const lz2 = T2 <= 0 ? '코로나 이전 수준 이하' : `초과분의 ${pc(L2[iMax2], T2)}가 ${LN[iMax2][0]}`;
+  const lz3 = T3 == null ? '—' : Math.abs(T3) < 0.15
+    ? (L3[0] * L3[1] < 0 && Math.abs(L3[0]) >= 0.15 && Math.abs(L3[1]) >= 0.15
+      ? `합계는 그대로 — ${L3[1] < 0 ? '수요 → 공급' : '공급 → 수요'}으로 구성만 바뀜` : '합계·구성 모두 큰 변화 없음')
+    : `${T3 > 0 ? '가속' : '둔화'} — 가장 큰 몫: ${LN[L3.indexOf(T3 > 0 ? Math.max(...L3) : Math.min(...L3))][0]}`;
+  const lensTbl = '<table class="data vlines" style="width:auto;font-size:12.5px"><thead><tr><th>관점</th>'
+    + LN.map(([n, , , c]) => `<th style="color:${c}">${n}</th>`).join('') + '<th>합</th><th>요약</th></tr></thead><tbody>'
+    + `<tr><td style="text-align:left">① 크기 <span style="color:#8592a3">3개월 평균 (비중)</span></td>`
+    + L1.map(v => `<td>${f2(v)} <span style="color:#8592a3">(${pc(v, T1)})</span></td>`).join('') + `<td>${f2(T1)}</td><td style="text-align:left"><b>${lz1}</b></td></tr>`
+    + `<tr><td style="text-align:left">② 초과분 <span style="color:#8592a3">− 2015~19 평균 (비중)</span></td>`
+    + L2.map(v => `<td${v < 0 ? ' class="neg"' : ''}>${sgn2(v)} <span style="color:#8592a3">(${T2 > 0 && v > 0 ? pc(v, T2) : '—'})</span></td>`).join('')
+    + `<td>${sgn2(T2)}</td><td style="text-align:left"><b>${lz2}</b></td></tr>`
+    + `<tr><td style="text-align:left">③ 변화 <span style="color:#8592a3">직전 3개월${prev3 ? ' (' + dateLabel(prev3) + ')' : ''} 대비</span></td>`
+    + L3.map(v => `<td${v != null && v < 0 ? ' class="neg"' : ''}>${sgn2(v)}</td>`).join('') + `<td>${sgn2(T3)}</td><td style="text-align:left"><b>${lz3}</b></td></tr>`
+    + '</tbody></table>';
+  const sCard = (nm, st, col) => '<div style="min-width:170px;padding:6px 16px 6px 0;border-right:1px solid #e3e7ee">'
+    + `<div style="font-size:12.5px;color:#8592a3">${nm} 3개월 평균 · ${dateLabel(last)}</div>`
+    + `<div style="font-size:24px;font-weight:700;line-height:1.25;color:${st.z >= 1 ? '#c0392b' : col}">${f2(st.cur)}<span style="font-size:13px">%p</span></div>`
+    + `<div style="font-size:12px;color:#5a6b82">2015~19 평균 ${f2(st.mu)} · z <b>${st.z >= 0 ? '+' : '−'}${Math.abs(st.z).toFixed(1)}</b>`
+    + `<br>평균+1σ 초과 <b>${st.run}</b>개월 연속</div></div>`;
+  out += `<div class="block-title" style="margin-top:6px">공급 점검표 — ${base} PCE 월간연율 기여도 3개월 평균 vs 코로나 이전(2015~19)</div>`
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:6px">'
+    + sCard('공급', stS, SUPC) + sCard('수요', stD, DEMC) + sCard('모호', stA, '#5a6b82')
+    + '</div><div style="margin-bottom:6px">' + lensTbl + '</div>'
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.8;margin-bottom:10px">'
+    + '"누가 주도하나"는 기준에 따라 답이 다릅니다 — ① 지금 크기, ② 코로나 이전보다 높아진 몫, ③ 최근 변화를 따로 봅니다. '
+    + '카드의 <b>z</b> = (3개월 평균 − 2015~19 평균) ÷ 2015~19 의 3개월 평균 표준편차는 <b>평소 대비 얼마나 비정상인가</b>일 뿐, 크기 비교가 아닙니다 '
+    + '(수요는 원래 덜 출렁여 같은 폭이라도 z 가 크다). 단월 월간연율은 σ 가 1%p 안팎이라 판단에 쓰지 않습니다. '
+    + 'Shapiro 분류는 "공급형으로 분류된 품목의 기여"이지 인과(공급충격 때문에 생긴 물가)가 아닙니다.</div>'
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">'
+    + [3, 4].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:280px"><canvas id="usSd${i}"></canvas></div></div>`).join('')
+    + '</div>';
+
+  // ── 공급 쪽 대표 품목: 유가·항공·운송 (전년비 %) + 브렌트 시차 상관
+  const SM = (ind, n) => { const x = ind && ind.series.find(y => baseName(y.name) === n);
+    return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const yoyM = m => { const o = new Map();
+    m.forEach((v, d) => { const p = m.get(new Date(Date.UTC(+d.slice(0, 4) - 1, +d.slice(5, 7), 0)).toISOString().slice(0, 10));
+      if (p) o.set(d, (v / p - 1) * 100); }); return o; };
+  const shiftM = (m, k) => new Map([...m].map(([d, v]) => [new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) + k, 0)).toISOString().slice(0, 10), v]));
+  const BRy = yoyM(SM(usSdOil, '브렌트유'));
+  const SUPI = [
+    ['브렌트유', BRy, '#1a2b4a', 'FRED 월평균'],
+    ['항공유 도매 (걸프)', yoyM(SM(usSdOil, '항공유 도매 (걸프)')), '#5b8fd6', 'FRED'],
+    ['디젤 소매', yoyM(SM(usSdOil, '디젤 소매')), '#c0392b', 'EIA 주간 → 월평균'],
+    ['PPI 트럭 화물', yoyM(SM(usSdPpi, '트럭 화물')), '#d9822b', 'BLS WPU3012'],
+    ['PPI 항공요금', yoyM(SM(usSdPpi, '항공요금')), '#8e44ad', 'BLS WPU3022 — 근원 PCE 항공료가 이 PPI 로 디플레이트된다'],
+    ['CPI 항공료', yoyM(SM(usSdCpi, '항공료')), '#2e8b57', 'BLS 원계열'],
+    ['CPI 교통 서비스', yoyM(SM(usSdCpi, '교통 서비스')), '#7f8c8d', 'BLS 원계열'],
+  ];
+  // 브렌트 전년비(t−L) vs 공급 기여 3MMA(t) 상관 — 코로나 이전과 이후를 나눠 본다
+  const corrL = (L, lo, hi) => {
+    const bs = shiftM(BRy, L), xs = [], ys = [];
+    a3S.forEach((v, d) => { const k = d.slice(0, 7); if (k < lo || k > hi) return; const b = bs.get(d); if (b != null) { xs.push(v); ys.push(b); } });
+    if (xs.length < 12) return null;
+    const mx = xs.reduce((a, x) => a + x, 0) / xs.length, my = ys.reduce((a, x) => a + x, 0) / ys.length;
+    let sxy = 0, sxx = 0, syy = 0;
+    xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; syy += (ys[i] - my) ** 2; });
+    return sxy / Math.sqrt(sxx * syy);
+  };
+  const LAGS = [0, 3, 6, 9, 12];
+  const cR = v => v == null ? '<td>—</td>' : `<td style="color:${v >= 0.5 ? '#c0392b' : v >= 0.3 ? '#d9822b' : '#5a6b82'};${v >= 0.5 ? 'font-weight:700' : ''}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td>`;
+  const lastK = last.slice(0, 7);
+  out += `<div class="block-title">공급 쪽 대표 품목 — 유가·항공·운송</div>`
+    + '<div style="font-size:12px;color:#8592a3;line-height:1.8;margin-bottom:6px">'
+    + 'Shapiro 의 "공급"은 유가만이 아니라 관세·공급망·개별 품목 충격이 섞여 있습니다. 근원 공급 기여 상승이 <b>유가 전가</b>인지 보려면 '
+    + '항공(항공유 → 항공요금)과 운송(디젤 → 트럭 운임)이 같이 움직이는지, 브렌트와의 시차 상관이 높아졌는지를 봅니다.</div>'
+    + '<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:10px">'
+    + [5, 6].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:280px"><canvas id="usSd${i}"></canvas></div></div>`).join('')
+    + '</div>'
+    + `<div style="display:inline-block;margin-bottom:14px"><table class="data vlines" style="width:auto"><thead><tr><th>브렌트 전년비(t−L) ↔ ${base} 공급 기여 3MMA(t) 상관</th>`
+    + LAGS.map(L => `<th>${L ? L + '개월 시차' : '동월'}</th>`).join('') + '</tr></thead><tbody>'
+    + [['2001~19 (코로나 이전)', '2001-01', '2019-12'], [`2021~${lastK.slice(2, 4)}.${lastK.slice(5)}`, '2021-01', lastK]]
+      .map(([t, lo, hi]) => `<tr><td style="text-align:left">${t}</td>` + LAGS.map(L => cR(corrL(L, lo, hi))).join('') + '</tr>').join('')
+    + '</tbody></table><div style="font-size:11.5px;color:#8592a3;margin-top:3px">0.5 이상 빨강 · 2021년 이후는 표본이 짧고 코로나 공급망 충격이 섞여 있어 참고용입니다.</div></div>';
+  const supRows = [['공급 기여 3MMA (%p)', g(a3S), 0], ['수요 기여 3MMA (%p)', g(a3D), 0],
+    ...SUPI.map(([n, m]) => [n + ' 전년비 (%)', g(m), 1])];
+
   const cols = all;
   const th = cols.map(d => `<th>${dateLabel(d)}</th>`).join('');
   const tbl = (title, rows) => `<div class="block-title">${title}</div><div class="tscroll">`
@@ -9568,7 +9691,8 @@ function renderUsPceSd(box, xT) {
     + tbl(`${base} PCE 월간 연율 기여도 (%p)`, [
       [`${base} PCE (합)`, sum3(aD, aS, aA), 0],
       ['수요 주도', g(aD), 1], ['공급 주도', g(aS), 1], ['모호', g(aA), 1],
-    ]);
+    ])
+    + tbl('공급 점검표 — 3개월 평균 기여도와 공급 대표 품목', supRows);
   box.innerHTML = out;
   box.querySelectorAll('#usSdTabs button').forEach(b =>
     b.onclick = () => { usSdTab = b.dataset.sd; renderUsPce(); });
@@ -9620,6 +9744,53 @@ function renderUsPceSd(box, xT) {
       scales: { x: { stacked: true, ticks: xT },
         y: { stacked: true, ticks: { font: { size: 10 } },
              grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+  // 점검표 차트 — 3MMA 와 2015~19 평균 ±1σ 띠
+  const bandChart = (id, nm, m1, m3, st, col) => new Chart(box.querySelector(id), {
+    type: 'line',
+    data: { labels: all, datasets: [
+      { label: '평균 +1σ', data: all.map(() => st.mu3 + st.sd), borderColor: 'rgba(0,0,0,0)', backgroundColor: 'rgba(150,160,180,0.20)', pointRadius: 0, fill: '+1', order: 5 },
+      { label: '평균 −1σ', data: all.map(() => st.mu3 - st.sd), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false, order: 5 },
+      { label: '2015~19 평균', data: all.map(() => st.mu3), borderColor: '#8592a3', borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, order: 4 },
+      { label: `${nm} 단월`, data: all.map(g(m1)), borderColor: col + '66', backgroundColor: col + '66', borderWidth: 1, pointRadius: 1.5, tension: .1, spanGaps: true, order: 2 },
+      { label: `${nm} 3개월 평균`, data: all.map(g(m3)), borderColor: col, backgroundColor: col, borderWidth: 2.6, pointRadius: 0, tension: .12, spanGaps: true, order: 0 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11, filter: it => it.text !== '평균 −1σ' } },
+        title: { display: true, font: { size: 13 }, text: `${base} PCE ${nm} 기여 — 월간연율 (%p) vs 2015~19 평균 ±1σ` },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: xT }, y: { ticks: { font: { size: 10 } },
+        grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
+  });
+  usPceCharts[3] = bandChart('#usSd3', '공급', aS, a3S, stS, SUPC);
+  usPceCharts[4] = bandChart('#usSd4', '수요', aD, a3D, stD, DEMC);
+  // 공급 기여 3MMA vs 브렌트 전년비 3개월 선행 (우축)
+  const BR3 = shiftM(BRy, 3);
+  usPceCharts[5] = new Chart(box.querySelector('#usSd5'), {
+    type: 'line',
+    data: { labels: all, datasets: [
+      { label: `${base} 공급 기여 3MMA (좌, %p)`, data: all.map(g(a3S)), borderColor: SUPC, backgroundColor: SUPC, borderWidth: 2.6, pointRadius: 0, tension: .12, spanGaps: true, yAxisID: 'y' },
+      { label: '브렌트 전년비 3개월 선행 (우, %)', data: all.map(g(BR3)), borderColor: '#1a2b4a', backgroundColor: '#1a2b4a', borderWidth: 1.6, borderDash: [5, 3], pointRadius: 0, tension: .12, spanGaps: true, yAxisID: 'y2' },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: '공급 기여 vs 유가 — 브렌트를 3개월 앞당겨 겹침' },
+        tooltip: { callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(2)}` } } },
+      scales: { x: { ticks: xT }, y: { ticks: { font: { size: 10 } } },
+        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } } } },
+  });
+  usPceCharts[6] = new Chart(box.querySelector('#usSd6'), {
+    type: 'line',
+    data: { labels: all, datasets: SUPI.slice(1).map(([n, m, c], j) => ({
+      label: n, data: all.map(g(m)), borderColor: c, backgroundColor: c, borderWidth: 2, pointRadius: 0, tension: .12, spanGaps: true, order: j })) },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10.5 }, boxWidth: 11 } },
+        title: { display: true, font: { size: 13 }, text: '항공·운송 — 연료 → 운임 → 소비자가격 (전년비 %)' },
+        tooltip: { itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: { title: it => dateLabel(it[0].label), label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : it.parsed.y.toFixed(1)}%` } } },
+      scales: { x: { ticks: xT }, y: { ticks: { font: { size: 10 } },
+        grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } } } },
   });
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
 }
@@ -11120,10 +11291,14 @@ const OIL = { id: 'oil', name: '유가 흐름', ids: ['us_oil', 'us_cpi'] };
 const OIL_DEF_START = { base: '2024-01' };
 const OIL_BASE = ['2010-01', '2019-12'];
 let oilData = null, oilCpi = null, oilTab = 'crack', oilSeen = {}, oilCharts = [];
+let oilUnit = 'bbl', oilDecomp = 'eia', oilPump = null, oilRef = null, oilRefW = null;   // oilRef(W): EIA 정제설비 월·주   // oilDecomp: 소매가 분해 기준 'eia' 공식 | 'mkt' 시장가 추정   // 크랙 탭 단위: 'bbl' ($/배럴, 업계 관행) | 'gal' ($/갤런, 시장 리포트 차트)
 
 async function enterOil() {
   oilData = await loadIndicator('us_oil').catch(() => null);
   oilCpi = await loadIndicator('us_cpi').catch(() => null);
+  oilPump = await loadIndicator('us_pump').catch(() => null);
+  oilRef = await loadIndicator('us_refinery').catch(() => null);
+  oilRefW = await loadIndicator('us_refinery_w').catch(() => null);   // EIA 소매가 구성 (없으면 시장가 추정만)
   if (!oilData) { alert('유가 데이터가 없습니다. python fetch.py us_oil 실행 필요.'); return; }
   current = { id: OIL.id, name: OIL.name, freq: 'M', unit: '달러',
               updated_at: oilData.updated_at, series: [] };
@@ -11162,7 +11337,7 @@ function renderOil() {
   oilCharts.forEach(c => c && c.destroy()); oilCharts = [];
   const S = n => { const x = oilData.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
   const C = n => { const x = oilCpi && oilCpi.series.find(y => baseName(y.name) === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
-  const W = S('WTI'), B = S('브렌트유'), G = S('휘발유 도매 (NY항)'), D = S('디젤 도매 (NY항)'), J = S('항공유 도매 (걸프)');
+  const W = S('WTI'), B = S('브렌트유'), G = S('휘발유 도매 (NY항)'), GG = S('휘발유 도매 (걸프)'), D = S('디젤 도매 (NY항)'), J = S('항공유 도매 (걸프)');
   const GR = S('휘발유 소매'), DR = S('디젤 소매');
   const addM = (d, k) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) + k, 0)).toISOString().slice(0, 10);
   const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
@@ -11179,7 +11354,7 @@ function renderOil() {
   const pctile = m => { const v = [...m.values()], x = m.get(lastD(m)); return v.filter(y => y <= x).length / v.length * 100; };
   // 크랙 ($/bbl)
   const K321 = zip((g, d, w) => (2 * g + d) / 3 * 42 - w, G, D, W);
-  const KG = zip((g, w) => g * 42 - w, G, W), KD = zip((d, w) => d * 42 - w, D, W), KJ = zip((j, w) => j * 42 - w, J, W);
+  const KG = zip((g, w) => g * 42 - w, G, W), KGG = zip((g, w) => g * 42 - w, GG, W), KD = zip((d, w) => d * 42 - w, D, W), KJ = zip((j, w) => j * 42 - w, J, W);
   const cols = periodDates.filter(inRange);
   const f2 = v => v.toFixed(2), f1 = v => v.toFixed(1);
   const sg = (v, f = f1) => (v >= 0 ? '+' : '−') + f(Math.abs(v));
@@ -11243,57 +11418,173 @@ function renderOil() {
   let out = '';
 
   if (oilTab === 'crack') {
-    const a321 = avg(K321), aG = avg(KG), aD = avg(KD), aJ = avg(KJ);
+    // 단위 전환: 원본은 크랙 $/bbl, 제품가 $/gal, 원유가 $/bbl. 1 배럴 = 42 갤런.
+    const U = oilUnit === 'gal', un = U ? '$/gal' : '$/bbl', ff = U ? f2 : f1;
+    const sc = k => m => new Map([...m].map(([d, v]) => [d, v * k]));
+    const cr = U ? sc(1 / 42) : m => m;        // 크랙·원유 ($/bbl 원본)
+    const pr = U ? m => m : sc(42);            // 제품가 ($/gal 원본)
+    const k321 = cr(K321), kG = cr(KG), kGG = cr(KGG), kD = cr(KD), kJ = cr(KJ);
+    const a321 = avg(k321), aG = avg(kG), aGG = avg(kGG), aD = avg(kD), aJ = avg(kJ);
     const ck = (lab, m, a) => { const d = lastD(m), v = m.get(d);
-      return chip(`${lab} · ${ml(d)}`, '$' + f1(v), `2010~19 평균 $${f1(a)} 의 <b>${f1(v / a)}배</b> · 상위 ${f1(100 - pctile(m))}%`,
+      return chip(`${lab} · ${ml(d)}`, '$' + ff(v), `2010~19 평균 $${ff(a)} 의 <b>${f1(v / a)}배</b> · 상위 ${f1(100 - pctile(m))}%`,
         v > a ? '#c0392b' : '#1a4fa0'); };
-    out += chips([ck('3-2-1 크랙', K321, a321), ck('휘발유 크랙', KG, aG), ck('디젤 크랙', KD, aD), ck('항공유 크랙', KJ, aJ)])
-      + note('크랙 = 정제제품 도매가 − 원유가 ($/bbl, 월평균). 정제마진이 넓으면 원유가가 그대로여도 휘발유·디젤·항공유 값이 높게 유지된다. '
+    const ub = (u, l) => `<button data-oilu="${u}" style="font-size:12px;padding:3px 10px;border:1px solid ${oilUnit === u ? '#1a4fa0' : '#c8d0dc'};`
+      + `background:${oilUnit === u ? '#1a4fa0' : '#fff'};color:${oilUnit === u ? '#fff' : '#333'};border-radius:4px;cursor:pointer">${l}</button>`;
+    out += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px"><b>단위</b>'
+      + ub('bbl', '$/배럴') + ub('gal', '$/갤런')
+      + '<span style="color:#8592a3">1배럴 = 42갤런. 업계 표준은 $/배럴, 시장 리포트의 US crack spread 차트는 $/갤런</span></div>'
+      + chips([ck('3-2-1 크랙', k321, a321), ck('휘발유 크랙 (NY항)', kG, aG), ck('휘발유 크랙 (걸프)', kGG, aGG), ck('디젤 크랙', kD, aD), ck('항공유 크랙', kJ, aJ)])
+      + note(`크랙 = 정제제품 도매가 − 원유가 (${un}, 월평균). 정제마진이 넓으면 원유가가 그대로여도 휘발유·디젤·항공유 값이 높게 유지된다. `
         + '유휴 정제능력이 바닥이면 마진이 쉽게 안 줄어든다 — 원유 전년비보다 <b>제품가</b>를 봐야 하는 이유. 점선 = 2010~19 평균.')
       + row2(canv('oilC0'), canv('oilC1'))
-      + table([['3-2-1 크랙 ($/bbl)', K321, f1, false, 0, '(휘발유 × 2 + 디젤) / 3 − WTI'], ['휘발유 크랙', KG, f1], ['디젤 크랙', KD, f1], ['항공유 크랙 (걸프)', KJ, f1],
-        '-', ['WTI ($/bbl)', W, f1, false, 0], ['브렌트유', B, f1], ['브렌트 − WTI', zip((b, w) => b - w, B, W), f1],
-        '-', ['휘발유 도매 NY항 ($/gal)', G, f2, false, 0], ['디젤 도매 NY항', D], ['항공유 도매 걸프', J], ['WTI ($/gal)', zip(w => w / 42, W)]]);
+      + table([[`3-2-1 크랙 (${un})`, k321, ff, false, 0, '(휘발유 × 2 + 디젤) / 3 − WTI'], ['휘발유 크랙 (NY항)', kG, ff], ['휘발유 크랙 (걸프)', kGG, ff, false, 1, '걸프 휘발유 − WTI. 시장 리포트의 US crack spread 차트($/gal)에 가장 가까운 정의'], ['디젤 크랙', kD, ff], ['항공유 크랙 (걸프)', kJ, ff],
+        '-', [`WTI (${un})`, cr(W), ff, false, 0], ['브렌트유', cr(B), ff], ['브렌트 − WTI', cr(zip((b, w) => b - w, B, W)), ff],
+        '-', [`휘발유 도매 NY항 (${un})`, pr(G), ff, false, 0], ['휘발유 도매 걸프', pr(GG), ff], ['디젤 도매 NY항', pr(D), ff], ['항공유 도매 걸프', pr(J), ff]]);
     box.innerHTML = out;
-    mk('oilC0', '크랙스프레드 ($/bbl)', cols, [ln('3-2-1', K321, '#1a2b4a', cols, { w: 3 }), ln('휘발유', KG, '#d9822b', cols),
-      ln('디젤', KD, '#c0392b', cols), ln('항공유', KJ, '#5b8fd6', cols), ref('3-2-1 2010~19 평균', a321, cols)], { fmt: f1 });
-    mk('oilC1', '원유·제품 가격 ($/gal)', cols, [ln('WTI/42', zip(w => w / 42, W), '#1a2b4a', cols, { w: 2.6 }),
-      ln('브렌트/42', zip(b => b / 42, B), '#8592a3', cols), ln('휘발유 NY항', G, '#d9822b', cols),
-      ln('디젤 NY항', D, '#c0392b', cols), ln('항공유 걸프', J, '#5b8fd6', cols)]);
+    box.querySelectorAll('[data-oilu]').forEach(b => b.onclick = () => { oilUnit = b.dataset.oilu; renderOil(); });
+    mk('oilC0', `크랙스프레드 (${un})`, cols, [ln('3-2-1', k321, '#1a2b4a', cols, { w: 3 }), ln('휘발유 NY항', kG, '#d9822b', cols), ln('휘발유 걸프', kGG, '#b8860b', cols, { dash: [5, 3] }),
+      ln('디젤', kD, '#c0392b', cols), ln('항공유', kJ, '#5b8fd6', cols), ref('3-2-1 2010~19 평균', a321, cols)], { fmt: ff });
+    mk('oilC1', `원유·제품 가격 (${un})`, cols, [ln('WTI', cr(W), '#1a2b4a', cols, { w: 2.6 }),
+      ln('브렌트', cr(B), '#8592a3', cols), ln('휘발유 NY항', pr(G), '#d9822b', cols), ln('휘발유 걸프', pr(GG), '#b8860b', cols, { dash: [5, 3] }),
+      ln('디젤 NY항', pr(D), '#c0392b', cols), ln('항공유 걸프', pr(J), '#5b8fd6', cols)], { fmt: ff });
   } else if (oilTab === 'retail') {
-    // 소매가 분해 ($/gal): 원유 + 정제마진(도매 − 원유) + 유통·세금(소매 − 도매)
+    // 소매가 분해 ($/gal) — 두 가지 기준
+    //   EIA 공식: 원유(정유사 도입단가) + 정제 + 유통·마케팅 + 세금. 2~3개월 늦다 (us_pump)
+    //   시장가 추정: 원유(WTI/42) + 정제마진(NY항 도매 − 원유) + 유통·세금(소매 − 도매). 지난달까지 나온다
+    const PU = n => { const x = oilPump && oilPump.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+    const hasE = !!(oilPump && oilPump.series.length);
+    const E = hasE && oilDecomp === 'eia';
     const parts = (R, P) => [zip(w => w / 42, W), zip((p, w) => p - w / 42, P, W), zip((r, p) => r - p, R, P)];
     const [gC, gM, gT] = parts(GR, G), [dC, dM, dT] = parts(DR, D);
+    const EK = ['원유', '정제', '유통·마케팅', '세금'];
+    const eG = EK.map(k => PU('휘발유 · ' + k)), eD = EK.map(k => PU('디젤 · ' + k));
+    const eGR = PU('휘발유 · 소매가'), eDR = PU('디젤 · 소매가');
     const cpiG = C('휘발유'), cpiA = C('항공료');
     const cpiGm = chg(cpiG, 1), grM = chg(GR, 1), cpiAy = chg(cpiA, 12), jY = chg(J, 12);
-    const aT = avg(gT), aDT = avg(dT);
-    const d0 = lastD(GR);
     // 다음 달 CPI 휘발유 가늠: 소매가 전월비를 그대로 쓴다 (둘은 거의 1:1, 계절조정 차이만)
     const cL = lastD(cpiGm), gL = lastD(grM);
     const nx = cL && gL > cL ? gL : null;
-    out += chips([
-      chip(`휘발유 소매 · ${ml(d0)}`, '$' + f2(GR.get(d0)), `원유 ${f2(gC.get(d0))} + 정제 ${f2(gM.get(d0))} + 유통·세금 ${f2(gT.get(d0))}`),
-      chip('휘발유 유통·세금 마진', '$' + f2(gT.get(d0)), `2010~19 평균 $${f2(aT)}`, gT.get(d0) > aT ? '#c0392b' : '#1a4fa0'),
-      chip(`디젤 소매 · ${ml(lastD(DR))}`, '$' + f2(DR.get(lastD(DR))), `유통·세금 ${f2(dT.get(lastD(dT)))} (평균 ${f2(aDT)})`),
-      nx ? chip(`CPI 휘발유 가늠 · ${ml(nx)}`, sg(grM.get(nx)) + '%', '소매가 전월비 (원계열) — CPI 발표 전 참고', red(grM.get(nx)))
-        : cL ? chip(`CPI 휘발유 전월비 · ${ml(cL)}`, sg(cpiGm.get(cL)) + '%', `소매가 전월비 ${grM.has(cL) ? sg(grM.get(cL)) + '%' : '—'} (원계열)`, red(cpiGm.get(cL))) : '',
-    ]) + note('소매가 = 원유(WTI/42) + 정제마진(NY항 도매 − 원유) + 유통·세금(소매 − 도매). 유통·세금에는 연방·주 유류세(갤런당 약 $0.5)가 들어 있어 0 이 되지 않는다. '
-        + '도매가가 급락하면 소매가가 늦게 따라 내려 이 몫이 일시적으로 커진다 (rockets and feathers).')
-      + row2(canv('oilC0', 280), canv('oilC1', 280)) + row2(canv('oilC2', 280), canv('oilC3', 280))
-      + table([['휘발유 소매 ($/gal)', GR, f2, false, 0], ['원유 (WTI/42)', gC], ['정제마진 (도매 − 원유)', gM], ['유통·세금 (소매 − 도매)', gT],
-        '-', ['디젤 소매 ($/gal)', DR, f2, false, 0], ['원유 (WTI/42)', dC], ['정제마진 (도매 − 원유)', dM], ['유통·세금 (소매 − 도매)', dT],
+    const cpiChip = nx ? chip(`CPI 휘발유 가늠 · ${ml(nx)}`, sg(grM.get(nx)) + '%', '소매가 전월비 (원계열) — CPI 발표 전 참고', red(grM.get(nx)))
+      : cL ? chip(`CPI 휘발유 전월비 · ${ml(cL)}`, sg(cpiGm.get(cL)) + '%', `소매가 전월비 ${grM.has(cL) ? sg(grM.get(cL)) + '%' : '—'} (원계열)`, red(cpiGm.get(cL))) : '';
+    const db = (u, l) => `<button data-oild="${u}" style="font-size:12px;padding:3px 10px;border:1px solid ${oilDecomp === u ? '#1a4fa0' : '#c8d0dc'};`
+      + `background:${oilDecomp === u ? '#1a4fa0' : '#fff'};color:${oilDecomp === u ? '#fff' : '#333'};border-radius:4px;cursor:pointer">${l}</button>`;
+    out += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px;flex-wrap:wrap"><b>분해 기준</b>'
+      + (hasE ? db('eia', 'EIA 공식') : '') + db('mkt', '시장가 추정')
+      + `<span style="color:#8592a3">${hasE ? `EIA 는 ${ml(lastD(eGR))} 까지 (2~3개월 늦음) · 시장가 추정은 ${ml(lastD(gT))} 까지` : 'EIA 데이터 없음 — python fetch.py us_pump'}</span></div>`;
+    if (E) {
+      const g0 = lastD(eGR), d0 = lastD(eDR);
+      const aGD = avg(eG[2]), aDD = avg(eD[2]);
+      out += chips([
+        chip(`휘발유 소매 · ${ml(g0)}`, '$' + f2(eGR.get(g0)), EK.map((k, i) => `${k} ${f2(eG[i].get(g0))}`).join(' · ')),
+        chip('휘발유 유통·마케팅', '$' + f2(eG[2].get(g0)), `2010~19 평균 $${f2(aGD)}`, eG[2].get(g0) > aGD ? '#c0392b' : '#1a4fa0'),
+        chip(`디젤 소매 · ${ml(d0)}`, '$' + f2(eDR.get(d0)), EK.map((k, i) => `${k} ${f2(eD[i].get(d0))}`).join(' · ')),
+        chip('디젤 정제 몫', '$' + f2(eD[1].get(d0)), `2010~19 평균 $${f2(avg(eD[1]))}`, eD[1].get(d0) > avg(eD[1]) ? '#c0392b' : '#1a4fa0'),
+        cpiChip,
+      ]) + note('EIA 공식 분해 (Gasoline and Diesel Fuel Update). <b>원유</b> = 정유사 원유 도입단가(국산·수입 가중, WTI 아님) · <b>정제</b> = 도매(rack)가 − 원유 · '
+          + '<b>유통·마케팅</b> = 소매가 − 도매가 − 세금 · <b>세금</b> = 연방 + 주 평균. EIA 는 비중(%)만 내므로 소매가 × 비중으로 $/gal 을 만들었다 (반올림으로 합계가 ±0.01 어긋날 수 있다).');
+    } else {
+      const d0 = lastD(GR), aT = avg(gT), aDT = avg(dT);
+      out += chips([
+        chip(`휘발유 소매 · ${ml(d0)}`, '$' + f2(GR.get(d0)), `원유 ${f2(gC.get(d0))} + 정제 ${f2(gM.get(d0))} + 유통·세금 ${f2(gT.get(d0))}`),
+        chip('휘발유 유통·세금 마진', '$' + f2(gT.get(d0)), `2010~19 평균 $${f2(aT)}`, gT.get(d0) > aT ? '#c0392b' : '#1a4fa0'),
+        chip(`디젤 소매 · ${ml(lastD(DR))}`, '$' + f2(DR.get(lastD(DR))), `유통·세금 ${f2(dT.get(lastD(dT)))} (평균 ${f2(aDT)})`),
+        cpiChip,
+      ]) + note('시장가 추정: 소매가 = 원유(WTI/42) + 정제마진(NY항 도매 − 원유) + 유통·세금(소매 − 도매). 소매가는 전국 평균, 도매가는 NY항이라 지역이 섞여 있다. '
+          + '유통·세금에는 연방·주 유류세(갤런당 약 $0.5)가 들어 있어 0 이 되지 않는다. 도매가가 급락하면 소매가가 늦게 따라 내려 이 몫이 일시적으로 커진다 (rockets and feathers).');
+    }
+    out += row2(canv('oilC0', 280), canv('oilC1', 280)) + row2(canv('oilC2', 280), canv('oilC3', 280))
+      + table([
+        ...(hasE ? [['휘발유 소매 · EIA ($/gal)', eGR, f2, false, 0], ...EK.map((k, i) => [k, eG[i]]),
+          ['디젤 소매 · EIA ($/gal)', eDR, f2, false, 0], ...EK.map((k, i) => [k, eD[i]]), '-'] : []),
+        ['휘발유 소매 · 시장가 추정 ($/gal)', GR, f2, false, 0], ['원유 (WTI/42)', gC], ['정제마진 (NY항 도매 − 원유)', gM], ['유통·세금 (소매 − 도매)', gT],
+        ['디젤 소매 · 시장가 추정 ($/gal)', DR, f2, false, 0], ['원유 (WTI/42)', dC], ['정제마진 (NY항 도매 − 원유)', dM], ['유통·세금 (소매 − 도매)', dT],
         '-', ['CPI 휘발유 전월비 (%, SA)', cpiGm, f1, true, 0], ['소매 휘발유 전월비 (%)', grM, f1, true],
         ['CPI 항공료 전년비 (%)', cpiAy, f1, true, 0], ['항공유 전년비 (%)', jY, f1, true]]);
     box.innerHTML = out;
+    box.querySelectorAll('[data-oild]').forEach(b => b.onclick = () => { oilDecomp = b.dataset.oild; renderOil(); });
     const stk = (lab, m, c) => ({ type: 'bar', label: lab, data: cols.map(d => m.get(d) ?? null), backgroundColor: c, stack: 's', order: 2 });
-    mk('oilC0', '휘발유 소매가 분해 ($/gal)', cols, [ln('소매가', GR, '#c0392b', cols, { w: 2.4, order: 0 }),
-      stk('원유', gC, '#0b2a5b'), stk('정제마진', gM, '#d9822b'), stk('유통·세금', gT, '#a6a6a6')], { bar: true });
-    mk('oilC1', '디젤 소매가 분해 ($/gal)', cols, [ln('소매가', DR, '#c0392b', cols, { w: 2.4, order: 0 }),
-      stk('원유', dC, '#0b2a5b'), stk('정제마진', dM, '#d9822b'), stk('유통·세금', dT, '#a6a6a6')], { bar: true });
+    const ECOL = ['#0b2a5b', '#d9822b', '#a6a6a6', '#7cc242'];
+    if (E) {
+      mk('oilC0', '휘발유 소매가 구성 — EIA ($/gal)', cols, [ln('소매가', eGR, '#c0392b', cols, { w: 2.4, order: 0 }),
+        ...EK.map((k, i) => stk(k, eG[i], ECOL[i]))], { bar: true });
+      mk('oilC1', '디젤 소매가 구성 — EIA ($/gal)', cols, [ln('소매가', eDR, '#c0392b', cols, { w: 2.4, order: 0 }),
+        ...EK.map((k, i) => stk(k, eD[i], ECOL[i]))], { bar: true });
+    } else {
+      mk('oilC0', '휘발유 소매가 분해 — 시장가 추정 ($/gal)', cols, [ln('소매가', GR, '#c0392b', cols, { w: 2.4, order: 0 }),
+        stk('원유', gC, '#0b2a5b'), stk('정제마진', gM, '#d9822b'), stk('유통·세금', gT, '#a6a6a6')], { bar: true });
+      mk('oilC1', '디젤 소매가 분해 — 시장가 추정 ($/gal)', cols, [ln('소매가', DR, '#c0392b', cols, { w: 2.4, order: 0 }),
+        stk('원유', dC, '#0b2a5b'), stk('정제마진', dM, '#d9822b'), stk('유통·세금', dT, '#a6a6a6')], { bar: true });
+    }
     mk('oilC2', 'CPI 휘발유 vs 소매 휘발유 (전월비 %)', cols, [ln('CPI 휘발유 (SA)', cpiGm, '#1a2b4a', cols, { w: 2.4, pr: 2 }),
       ln('소매 휘발유 (원계열)', grM, '#d9822b', cols, { dash: [5, 3] })], { fmt: f1 });
     mk('oilC3', 'CPI 항공료 vs 항공유 (전년비 %)', cols, [ln('CPI 항공료', cpiAy, '#1a2b4a', cols, { w: 2.4 }),
       ln('항공유 (우)', jY, '#5b8fd6', cols, { y2: true })], { fmt: f1, y2: '항공유 %' });
+  } else if (oilTab === 'refine') {
+    // 정제설비 — EIA 월별(유휴능력·가동률) + 주별(가동률). 크랙이 왜 안 내려오는지의 공급 쪽 설명.
+    const R = (ind, n) => { const x = ind && ind.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+    if (!oilRef) { box.innerHTML = '<div style="padding:24px;color:#888">정제설비 데이터가 없습니다. <b>python fetch.py us_refinery us_refinery_w</b> 실행 필요.</div>'; return; }
+    const UT = R(oilRef, '가동률'), ID = R(oilRef, '유휴 정제능력'), OP = R(oilRef, '운영가능 정제능력'),
+          OG = R(oilRef, '가동 중 정제능력'), IN = R(oilRef, '정제 총투입');
+    const WU = R(oilRefW, '가동률');
+    const fk = v => Math.round(v).toLocaleString('en-US');
+    const m0 = lastD(UT), aID = avg(ID), aUT = avg(UT);
+    const opY = OP.get(addM(m0, -12)), opChg = opY ? OP.get(m0) - opY : null;
+    // 주별: 최신·4주 평균·작년 같은 주
+    const wds = [...WU.keys()].sort(), w0 = wds[wds.length - 1];
+    const w4 = wds.slice(-4).reduce((a, d) => a + WU.get(d), 0) / 4;
+    const wk = d => { const t = new Date(d + 'T00:00:00Z'); const j = Date.UTC(t.getUTCFullYear(), 0, 1);
+      return Math.min(52, Math.floor((t - j) / 864e5 / 7) + 1); };
+    const yr = d => +d.slice(0, 4);
+    const ly = wds.filter(d => yr(d) === yr(w0) - 1 && wk(d) === wk(w0))[0];
+    const md = d => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
+    out += chips([
+      chip(`주간 가동률 · ${md(w0)}`, f1(WU.get(w0)) + '%', `4주 평균 ${f1(w4)}% · 작년 같은 주 ${ly ? f1(WU.get(ly)) + '%' : '—'}`, WU.get(w0) > 92 ? '#c0392b' : '#1a2b4a'),
+      chip(`유휴 정제능력 · ${ml(m0)}`, fk(ID.get(m0)) + '천b/d', `2010~19 평균 ${fk(aID)}천b/d · 운영가능의 ${f1(ID.get(m0) / OP.get(m0) * 100)}%`, ID.get(m0) < aID ? '#c0392b' : '#1a4fa0'),
+      chip(`월 가동률 · ${ml(m0)}`, f1(UT.get(m0)) + '%', `2010~19 평균 ${f1(aUT)}%`, UT.get(m0) > aUT ? '#c0392b' : '#1a4fa0'),
+      chip(`운영가능 능력 · ${ml(m0)}`, fk(OP.get(m0)) + '천b/d', `1년 전보다 ${opChg == null ? '—' : sg(opChg, fk)}천b/d (정유소 폐쇄·증설)`, opChg != null && opChg < 0 ? '#c0392b' : '#1a2b4a'),
+    ]) + note('<b>유휴 정제능력</b> = 운영가능 − 가동 중 능력 (원유 증류 기준, 천배럴/일). 0 에 가깝다는 건 정기보수를 미루고 풀가동 중이라는 뜻 — '
+        + '예정에 없던 고장 하나에도 제품가가 튄다. 정유소가 문을 닫으면 운영가능 능력에서 빠져 유휴가 작아 보이므로 <b>운영가능 능력 추이</b>를 같이 본다. '
+        + 'EIA 월별은 2~3개월 늦고, 주별 가동률은 매주 수요일 발표.')
+      + row2(canv('oilC0', 290), canv('oilC1', 290)) + row2(canv('oilC2', 290), canv('oilC3', 290))
+      + table([['가동률 (%)', UT, f1, false, 0], ['유휴 정제능력 (천b/d)', ID, fk], ['운영가능 정제능력', OP, fk], ['가동 중 정제능력', OG, fk], ['정제 총투입', IN, fk],
+        '-', ['3-2-1 크랙 ($/bbl)', K321, f1, false, 0], ['디젤 크랙', KD, f1]]);
+    box.innerHTML = out;
+    const bar = (lab, m, c) => ({ type: 'bar', label: lab, data: cols.map(d => m.get(d) ?? null), backgroundColor: c, order: 2, yAxisID: 'y' });
+    mk('oilC0', '유휴 정제능력 (천b/d, 막대) vs 가동률 (%, 우)', cols,
+      [bar('유휴 정제능력', ID, '#a9cdf0'), ln('가동률 (우)', UT, '#c0392b', cols, { y2: true, w: 2.4, fmt: f1 })],
+      { bar: true, fmt: fk, y2: '가동률 %' });
+    // 주간 가동률 계절 비교: 올해·작년 vs 2015~19 범위
+    const W = [...Array(52)].map((_, i) => i + 1);
+    const byYW = new Map();
+    wds.forEach(d => byYW.set(yr(d) + '-' + wk(d), WU.get(d)));
+    const ys = [2015, 2016, 2017, 2018, 2019];
+    const rng = W.map(w => ys.map(y => byYW.get(y + '-' + w)).filter(v => v != null));
+    const lo = rng.map(a => a.length ? Math.min(...a) : null), hi = rng.map(a => a.length ? Math.max(...a) : null);
+    const av = rng.map(a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const Y0 = yr(w0);
+    const yl = y => W.map(w => byYW.get(y + '-' + w) ?? null);
+    const el = box.querySelector('#oilC1');
+    if (el) oilCharts.push(new Chart(el, { type: 'line',
+      data: { labels: W.map(String), datasets: [
+        { label: '2015~19 최고', data: hi, borderColor: 'rgba(0,0,0,0)', backgroundColor: 'rgba(150,160,180,0.22)', pointRadius: 0, fill: '+1', order: 5 },
+        { label: '2015~19 최저', data: lo, borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false, order: 5 },
+        { label: '2015~19 평균', data: av, borderColor: '#8592a3', borderDash: [5, 4], borderWidth: 1.4, pointRadius: 0, order: 4 },
+        { label: String(Y0 - 1), data: yl(Y0 - 1), borderColor: '#5b8fd6', borderWidth: 1.8, pointRadius: 0, spanGaps: true, order: 1 },
+        { label: String(Y0), data: yl(Y0), borderColor: '#c0392b', backgroundColor: '#c0392b', borderWidth: 2.6, pointRadius: 0, spanGaps: true, order: 0 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { title: { display: true, text: '주간 가동률 (%) — 올해·작년 vs 2015~19 범위', font: { size: 12 } },
+          legend: { labels: { boxWidth: 12, font: { size: 11 }, filter: it => it.text !== '2015~19 최저' } },
+          tooltip: { callbacks: { title: it => `${it[0].label}주차`, label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : f1(it.parsed.y)}%` } } },
+        scales: { x: { ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: false,
+            callback: function (v, i) { const w = i + 1; const m = [1, 5, 9, 14, 18, 22, 27, 31, 35, 40, 44, 48].indexOf(w); return m >= 0 ? (m + 1) + '월' : ''; } } },
+          y: { ticks: { font: { size: 10 } } } } } }));
+    mk('oilC2', '가동률 (%) vs 3-2-1 크랙 ($/bbl, 우)', cols,
+      [ln('가동률', UT, '#1a2b4a', cols, { w: 2.4, fmt: f1 }), ln('3-2-1 크랙 (우)', K321, '#d9822b', cols, { y2: true, fmt: f1 })],
+      { fmt: f1, y2: '크랙 $/bbl' });
+    mk('oilC3', '운영가능 능력 vs 총투입 (천b/d)', cols,
+      [ln('운영가능 정제능력', OP, '#1a2b4a', cols, { w: 2.4 }), ln('가동 중 정제능력', OG, '#5b8fd6', cols, { dash: [5, 3] }),
+       ln('정제 총투입', IN, '#c0392b', cols)], { fmt: fk });
   } else if (oilTab === 'freight') {
     const FTL = S('트럭운임 PPI (FTL 장거리)'), LTL = S('트럭운임 PPI (LTL 장거리)'), TRK = S('트럭운송 PPI (전체)');
     const CSH = S('Cass 출하량'), CEX = S('Cass 운임지출'), TON = S('ATA 트럭 톤수');

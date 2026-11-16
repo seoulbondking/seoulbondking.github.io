@@ -1975,6 +1975,7 @@ indicators:
         DCOILWTICO: WTI
         DCOILBRENTEU: 브렌트유
         DGASNYH: 휘발유 도매 (NY항)
+        DGASUSGULF: 휘발유 도매 (걸프)
         DDFUELNYH: 디젤 도매 (NY항)
         DJFUELUSGULF: 항공유 도매 (걸프)
         GASREGW: 휘발유 소매
@@ -1985,6 +1986,53 @@ indicators:
         FRGSHPUSM649NCIS: Cass 출하량
         FRGEXPUSM649NCIS: Cass 운임지출
         TRUCKD11: ATA 트럭 톤수
+
+  # EIA 소매가 구성 (유가 흐름 > 소매가·CPI 탭) — 원유·정제·유통·세금, $/gal
+  #   EIA Gasoline and Diesel Fuel Update 의 Pump Components History 표 (키 불필요, HTML).
+  #   원유는 정유사 도입단가(RAC)라 WTI/42 와 다르다. 공표가 2~3개월 늦다.
+  #   표가 작아(월 300줄) 매번 통째로 받는다.
+  - id: us_pump
+    name: 미국 휘발유·디젤 소매가 구성 (EIA)
+    source: eia
+    unit: 달러/갤런
+    freq: M
+    start_year: 2000
+    always_full: true
+    params:
+      products: {gas: 휘발유, diesel: 디젤}
+
+  # EIA 정제설비 가동률·유휴능력 (유가 흐름 > 정제설비 탭)
+  #   유휴 정제능력 = 운영가능 − 가동 중 능력. 0 에 가까우면 정기보수를 미루고 풀가동 중이라는 뜻.
+  #   가동률 = 총투입 ÷ 운영가능 능력 (원유 증류 기준). 월별은 2~3개월 늦고, 주별은 다음 주 수요일에 나온다.
+  #   ※ 정유소가 폐쇄되면 '운영가능' 에서 빠지므로 유휴능력이 0 에 가까워 보일 수 있다 — 운영가능 능력 추이를 같이 볼 것.
+  - id: us_refinery
+    name: 미국 정제설비 가동 (월)
+    source: eia
+    unit: 천배럴/일·%
+    freq: M
+    start_year: 2000
+    always_full: true
+    params:
+      dnav:
+        PET_PNP_UNC_DCU_NUS_M:
+          MOPUEUS2: 가동률
+          MOCIDUS2: 유휴 정제능력
+          MOCLEUS2: 운영가능 정제능력
+          MOCGGUS2: 가동 중 정제능력
+          MGIRIUS2: 정제 총투입
+  - id: us_refinery_w
+    name: 미국 정제설비 가동 (주)
+    source: eia
+    unit: 천배럴/일·%
+    freq: W
+    start_year: 2000
+    always_full: true
+    params:
+      dnav:
+        PET_PNP_WIUP_DCU_NUS_W:
+          WPULEUS3: 가동률
+          WGIRIUS2: 정제 총투입
+          WOCLEUS2: 운영가능 정제능력
 
   # 임금 → 물가 전이 (미국 고용상황 > 임금→물가 탭)
   #   가격 = 단위노동비용 × 마진. 단위노동비용(ULC) = 시간당 보수 ÷ 생산성.

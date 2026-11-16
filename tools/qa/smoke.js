@@ -68,12 +68,21 @@ const chkHas = (name, elId, needle) => {
   }
   if (w.__MACRO__ && w.__MACRO__.us_ppi) {
     await ev('enterUsPpi()');
-    for (const t of ['chg', 'idx', 'ctb']) { ev(`usPpiTab='${t}'; refresh();`); chk('미국 생산자물가 > ' + t, 'retailWrap'); }
+    for (const t of ['ctb', 'chg']) { ev(`usPpiTab='${t}'; refresh();`); chk('미국 생산자물가 > ' + t, 'retailWrap'); }
+    ev(`usPpiFold = new Set(); usPpiTab = 'chg'; refresh();`);   // 모두 펼치기
+    chkHas('미국 PPI > 운송 세부', 'retailWrap', '트럭 장거리 FTL');
+    chkHas('미국 PPI > 에너지 세부', 'retailWrap', '디젤');
+    chkHas('미국 PPI > 식료품 세부', 'retailWrap', '계란');
   } else { console.log('  미국 생산자물가              (데이터 없음 — python fetch.py us_ppi us_ppi_nsa)'); }
   if (w.__MACRO__ && w.__MACRO__.us_pce) {
     await ev('enterUsPce()');
     for (const t of ['price', 'real', 'income', 'mkt', 'sd']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
   } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
+  if (w.__MACRO__ && w.__MACRO__.us_oil) {
+    await ev('enterOil()');
+    for (const t of ['crack', 'retail', 'freight', 'base']) { ev(`oilTab='${t}'; refresh();`); chk('유가 흐름 > ' + t, 'retailWrap'); }
+    chkHas('유가 흐름 > 기저효과 표', 'retailWrap', '가격 동결');
+  } else { console.log('  유가 흐름                    (데이터 없음 — python fetch.py us_oil)'); }
   await ev('enterFundFlow()');
   for (const m of ['change', 'balance']) { ev(`fundMode='${m}'; renderFundFlow();`); chk('자금흐름 > ' + m, 'retailWrap'); }
   for (const u of ['pct', 'eok']) {
@@ -131,6 +140,8 @@ const chkHas = (name, elId, needle) => {
   for (const t of ['lf', 'industry', 'hrs', 'dur', 'flow', 'jolts', 'lmci']) {
     ev(`usEmpTab='${t}'; renderUsEmp();`); chk('미국 고용 > ' + t, 'retailWrap');
   }
+  await ev("ensureUsWp().then(() => { usEmpTab = 'wp'; renderUsEmp(); })").catch(() => {});
+  chk('미국 고용 > wp', 'retailWrap'); chkHas('임금→물가 > 단계별 표', 'retailWrap', '단계별 수치');
 
   // nav 에 나와야 할 지표가 빠지지 않았는지
   const src = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -145,7 +156,7 @@ const chkHas = (name, elId, needle) => {
   await new Promise(r => setTimeout(r, 200));
   const btns = [...w.document.querySelectorAll('nav button')].map(b => b.textContent.trim());
   console.log('\n  nav 버튼 ' + btns.length + '개');
-  const wantBtn = ['소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향'];
+  const wantBtn = ['유가 흐름', '소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향'];
   wantBtn.forEach(t => {
     const ok = btns.some(b => b === t || b.indexOf(t) === 0);
     if (!ok) fail++;

@@ -2052,6 +2052,48 @@ indicators:
         OPHNFB: 노동생산성 (비농업)
         HCOMPBS: 시간당 보수 (비농업)
 
+  # 소비·신용 (전용 화면) — 연준 G.19 소비자신용 + 소득·소비·저축
+#   US_macro.xlsm 'Credit' 시트와 같은 계열. FRED 는 백만달러라 scale 로 십억달러로 맞춘다.
+#   G.19 금리(카드·자동차·개인대출)는 분기 중간월(2·5·8·11월)에만 값이 있다 — 나머지 달은 결측.
+  - id: us_ccredit
+    name: 미국 소비자신용·저축
+    source: fred
+    unit: 십억달러·%
+    freq: M
+    start_year: 2000
+    refetch_years: 3
+    series_first: ["소비자신용 잔액"]
+    params:
+      series:
+        TOTALSL: 소비자신용 잔액
+        REVOLSL: 리볼빙 잔액
+        NONREVSL: 비리볼빙 잔액
+        PSAVERT: 개인저축률
+        DSPIC96: 실질 가처분소득
+        PCEC96: 실질 소비지출
+        DSPI: 명목 가처분소득
+        FEDFUNDS: 연방기금금리
+        TERMCBCCALLNS: 카드 금리 (전체 계좌)
+        TERMCBCCINTNS: 카드 금리 (이자 부과 계좌)
+        TERMCBPER24NS: 개인대출 금리 (24개월)
+        RIFLPBCIANM60NM: 신차 대출 금리 (60개월)
+        RIFLPBCIANM72NM: 신차 대출 금리 (72개월)
+      scale: {TOTALSL: 0.001, REVOLSL: 0.001, NONREVSL: 0.001}
+
+  # 상업은행 소비자대출 연체·상각률 (분기, %, SA) — 소비·신용 화면의 금리·연체 탭
+  - id: us_ccredit_q
+    name: 미국 소비자대출 연체율
+    source: fred
+    unit: '%'
+    freq: Q
+    start_year: 2000
+    refetch_years: 3
+    params:
+      series:
+        DRCCLACBS: 카드 연체율
+        CORCCACBS: 카드 상각률
+        DRCLACBS: 소비자대출 연체율
+
   # JOLTS — 구인·채용·이직·해고 (전산업, 천건 및 %)
   - id: us_jolts
     name: 미국 JOLTS (구인·이직)

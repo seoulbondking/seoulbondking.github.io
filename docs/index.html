@@ -314,6 +314,11 @@
         <button data-oil="freight">운송비</button>
         <button data-oil="base">기저효과</button>
       </div>
+      <div id="ccrTabs" class="mode" style="display:none">
+        <button data-ccr="credit" class="active">신용 증가</button>
+        <button data-ccr="gap">소득·소비·저축</button>
+        <button data-ccr="rate">금리·연체</button>
+      </div>
       <div id="usPceTabs" class="mode" style="display:none">
         <button data-uc2="price" class="active">물가</button>
         <button data-uc2="real">실질소비</button>
@@ -687,7 +692,7 @@ let catalog = [], current = null, chart = null;
 // 버튼을 다 만든 **뒤에** DOM 에서 자리만 옮긴다 — 어떤 지표에서 어떤 버튼이 생기는지
 // (US_EMP 처럼 지표 10개가 버튼 하나로 묶이는 경우 포함)를 건드리지 않아서
 // 지표가 늘거나 yaml 순서가 바뀌어도 깨지지 않는다. 없는 버튼은 그냥 건너뛴다.
-const NAV_ORDER = ['usGdpBtn', 'fisBtn', 'gnBtn', 'ismBtn', 'oilBtn', 'usPceBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn',
+const NAV_ORDER = ['usGdpBtn', 'fisBtn', 'gnBtn', 'ismBtn', 'oilBtn', 'usPceBtn', 'ccrBtn', 'usCpiBtn', 'usPpiBtn', 'nowcBtn',
                    'usEmpBtn', 'fedBtn', 'aucBtn', 'yenBtn'];
 function applyNavOrder(nav) {
   const btns = NAV_ORDER.map(id => document.getElementById(id)).filter(Boolean);
@@ -700,7 +705,7 @@ function applyNavOrder(nav) {
   btns.forEach(b => { prev.after(b); prev = b; });
   mark.remove();
 }
-const NAV_HIDE = ['us_pump', 'us_refinery', 'us_refinery_w', 'kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
+const NAV_HIDE = ['us_ccredit_q', 'us_pump', 'us_refinery', 'us_refinery_w', 'kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
                   // kr_yield(34MB)는 메뉴에서 내렸다 — 클릭하면 통째로 받느라 굳는다
                   'kr_yield', 'kr_policy_bei', 'mkt_oil_fx',
@@ -947,7 +952,7 @@ function refresh() {
   const isTot = view === 'tot', isWg = view === 'wage', isCard = view === 'card';
   const isUCpi = view === 'uscpi', isFed = view === 'fed', isHd = view === 'hdebt';
   const isYen = view === 'yen', isNowc = view === 'nowcast', isIrs = view === 'irs';
-  const isAuc = view === 'auction', isOil = view === 'oil';
+  const isAuc = view === 'auction', isOil = view === 'oil', isCcr = view === 'ccr';
   const isUPpi = view === 'usppi', isUPce = view === 'uspce', isUGdp = view === 'usgdp';
   const isGn = view === 'gdpnow', isFis = view === 'usfiscal', isIsm = view === 'ism', isM2h = view === 'm2h', isFvi = view === 'fvi';
   const tab = isCombo ? comboTab : null;
@@ -960,6 +965,7 @@ function refresh() {
   document.getElementById('usPpiTabs').style.display = isUPpi ? '' : 'none';
   document.getElementById('usPceTabs').style.display = isUPce ? '' : 'none';
   document.getElementById('oilTabs').style.display = isOil ? '' : 'none';
+  document.getElementById('ccrTabs').style.display = isCcr ? '' : 'none';
   if (view !== 'chart' && view !== 'table' && view !== 'multi')
     document.getElementById('gdpSwitch').style.display = 'none';
   document.querySelectorAll('#usCpiTabs button').forEach(b =>
@@ -972,7 +978,7 @@ function refresh() {
   document.getElementById('taylorTabs').style.display = isTay ? '' : 'none';
   // '금리 흐름'·'채권 계산' 은 한 화면뿐이라 탭 막대를 감춘다
   document.getElementById('yieldTabs').style.display = (isYld && yldMode === 'full') ? '' : 'none';
-  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc || isOil) ? '' : 'none';
+  document.getElementById('retailWrap').style.display = (isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc || isOil || isCcr) ? '' : 'none';
   document.querySelectorAll('#cpiTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.ct === cpiTab));
   document.getElementById('chartWrap').style.display =
@@ -985,13 +991,13 @@ function refresh() {
   document.getElementById('customWrap').style.display = (isCombo && tab === 'custom') ? '' : 'none';
   document.getElementById('mapWrap').style.display = (isCombo && tab === 'map') ? '' : 'none';
   document.getElementById('modeButtons').style.display =
-    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc || isOil) ? 'none' : '';
-  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc || isOil) ? 'none' : '';
+    (view === 'multi' || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc || isOil || isCcr) ? 'none' : '';
+  document.getElementById('viewButtons').style.display = (isCmp || isCombo || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYld || isNg || isFc || isFv || isJlt || isTot || isWg || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isIrs || isAuc || isOil || isCcr) ? 'none' : '';
   document.getElementById('compareBar').style.display = isCmp ? 'flex' : 'none';
   // 금리 흐름·채권 계산은 차트뿐이라 표 좌우 스크롤 버튼이 할 일이 없다 ('금리 분해'는 원자료 표가 있어 남긴다)
   const isYldTbl = isYld && yldMode === 'full';
   document.getElementById('scrollBtns').style.display =
-    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isAuc || isOil || (isCombo && tab === 'chart')) ? '' : 'none';
+    (view === 'table' || view === 'multi' || isCpiC || isRet || isPpi || isUsE || isFund || isKrE || isTay || isYldTbl || isNg || isFc || isFv || isJlt || isCard || isUCpi || isFed || isHd || isUPpi || isUPce || isUGdp || isGn || isIsm || isM2h || isFvi || isFis || isYen || isNowc || isAuc || isOil || isCcr || (isCombo && tab === 'chart')) ? '' : 'none';
   document.querySelector('.toolbar').style.display = (isCombo && tab === 'map') ? 'none' : '';
   // IRS 시나리오·채권 계산은 기간 선택기를 안 쓴다 (평가일 두 개가 기준이라 기간 개념이 없다).
   // 툴바 자체는 남겨서 제목이 계속 보이게 하고, 선택기만 감춘다.
@@ -1024,6 +1030,7 @@ function refresh() {
   else if (isUPpi) renderUsPpi();
   else if (isUPce) renderUsPce();
   else if (isOil) renderOil();
+  else if (isCcr) renderCcr();
   else if (isUGdp) renderUsGdp();
   else if (isGn) renderGdpNow();
   else if (isIsm) renderIsm();
@@ -11483,11 +11490,11 @@ function renderOil() {
       ]) + note('EIA 공식 분해 (Gasoline and Diesel Fuel Update). <b>원유</b> = 정유사 원유 도입단가(국산·수입 가중, WTI 아님) · <b>정제</b> = 도매(rack)가 − 원유 · '
           + '<b>유통·마케팅</b> = 소매가 − 도매가 − 세금 · <b>세금</b> = 연방 + 주 평균. EIA 는 비중(%)만 내므로 소매가 × 비중으로 $/gal 을 만들었다 (반올림으로 합계가 ±0.01 어긋날 수 있다).');
     } else {
-      const d0 = lastD(GR), aT = avg(gT), aDT = avg(dT);
+      const d0 = lastD(gT), dd0 = lastD(dT), aT = avg(gT), aDT = avg(dT);   // 소매가(주간)가 도매가보다 한 달 앞설 수 있다 — 분해 가능한 달 기준
       out += chips([
         chip(`휘발유 소매 · ${ml(d0)}`, '$' + f2(GR.get(d0)), `원유 ${f2(gC.get(d0))} + 정제 ${f2(gM.get(d0))} + 유통·세금 ${f2(gT.get(d0))}`),
         chip('휘발유 유통·세금 마진', '$' + f2(gT.get(d0)), `2010~19 평균 $${f2(aT)}`, gT.get(d0) > aT ? '#c0392b' : '#1a4fa0'),
-        chip(`디젤 소매 · ${ml(lastD(DR))}`, '$' + f2(DR.get(lastD(DR))), `유통·세금 ${f2(dT.get(lastD(dT)))} (평균 ${f2(aDT)})`),
+        chip(`디젤 소매 · ${ml(dd0)}`, '$' + f2(DR.get(dd0)), `유통·세금 ${f2(dT.get(dd0))} (평균 ${f2(aDT)})`),
         cpiChip,
       ]) + note('시장가 추정: 소매가 = 원유(WTI/42) + 정제마진(NY항 도매 − 원유) + 유통·세금(소매 − 도매). 소매가는 전국 평균, 도매가는 NY항이라 지역이 섞여 있다. '
           + '유통·세금에는 연방·주 유류세(갤런당 약 $0.5)가 들어 있어 0 이 되지 않는다. 도매가가 급락하면 소매가가 늦게 따라 내려 이 몫이 일시적으로 커진다 (rockets and feathers).');
@@ -11629,6 +11636,223 @@ function renderOil() {
     mk('oilC0', '전년비 경로 (% · 점선 = 가격 동결 가정)', xs, Y.flatMap(([n, m, c]) => [
       { ...ln(n, new Map([...m].filter(([d]) => !isF(d))), c, xs, { w: n === 'WTI' ? 2.8 : 1.8 }) },
       { ...ln(n + ' (가정)', new Map([...m].filter(([d]) => d >= end)), c, xs, { dash: [5, 4] }) }]), { fmt: f1 });
+  }
+  box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
+}
+
+// ── 소비·신용 (전용 화면) ─────────────────────────────────────────
+// 물가가 오르는데 소비가 버티는 이유를 본다: 실질소득 vs 실질소비 → 그 차이를 메우는 저축률 하락과 신용.
+// us_ccredit: 연준 G.19 소비자신용(십억달러, SA) + 저축률·실질소득·실질소비 (FRED 월별)
+// us_ccredit_q: 상업은행 카드·소비자대출 연체율·상각률 (분기)
+const CCR = { id: 'ccr', name: '소비·신용', ids: ['us_ccredit', 'us_ccredit_q'] };
+const CCR_BASE = ['2015-01', '2019-12'];
+let ccrData = null, ccrQ = null, ccrTab = 'credit', ccrCharts = [];
+
+async function enterCcr() {
+  ccrData = await loadIndicator('us_ccredit').catch(() => null);
+  ccrQ = await loadIndicator('us_ccredit_q').catch(() => null);
+  if (!ccrData) { alert('소비자신용 데이터가 없습니다. python fetch.py us_ccredit us_ccredit_q 실행 필요.'); return; }
+  current = { id: CCR.id, name: CCR.name, freq: 'M', unit: '십억달러·%',
+              updated_at: ccrData.updated_at, series: [] };
+  view = 'ccr';
+  document.getElementById('title').textContent = CCR.name;
+  document.getElementById('updatedAt').textContent = '데이터 갱신: ' + ccrData.updated_at;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.id === 'ccrBtn'));
+  const tabs = document.getElementById('ccrTabs');
+  if (!tabs.dataset.bound) {
+    tabs.addEventListener('click', e => {
+      if (!e.target.dataset.ccr) return;
+      ccrTab = e.target.dataset.ccr;
+      refresh();
+    });
+    tabs.dataset.bound = '1';
+  }
+  const ds = new Set();
+  ccrData.series.forEach(x => x.data.forEach(p => ds.add(p.d)));
+  periodDates = [...ds].sort();
+  const opts = periodDates.map(d => `<option value="${d}">${dateLabel(d)}</option>`).join('');
+  const sSel = document.getElementById('startSel'), eSel = document.getElementById('endSel');
+  sSel.innerHTML = opts; eSel.innerHTML = opts;
+  // 기본 2022년부터 — 2020~21 은 코로나 기저효과(실질소비 전년비 +25%, 저축률 30%대)가 최근 흐름을 눌러 버린다
+  startD = periodDates.find(d => d >= '2022-01') || periodDates[0];
+  endD = periodDates[periodDates.length - 1];
+  sSel.value = startD; eSel.value = endD;
+  refresh();
+}
+
+function renderCcr() {
+  const box = document.getElementById('retailWrap');
+  document.querySelectorAll('#ccrTabs button').forEach(b => b.classList.toggle('active', b.dataset.ccr === ccrTab));
+  ccrCharts.forEach(c => c && c.destroy()); ccrCharts = [];
+  const S = (n, src = ccrData) => { const x = src && src.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
+  const addM = (d, k) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) + k, 0)).toISOString().slice(0, 10);
+  const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
+  const mlQ = d => `'${d.slice(2, 4)}Q${Math.ceil(+d.slice(5, 7) / 3)}`;
+  const lastD = m => [...m.keys()].sort().pop();
+  const zip = (fn, ...ms) => { const out = new Map();
+    ms[0].forEach((_, d) => { const v = ms.map(m => m.get(d)); if (v.every(x => x != null)) out.set(d, fn(...v)); });
+    return out; };
+  const chg = (m, k) => { const out = new Map();
+    m.forEach((v, d) => { const p = m.get(addM(d, -k)); if (p) out.set(d, (v / p - 1) * 100); }); return out; };
+  const dif = (m, k = 1) => { const out = new Map();
+    m.forEach((v, d) => { const p = m.get(addM(d, -k)); if (p != null) out.set(d, v - p); }); return out; };
+  const ann = (m, k) => { const out = new Map();     // k개월 변화의 연율 (%)
+    m.forEach((v, d) => { const p = m.get(addM(d, -k)); if (p) out.set(d, (Math.pow(v / p, 12 / k) - 1) * 100); }); return out; };
+  const ma3 = m => { const out = new Map();
+    m.forEach((v, d) => { const a = m.get(addM(d, -1)), b = m.get(addM(d, -2)); if (a != null && b != null) out.set(d, (v + a + b) / 3); }); return out; };
+  const avg = (m, a = CCR_BASE[0], b = CCR_BASE[1]) => {
+    const v = [...m].filter(([d]) => d.slice(0, 7) >= a && d.slice(0, 7) <= b).map(x => x[1]);
+    return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+  const cols = periodDates.filter(inRange);
+  const f0 = v => v.toFixed(0), f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+  const sg = (v, f = f1) => (v >= 0 ? '+' : '−') + f(Math.abs(v));
+  const red = v => v >= 0 ? '#c0392b' : '#1a4fa0';
+
+  const chip = (lab, val, sub, col) => '<div style="min-width:150px;padding:6px 14px 6px 0;border-right:1px solid #e3e7ee">'
+    + `<div style="font-size:12.5px;color:#8592a3">${lab}</div>`
+    + `<div style="font-size:24px;font-weight:700;line-height:1.25;color:${col || '#1a2b4a'}">${val}</div>`
+    + `<div style="font-size:12px;color:#5a6b82">${sub}</div></div>`;
+  const chips = arr => '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">' + arr.join('') + '</div>';
+  const note = t => `<div style="font-size:12px;color:#8592a3;line-height:1.7;margin:2px 0 10px">${t}</div>`;
+  const canv = (id, h = 300) => `<div class="cchart" style="height:${h}px"><canvas id="${id}"></canvas></div>`;
+  const row2 = (a, b) => '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px">'
+    + `<div style="flex:1;min-width:340px">${a}</div><div style="flex:1;min-width:340px">${b}</div></div>`;
+  // 표: [라벨, Map, 형식, 색칠, 들여쓰기, 설명]
+  const table = (rows, xs = cols, lab = ml) => {
+    let h = '<div class="tscroll"><table class="data vlines"><thead><tr><th>항목</th>'
+      + xs.map(d => `<th>${lab(d)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(r => {
+      if (r === '-') { h += `<tr><td colspan="${xs.length + 1}" style="border-top:2px solid #9aa7b8;padding:0"></td></tr>`; return; }
+      const [nm, m, fmt = f1, colr = false, lv = 1, tip] = r;
+      h += `<tr class="lv${lv}"><td style="padding-left:${lv ? 22 : 8}px"${tip ? ` title="${tip}"` : ''}>`
+        + (lv ? nm : `<b>${nm}</b>`) + (tip ? '<span style="color:#b6bec9;font-size:11px"> ⓘ</span>' : '') + '</td>'
+        + xs.map(d => { const v = m.get(d); if (v == null) return '<td></td>';
+            return `<td style="${colr ? `color:${red(v)}` : ''}">${colr ? sg(v, fmt) : fmt(v)}</td>`; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  };
+  const xTk = lab => ({ maxTicksLimit: 12, font: { size: 10 }, maxRotation: 0,
+    callback: function (v) { return lab(this.getLabelForValue(v)); } });
+  const ln = (label, m, color, xs, o = {}) => ({ type: 'line', label, data: xs.map(d => m.get(d) ?? null),
+    borderColor: color, backgroundColor: color, borderWidth: o.w || 1.8, pointRadius: o.pr ?? 0,
+    borderDash: o.dash, tension: 0.15, spanGaps: true, yAxisID: o.y2 ? 'y2' : 'y', order: o.order ?? 0, _fmt: o.fmt });
+  const br = (label, m, color, xs, o = {}) => ({ type: 'bar', label, data: xs.map(d => m.get(d) ?? null),
+    backgroundColor: color, borderWidth: 0, stack: 's', order: 5, yAxisID: 'y', _fmt: o.fmt });
+  const ref = (label, v, xs, color = '#9aa7b8') => ({ type: 'line', label, data: xs.map(() => v), borderColor: color,
+    borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0, order: 9 });
+  const mk = (id, title, xs, datasets, o = {}) => {
+    const el = box.querySelector('#' + id); if (!el) return;
+    const fmt = o.fmt || f1, lab = o.lab || ml;
+    ccrCharts.push(new Chart(el, {
+      type: 'line',
+      data: { labels: xs, datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { title: { display: true, text: title, font: { size: 12 } },
+          legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { title: it => o.lab ? lab(it[0].label) : dateLabel(it[0].label),
+            label: it => ` ${it.dataset.label}: ${it.parsed.y == null ? '-' : (it.dataset._fmt || fmt)(it.parsed.y)}` } } },
+        scales: { x: { stacked: !!o.stack, ticks: xTk(lab) },
+          y: { stacked: !!o.stack, ticks: { font: { size: 10 } }, title: { display: !!o.yt, text: o.yt, font: { size: 10 } },
+               grid: { color: c => c.tick.value === 0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' } },
+          ...(o.y2 ? { y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } },
+                              title: { display: true, text: o.y2, font: { size: 10 } } } } : {}) } },
+    }));
+  };
+  const TOT = S('소비자신용 잔액'), REV = S('리볼빙 잔액'), NON = S('비리볼빙 잔액');
+  const SAV = S('개인저축률'), RDI = S('실질 가처분소득'), RPC = S('실질 소비지출'), NDI = S('명목 가처분소득');
+  const end = lastD(TOT);
+  let out = '';
+
+  if (ccrTab === 'credit') {
+    const dT = dif(TOT), dR = dif(REV), dN = dif(NON);
+    const aT = ann(TOT, 1), aR = ann(REV, 1), aN = ann(NON, 1);
+    const a3T = ann(ma3(TOT), 3), a3R = ann(ma3(REV), 3);
+    const yT = chg(TOT, 12), yR = chg(REV, 12), yN = chg(NON, 12);
+    const muR = avg(yR), muT = avg(yT);
+    out += chips([
+      chip(`소비자신용 잔액 (${ml(end)})`, (TOT.get(end) / 1000).toFixed(2) + '조$', `리볼빙 ${(REV.get(end) / 1000).toFixed(2)} · 비리볼빙 ${(NON.get(end) / 1000).toFixed(2)}`),
+      chip('월 증가', sg(dT.get(end), f1) + '십억$', `리볼빙 ${sg(dR.get(end))} · 비리볼빙 ${sg(dN.get(end))}`, red(dT.get(end))),
+      chip('총신용 3개월 연율', sg(a3T.get(end)) + '%', `단월 연율 ${sg(aT.get(end))}%`, red(a3T.get(end))),
+      chip('리볼빙(카드) 전년비', sg(yR.get(end)) + '%', `2015~19 평균 ${f1(muR)}% · 3개월 연율 ${sg(a3R.get(end))}%`, yR.get(end) > muR ? '#c0392b' : '#1a4fa0'),
+    ])
+      + note('연준 G.19 소비자신용(계절조정, 주택담보 제외). <b>리볼빙</b> = 신용카드 등 한도 대출, <b>비리볼빙</b> = 자동차·학자금·개인 할부대출. '
+        + '단월 연율은 출렁임이 커서 3개월 평균의 연율을 함께 본다. 엑셀 US_macro Credit 시트와 같은 계열.')
+      + row2(canv('ccrC0'), canv('ccrC1'))
+      + table([
+        ['증가율 (연율, %)', aT, f1, true, 0], ['리볼빙', aR, f1, true], ['비리볼빙', aN, f1, true], '-',
+        ['월 증가 (십억$)', dT, f1, true, 0], ['리볼빙', dR, f1, true], ['비리볼빙', dN, f1, true], '-',
+        ['잔액 (십억$)', TOT, f0, false, 0], ['리볼빙', REV, f0], ['비리볼빙', NON, f0], '-',
+        ['전년비 (%)', yT, f1, true, 0], ['리볼빙', yR, f1, true], ['비리볼빙', yN, f1, true]]);
+    box.innerHTML = out;
+    mk('ccrC0', '월 증가 (십억$) · 막대 = 리볼빙/비리볼빙', cols, [
+      br('리볼빙', dR, '#d9822b', cols), br('비리볼빙', dN, '#5b8fd6', cols),
+      ln('총 증가 3개월 평균', ma3(dT), '#1a2b4a', cols, { w: 2.4 })], { stack: true });
+    mk('ccrC1', '전년비 (%) · 점선 = 2015~19 평균', cols, [
+      ln('총 소비자신용', yT, '#1a2b4a', cols, { w: 2.4 }), ln('리볼빙', yR, '#d9822b', cols), ln('비리볼빙', yN, '#5b8fd6', cols),
+      ref(`리볼빙 2015~19 평균 ${f1(muR)}`, muR, cols, '#e8b98a'), ref(`총 2015~19 평균 ${f1(muT)}`, muT, cols)]);
+  } else if (ccrTab === 'gap') {
+    const yI = chg(RDI, 12), yC = chg(RPC, 12), gapY = zip((c, i) => c - i, yC, yI);
+    const a3I = ann(ma3(RDI), 3), a3C = ann(ma3(RPC), 3);
+    const muS = avg(SAV);
+    // 올해 누적 연율: 전년 12월 대비 최신월, 12/개월수 제곱
+    const dec = `${+end.slice(0, 4) - 1}-12-31`, nM = +end.slice(5, 7);
+    const ytd = m => m.get(dec) ? (Math.pow(m.get(end) / m.get(dec), 12 / nM) - 1) * 100 : null;
+    const yi = ytd(RDI), yc = ytd(RPC);
+    const CR = zip((c, i) => c / i * 100, TOT, NDI), RR = zip((c, i) => c / i * 100, REV, NDI);
+    const sv12 = SAV.get(addM(end, -12));
+    out += chips([
+      chip(`개인저축률 (${ml(end)})`, f1(SAV.get(end)) + '%', `2015~19 평균 ${f1(muS)}% · 1년 전 ${sv12 != null ? f1(sv12) : '—'}%`, SAV.get(end) < muS ? '#c0392b' : '#1a2b4a'),
+      chip(`실질 가처분소득 (${end.slice(0, 4)}년 누적 연율)`, yi == null ? '—' : sg(yi) + '%', `전년비 ${sg(yI.get(end))}%`),
+      chip(`실질 소비 (${end.slice(0, 4)}년 누적 연율)`, yc == null ? '—' : sg(yc) + '%', `전년비 ${sg(yC.get(end))}%`),
+      chip('소비 − 소득 (전년비)', sg(gapY.get(end)) + '%p', '양수 = 소득보다 소비가 빨리 늘어 저축을 헐고 있다', red(gapY.get(end))),
+      chip('소비자신용 ÷ 가처분소득', f1(CR.get(end)) + '%', `리볼빙 ${f2(RR.get(end))}%`),
+    ])
+      + note('실질소비가 실질 가처분소득보다 빨리 늘면 그 차이는 <b>저축률 하락</b>(또는 자산 매각·차입)으로 메운다. '
+        + '누적 연율 = 전년 12월 대비 최신월을 연율로 환산. 저축률은 소득 대비 비율이라, 소득이 개정되면 함께 크게 개정된다(BEA 연례 개정 주의).')
+      + row2(canv('ccrC0'), canv('ccrC1'))
+      + canv('ccrC2', 260)
+      + table([
+        ['개인저축률 (%)', SAV, f1, false, 0], '-',
+        ['실질 가처분소득 전년비 (%)', yI, f1, true, 0], ['3개월 평균 연율', a3I, f1, true],
+        ['실질 소비 전년비 (%)', yC, f1, true, 0], ['3개월 평균 연율', a3C, f1, true],
+        ['소비 − 소득 (전년비, %p)', gapY, f1, true, 0], '-',
+        ['소비자신용 ÷ 가처분소득 (%)', CR, f1, false, 0], ['리볼빙 ÷ 가처분소득', RR, f2]]);
+    box.innerHTML = out;
+    mk('ccrC0', '실질 소득 vs 실질 소비 (전년비 %)', cols, [
+      br('소비 − 소득 (%p)', gapY, 'rgba(192,57,43,0.25)', cols),
+      ln('실질 소비지출', yC, '#c0392b', cols, { w: 2.4 }), ln('실질 가처분소득', yI, '#1a2b4a', cols, { w: 2.4 })]);
+    mk('ccrC1', `개인저축률 (%) · 점선 = 2015~19 평균 ${f1(muS)}`, cols, [
+      ln('개인저축률', SAV, '#2e8b57', cols, { w: 2.4 }), ref('2015~19 평균', muS, cols)]);
+    mk('ccrC2', '소비자신용 ÷ 명목 가처분소득 (%)', cols, [
+      ln('총 소비자신용', CR, '#1a2b4a', cols, { w: 2.2 }), ln('리볼빙 (우)', RR, '#d9822b', cols, { y2: true })], { y2: '리볼빙 %' });
+  } else {
+    const RT = [['카드 금리 (전체 계좌)', '#c0392b'], ['카드 금리 (이자 부과 계좌)', '#e8826f'], ['개인대출 금리 (24개월)', '#8e44ad'],
+      ['신차 대출 금리 (60개월)', '#5b8fd6'], ['신차 대출 금리 (72개월)', '#9bbbe6'], ['연방기금금리', '#1a2b4a']]
+      .map(([n, c]) => [n, S(n), c]);
+    const card = RT[0][1], ff = RT[5][1];
+    const rx = cols.filter(d => card.has(d));            // G.19 금리가 있는 분기 중간월
+    const cE = lastD(card), spr = zip((c, f) => c - f, card, ff);
+    const QS = [['카드 연체율', '#c0392b'], ['카드 상각률', '#d9822b'], ['소비자대출 연체율', '#1a2b4a']].map(([n, c]) => [n, S(n, ccrQ), c]);
+    const qAll = ccrQ ? [...new Set(ccrQ.series.flatMap(x => x.data.map(p => p.d)))].sort() : [];
+    const qx = qAll.filter(d => d >= cols[0] && d <= cols[cols.length - 1]);
+    const dq = QS[0][1], qE = lastD(dq);
+    const muDq = avg(dq);
+    out += chips([
+      chip(`카드 금리 (${ml(cE)})`, f2(card.get(cE)) + '%', `이자 부과 계좌 ${f2(RT[1][1].get(cE))}%`, '#c0392b'),
+      chip('카드 금리 − 연방기금금리', f2(spr.get(cE)) + '%p', `2015~19 평균 ${f2(avg(spr))}%p`),
+      chip(`신차 60개월 · 개인 24개월`, `${f2(RT[3][1].get(cE))} · ${f2(RT[2][1].get(cE))}%`, ml(cE) + ' 기준'),
+      ...(qE ? [chip(`카드 연체율 (${mlQ(qE)})`, f2(dq.get(qE)) + '%', `2015~19 평균 ${f2(muDq)}% · 상각률 ${f2(QS[1][1].get(qE))}%`, dq.get(qE) > muDq ? '#c0392b' : '#1a2b4a')] : []),
+    ])
+      + note('G.19 상업은행 대출금리는 분기 중간월(2·5·8·11월)에만 나온다. 연체율·상각률은 상업은행 기준(연준, 분기·계절조정, 30일 이상 연체) — '
+        + '연령별 90일 이상 연체(뉴욕 연은 가계부채 보고서)와 BNPL 은 공개 API 가 없어 넣지 않았다.')
+      + row2(canv('ccrC0'), canv('ccrC1'))
+      + table([...RT.map(([n, m], i) => [n + ' (%)', m, f2, false, i === 0 || i === 5 ? 0 : 1]),
+        ['카드 금리 − 연방기금금리 (%p)', spr, f2, false, 0]], rx)
+      + (qx.length ? table(QS.map(([n, m], i) => [n + ' (%)', m, f2, false, i === 0 ? 0 : 1]), qx, mlQ) : '');
+    box.innerHTML = out;
+    mk('ccrC0', 'G.19 소비자대출 금리 (%)', rx, RT.map(([n, m, c], i) => ln(n, m, c, rx, { w: i === 0 ? 2.6 : 1.8, pr: 2, dash: i === 5 ? [5, 3] : undefined })), { fmt: f2 });
+    if (qx.length) mk('ccrC1', '상업은행 연체·상각률 (%, 분기)', qx, [...QS.map(([n, m, c], i) => ln(n, m, c, qx, { w: i === 0 ? 2.6 : 1.8 })),
+      ref(`카드 연체 2015~19 평균 ${f2(muDq)}`, muDq, qx)], { fmt: f2, lab: mlQ });
   }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
 }
@@ -18396,6 +18620,12 @@ document.getElementById('endSel').onchange = e => {
           b.id = 'usPpiBtn'; b.textContent = US_PPI.name; b.onclick = enterUsPpi;
           nav.appendChild(b); usPpiInserted = true;
         }
+        return;
+      }
+      if (item.id === 'us_ccredit') {     // 소비·신용 → 전용 화면
+        const b = document.createElement('button');
+        b.id = 'ccrBtn'; b.textContent = CCR.name; b.onclick = enterCcr;
+        nav.appendChild(b);
         return;
       }
       if (item.id === 'us_oil') {     // 유가 흐름 → 전용 화면

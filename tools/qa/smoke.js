@@ -79,6 +79,13 @@ const chkHas = (name, elId, needle) => {
     for (const t of ['price', 'real', 'income', 'mkt', 'sd']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
     ev(`usPceTab='sd'; refresh();`); chkHas('미국 PCE > 공급 점검표', 'retailWrap', '공급 점검표'); chkHas('미국 PCE > 세 관점', 'retailWrap', '② 초과분'); chkHas('미국 PCE > 공급 품목', 'retailWrap', 'PPI 트럭 화물');
   } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
+  if (w.__MACRO__ && w.__MACRO__.us_ccredit) {
+    await ev('enterCcr()');
+    for (const t of ['credit', 'gap', 'rate']) { ev(`ccrTab='${t}'; refresh();`); chk('소비·신용 > ' + t, 'retailWrap'); }
+    ev(`ccrTab='credit'; refresh();`); chkHas('소비·신용 > 신용 표', 'retailWrap', '리볼빙');
+    ev(`ccrTab='gap'; refresh();`); chkHas('소비·신용 > 저축률', 'retailWrap', '개인저축률');
+    ev(`ccrTab='rate'; refresh();`); chkHas('소비·신용 > 금리', 'retailWrap', '카드 금리');
+  } else { console.log('  소비·신용                    (데이터 없음 — python fetch.py us_ccredit us_ccredit_q)'); }
   if (w.__MACRO__ && w.__MACRO__.us_oil) {
     await ev('enterOil()');
     for (const t of ['crack', 'retail', 'refine', 'freight', 'base']) { ev(`oilTab='${t}'; refresh();`); chk('유가 흐름 > ' + t, 'retailWrap'); }
@@ -161,7 +168,7 @@ const chkHas = (name, elId, needle) => {
   await new Promise(r => setTimeout(r, 200));
   const btns = [...w.document.querySelectorAll('nav button')].map(b => b.textContent.trim());
   console.log('\n  nav 버튼 ' + btns.length + '개');
-  const wantBtn = ['유가 흐름', '소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향'];
+  const wantBtn = ['유가 흐름', '소비·신용', '소매판매', '카드사용액', '국내총생산', '주간 아파트 매매&전세 동향'];
   wantBtn.forEach(t => {
     const ok = btns.some(b => b === t || b.indexOf(t) === 0);
     if (!ok) fail++;

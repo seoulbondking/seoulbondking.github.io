@@ -76,14 +76,16 @@ const chkHas = (name, elId, needle) => {
   } else { console.log('  미국 생산자물가              (데이터 없음 — python fetch.py us_ppi us_ppi_nsa)'); }
   if (w.__MACRO__ && w.__MACRO__.us_pce) {
     await ev('enterUsPce()');
-    for (const t of ['price', 'real', 'income', 'mkt', 'sd']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
+    for (const t of ['price', 'mkt', 'sd']) { ev(`usPceTab='${t}'; refresh();`); chk('미국 PCE > ' + t, 'retailWrap'); }
     ev(`usPceTab='sd'; refresh();`); chkHas('미국 PCE > 공급 점검표', 'retailWrap', '공급 점검표'); chkHas('미국 PCE > 세 관점', 'retailWrap', '② 초과분'); chkHas('미국 PCE > 공급 품목', 'retailWrap', 'PPI 트럭 화물');
   } else { console.log('  미국 PCE                    (데이터 없음 — python fetch.py us_pce)'); }
   if (w.__MACRO__ && w.__MACRO__.us_ccredit) {
     await ev('enterCcr()');
-    for (const t of ['credit', 'gap', 'rate']) { ev(`ccrTab='${t}'; refresh();`); chk('소비·신용 > ' + t, 'retailWrap'); }
+    for (const t of ['gap', 'real', 'credit', 'rate', 'age']) { ev(`ccrTab='${t}'; refresh();`); chk('소비·신용 > ' + t, 'retailWrap'); }
+    for (const p of ['자동차', '학자금', '전체', '카드']) { ev(`ccrTab='age'; ccrAgeP='${p}'; refresh();`); chkHas('소비·신용 > 연령별 ' + p, 'retailWrap', '18-29세'); }
     ev(`ccrTab='credit'; refresh();`); chkHas('소비·신용 > 신용 표', 'retailWrap', '리볼빙');
-    ev(`ccrTab='gap'; refresh();`); chkHas('소비·신용 > 저축률', 'retailWrap', '개인저축률');
+    ev(`ccrTab='gap'; refresh();`); chkHas('소비·신용 > 저축률', 'retailWrap', '개인저축률'); chkHas('소비·신용 > 명목 소득', 'retailWrap', '처분가능소득');
+    ev(`ccrTab='real'; refresh();`); chkHas('소비·신용 > 실질소비 품목', 'retailWrap', '실질 소비지출');
     ev(`ccrTab='rate'; refresh();`); chkHas('소비·신용 > 금리', 'retailWrap', '카드 금리');
   } else { console.log('  소비·신용                    (데이터 없음 — python fetch.py us_ccredit us_ccredit_q)'); }
   if (w.__MACRO__ && w.__MACRO__.us_oil) {

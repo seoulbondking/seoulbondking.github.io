@@ -84,14 +84,41 @@ def _num(s):
         return None
 
 
+class BeaTransient(RuntimeError):
+    """503·타임아웃 같은 일시 장애. 재시도 후에도 실패하면 지표 전체를 실패로 돌려
+    기존 아카이브를 지킨다 (표 하나만 건너뛰면 저장 때 그 표의 계열이 아카이브에서 지워진다
+    — 2026-11-27 PCE 발표일 아침 T20804 가 503 으로 빠져 물가 계열이 통째로 사라졌다)."""
+
+
+def _mask(msg: str) -> str:
+    """오류 문구에 요청 URL 이 섞이면 API 키(UserID)가 그대로 찍힌다 — 가린다."""
+    return re.sub(r"(UserID=)[^&\s]+", r"\g<1>***", str(msg))
+
+
 def request_table(key: str, dataset: str, table: str, freq: str, year: str = "ALL") -> list[dict]:
-    """표 하나를 통째로 받아 행 리스트를 돌려준다."""
-    r = requests.get(URL, params={
-        "UserID": key, "method": "GetData", "datasetname": dataset,
-        "TableName": table, "Frequency": freq, "Year": year,
-        "ResultFormat": "JSON",
-    }, timeout=90)
-    r.raise_for_status()
+    """표 하나를 통째로 받아 행 리스트를 돌려준다. 일시 장애는 두 번 더 시도한다."""
+    import time
+    last = None
+    for wait in (0, 10, 30):
+        if wait:
+            time.sleep(wait)
+        try:
+            r = requests.get(URL, params={
+                "UserID": key, "method": "GetData", "datasetname": dataset,
+                "TableName": table, "Frequency": freq, "Year": year,
+                "ResultFormat": "JSON",
+            }, timeout=90)
+        except requests.RequestException as e:
+            last = f"연결 실패 ({type(e).__name__})"
+            continue
+        if r.status_code >= 500 or r.status_code == 429:
+            last = f"HTTP {r.status_code}"
+            continue
+        if r.status_code >= 400:
+            raise BeaError(f"HTTP {r.status_code} ({dataset}/{table})")
+        break
+    else:
+        raise BeaTransient(f"{dataset}/{table}: {last} — 3회 시도 실패")
     js = r.json()
     api = js.get("BEAAPI") or {}
     # 오류는 두 자리 중 하나에 담겨 온다
@@ -190,8 +217,11 @@ def fetch(indicator: dict) -> list[dict]:
         # 표 하나가 실패해도 나머지는 살린다 (월별 제공이 없는 표가 섞일 수 있다)
         try:
             rows = request_table(key, dataset, table, freq)
+        except BeaTransient as e:
+            # 일부 표만 저장하면 나머지 표의 계열이 아카이브에서 지워진다 → 지표 전체 실패로
+            raise BeaError(f"{_mask(e)} — 기존 아카이브 유지") from None
         except Exception as e:
-            print(f"  [bea {indicator['id']}] {dataset}/{table} 실패(건너뜀): {str(e)[:160]}")
+            print(f"  [bea {indicator['id']}] {dataset}/{table} 실패(건너뜀): {_mask(e)[:160]}")
             continue
         got = parse(rows, t.get("prefix") or "", t.get("lines"))
         # 시작연도 이전은 버린다 (BEA 는 Year=ALL 로만 안정적으로 응답한다)

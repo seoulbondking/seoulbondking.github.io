@@ -2094,6 +2094,16 @@ indicators:
         CORCCACBS: 카드 상각률
         DRCLACBS: 소비자대출 연체율
 
+  # 뉴욕 연은 가계부채·신용 보고서 (분기, 키 불필요) — 소비·신용 화면 '연령별 연체' 탭
+  #   연령별 90일+ 연체 이행률(카드·자동차·주담대·학자금), 종류별 90일+ 잔액비중·잔액.
+  #   엑셀 하나(약 1MB)를 매번 통째로 읽는다. 표본 개정이 있어 과거값도 바뀔 수 있다.
+  - id: us_hhdc
+    name: 미국 가계부채·연체 (뉴욕 연은)
+    source: nyfed_hhdc
+    unit: '%·조달러'
+    freq: Q
+    always_full: true
+
   # JOLTS — 구인·채용·이직·해고 (전산업, 천건 및 %)
   - id: us_jolts
     name: 미국 JOLTS (구인·이직)

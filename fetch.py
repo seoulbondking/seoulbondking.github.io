@@ -22,7 +22,7 @@ import yaml
 
 from fetchers import (bea, frbsf, cftc, mof, pce_diffusion, kosis, ecos,
                       reb, bls, freesis, bok, seibro, fred, infomax, acm, krx,
-                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow, ism, bokfsr, eia)
+                      ecos_xlsx, nowcast, clevelandfed, treasurydirect, fiscaldata, gdpnow, ism, bokfsr, eia, nyfed_hhdc)
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "docs" / "data"
@@ -54,6 +54,7 @@ SOURCES = {
     "ism": ism.fetch,
     "bokfsr": bokfsr.fetch,
     "eia": eia.fetch,
+    "nyfed_hhdc": nyfed_hhdc.fetch,
 }
 
 KST = timezone(timedelta(hours=9))
@@ -238,6 +239,12 @@ def write_alert_tail(all_indicators: list[dict]) -> None:
 
 
 def main():
+    # 콘솔이 cp949 면 '—'·'→' 같은 문자 하나로 print 가 죽고, 그게 [CRASH] 로 루프 전체를 멈춘다
+    for st in (sys.stdout, sys.stderr):
+        try:
+            st.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
     load_dotenv()
     config = yaml.safe_load((ROOT / "indicators.yaml").read_text(encoding="utf-8"))
     all_indicators = config["indicators"]     # 메뉴 목록은 항상 전체 기준
@@ -344,10 +351,34 @@ def main():
                             known = {s["name"] for s in old.get("series", [])}
                             fresh = [s["name"] for s in series if s["name"] not in known]
                             if fresh:
-                                print(f"  [warn] {ind['id']}: 아카이브에 없던 시리즈 {fresh} —"
-                                      f" 증분이라 최근 {ind.get('refetch_years', 2)}년치만 들어옵니다."
-                                      f" 전체 이력이 필요하면 'python fetch.py {ind['id']} --full'")
+                                # 새 계열이 증분(최근 2년치)으로만 들어오면 앞이 잘린 채 굳는다.
+                                #   2026-11-26: BEA 503 으로 PCE 물가 31개 계열이 한 번 빠졌다가
+                                #   다음 회차에 '새 계열'로 2024년부터만 다시 채워졌다.
+                                #   → 그 자리에서 전체 기간을 다시 받는다. 실패하면 경고만 남긴다.
+                                print(f"  [warn] {ind['id']}: 아카이브에 없던 시리즈 {len(fresh)}개"
+                                      f" {fresh[:3]}{' …' if len(fresh) > 3 else ''} — 전체 기간으로 다시 받습니다")
+                                ind["_start_year"] = target_start
+                                try:
+                                    full = fetch_fn(ind)
+                                except Exception as e:
+                                    full = None
+                                    print(f"  [warn] {ind['id']}: 전체 재수집 실패({e}) —"
+                                          f" 'python fetch.py {ind['id']} --full' 로 다시 받을 것")
+                                if full:
+                                    series = full
                         series = merge_series(old["series"], series)
+                        # 이번 회차에 안 들어온 계열은 지우지 않고 아카이브 값을 유지한다.
+                        #   수집기가 표 하나를 '건너뜀'으로 삼키면 그 계열이 아카이브에서 사라지고,
+                        #   다음 회차에 '새 계열'로 최근 2년치만 다시 들어와 앞이 잘린다
+                        #   (2026-11: kr_yield_daily 통안1년·국고30년, us_pce 물가 31개).
+                        #   계열 이름을 바꿨다면 옛 이름이 남으니 --full 로 정리할 것.
+                        got = {x["name"] for x in series}
+                        kept = [x for x in old["series"] if x["name"] not in got and x.get("data")]
+                        if kept:
+                            print(f"  [keep] {ind['id']}: 이번에 안 들어온 시리즈 {len(kept)}개 유지"
+                                  f" {[x['name'] for x in kept][:3]}{' …' if len(kept) > 3 else ''}"
+                                  f" (이름을 바꾼 거면 --full 로 정리)")
+                            series = series + kept
 
             # drop_before: 이 날짜 이전 관측치는 버린다.
             #   과거 수집분이 지금과 다른 통계였을 때 쓴다. 아카이브에 이미 들어간

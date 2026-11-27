@@ -315,14 +315,14 @@
         <button data-oil="base">기저효과</button>
       </div>
       <div id="ccrTabs" class="mode" style="display:none">
-        <button data-ccr="credit" class="active">신용 증가</button>
-        <button data-ccr="gap">소득·소비·저축</button>
+        <button data-ccr="gap" class="active">소득·소비·저축</button>
+        <button data-ccr="real">실질소비 품목</button>
+        <button data-ccr="credit">신용 증가</button>
         <button data-ccr="rate">금리·연체</button>
+        <button data-ccr="age">연령별 연체</button>
       </div>
       <div id="usPceTabs" class="mode" style="display:none">
         <button data-uc2="price" class="active">물가</button>
-        <button data-uc2="real">실질소비</button>
-        <button data-uc2="income">소득·저축</button>
         <button data-uc2="mkt">시장기반</button>
         <button data-uc2="sd">수요·공급</button>
         <button data-uc2="diff">확산도</button>
@@ -705,7 +705,7 @@ function applyNavOrder(nav) {
   btns.forEach(b => { prev.after(b); prev = b; });
   mark.remove();
 }
-const NAV_HIDE = ['us_ccredit_q', 'us_pump', 'us_refinery', 'us_refinery_w', 'kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
+const NAV_HIDE = ['us_ccredit_q', 'us_hhdc', 'us_pump', 'us_refinery', 'us_refinery_w', 'kr_cpi_items', 'kr_csi', 'kr_infl_expect', 'kr_base_rate',
                   'kr_household_credit', 'kr_bop', 'kr_ppi_basic', 'kr_bank_flow', 'kr_repo_flow',
                   // kr_yield(34MB)는 메뉴에서 내렸다 — 클릭하면 통째로 받느라 굳는다
                   'kr_yield', 'kr_policy_bei', 'mkt_oil_fx',
@@ -9802,7 +9802,9 @@ function renderUsPceSd(box, xT) {
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
 }
 
-function renderUsPce() {
+// forceTab: 다른 화면(소비·신용)이 이 트리를 빌려 그릴 때. 'real' 만 쓴다.
+function renderUsPce(forceTab) {
+  const tab = forceTab || usPceTab;
   const box = document.getElementById('retailWrap');
   document.querySelectorAll('#usPceTabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.uc2 === usPceTab));
@@ -9858,11 +9860,13 @@ function renderUsPce() {
     + '<button class="mini-btn" id="pceCollapse">전체 접기</button>'
     + '<span style="font-size:12px;color:#8592a3;align-self:center">항목의 <b>＋/－</b>를 눌러 접고 펼칩니다</span></div>';
 
-  let out = '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+  let out = (forceTab ? '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
+    + '<b>실질 소비지출</b> (BEA, 연쇄 2017달러, 계절조정 연율) — 물가를 빼고 본 소비 물량. 재화·서비스 품목 트리는 미국 PCE 물가 화면과 같은 구성입니다.</div>'
+    : '<div style="font-size:12.5px;color:#8592a3;line-height:1.9;margin-bottom:12px">'
     + '연준의 공식 물가목표는 CPI 가 아니라 <b>PCE</b>입니다. CPI 보다 통상 <b>0.2~0.4%p 낮게</b> 나오는데, '
     + '가중치가 매달 갱신되고(연쇄가중) 의료비처럼 <b>보험이 대신 내는 지출</b>까지 잡히기 때문입니다.<br>'
     + 'BEA 월별 계열은 <b>계절조정본만</b> 공표됩니다 — 원계열이 없어 전월비·전년동월비 모두 같은 계열에서 뽑습니다. '
-    + '<span style="color:#c0392b">addenda 는 본표를 다시 묶은 항목이라 본표와 더하면 이중계상입니다.</span></div>'
+    + '<span style="color:#c0392b">addenda 는 본표를 다시 묶은 항목이라 본표와 더하면 이중계상입니다.</span></div>')
     + '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">'
     + [0, 1].map(i => `<div style="flex:1;min-width:340px"><div class="cchart" style="height:290px"><canvas id="ucp${i}"></canvas></div></div>`).join('')
     + '</div>';
@@ -9889,7 +9893,7 @@ function renderUsPce() {
         y: { ticks: { font: { size: 10 }, callback: v => axFmt(v, unit) } } } },
   });
 
-  if (usPceTab === 'price') {
+  if (tab === 'price') {
     out += treeBar
          + tbl('전년동월비 (%)', US_PCE_ROWS, (en, d) => chg(P(en), d, 12), f2)
          + tbl('addenda — 전년동월비 (%)', US_PCE_ADD, (en, d) => chg(P(en), d, 12), f2)
@@ -9908,7 +9912,7 @@ function renderUsPce() {
       winSet('Personal consumption expenditures (PCE)'), '%');
     usPceCharts[1] = line('#ucp1', '근원 PCE — 12 / 6 / 3개월 연율 (%)',
       winSet('PCE excluding food and energy'), '%');
-  } else if (usPceTab === 'real') {
+  } else if (tab === 'real') {
     const T = 1e6;   // 백만달러 → 조달러
     out += treeBar
          + tbl('실질 소비지출 (조달러, 연쇄 2017달러)', US_PCE_ROWS, (en, d) => lvl(R(en), d, T), f2)
@@ -9923,7 +9927,7 @@ function renderUsPce() {
       ['· 내구재', '#7b52ab', d => chg(R('Durable goods'), d, 12)],
       ['서비스', '#1a4fa0', d => chg(R('Services'), d, 12)],
     ], '%');
-  } else if (usPceTab === 'mkt') {
+  } else if (tab === 'mkt') {
     // 시장기반(market-based) PCE — 실제로 거래 가격이 관찰되는 항목만 모은 보조지수.
     // 전체 PCE 의 약 87%. 나머지(비시장)는 BEA 가 방법을 정해 '귀속'한 값이라
     // 물가가 아니라 금리·주가·손해율이 지수를 움직인다.
@@ -9983,45 +9987,30 @@ function renderUsPce() {
       ['6개월 연율', '#1a6fc4', gapAt(CORE, MCORE, 6)],
       ['3개월 연율', '#c0392b', gapAt(CORE, MCORE, 3)],
     ], '%p');
-  } else if (usPceTab === 'sd') {
+  } else if (tab === 'sd') {
     renderUsPceSd(box, xT);
     return;
-  } else if (usPceTab === 'diff') {
+  } else if (tab === 'diff') {
     renderUsPceDiff(box, xT);
     return;
-  } else {
-    const T = 1e6;
-    out += tbl('수준 (조달러, 연율)', US_PCE_INC, (en, d) => lvl(I(en), d, T), f2)
-         + `<div class="block-title">개인저축률 (%)</div><div class="tscroll">`
-         + `<table class="data vlines"><thead><tr><th>항목</th>${th}</tr></thead><tbody>`
-         + `<tr class="lv0 sep-solid"><td>${US_PCE_RATE[1]}</td>`
-         + cols.map(d => cell(lvl(I(US_PCE_RATE[0]), d), f1)).join('') + '</tr></tbody></table></div>'
-         + tbl('전년동월비 (%)', US_PCE_INC, (en, d) => chg(I(en), d, 12), f2);
-    box.innerHTML = out;
-    usPceCharts[0] = line('#ucp0', '개인저축률 (%)',
-      [['저축률', '#002060', d => lvl(I(US_PCE_RATE[0]), d), true]], '%');
-    usPceCharts[1] = line('#ucp1', '전년동월비 (%) — 소득 vs 소비', [
-      ['처분가능소득', '#1a4fa0', d => chg(I('Equals: Disposable personal income'), d, 12), true],
-      ['개인소비지출', '#c0392b', d => chg(I('Personal consumption expenditures'), d, 12)],
-    ], '%');
   }
   box.querySelectorAll('.tscroll').forEach(el => el.scrollLeft = el.scrollWidth);
   box.querySelectorAll('tr.parent[data-pcec]').forEach(tr => {
     tr.querySelector('td:first-child').onclick = () => {
       const n = tr.dataset.pcec;
       usPceCollapsed.has(n) ? usPceCollapsed.delete(n) : usPceCollapsed.add(n);
-      renderUsPce();
+      renderUsPce(forceTab);
     };
   });
   const ex = box.querySelector('#pceExpand'), cl = box.querySelector('#pceCollapse');
-  if (ex) ex.onclick = () => { usPceCollapsed = new Set(); renderUsPce(); };
+  if (ex) ex.onclick = () => { usPceCollapsed = new Set(); renderUsPce(forceTab); };
   if (cl) cl.onclick = () => {
     usPceCollapsed = new Set();
     US_PCE_ROWS.forEach(([en, lv], i) => {
       const nx = US_PCE_ROWS[i + 1];
       if (nx && nx[1] > lv) usPceCollapsed.add(en);
     });
-    renderUsPce();
+    renderUsPce(forceTab);
   };
 }
 
@@ -11644,13 +11633,16 @@ function renderOil() {
 // 물가가 오르는데 소비가 버티는 이유를 본다: 실질소득 vs 실질소비 → 그 차이를 메우는 저축률 하락과 신용.
 // us_ccredit: 연준 G.19 소비자신용(십억달러, SA) + 저축률·실질소득·실질소비 (FRED 월별)
 // us_ccredit_q: 상업은행 카드·소비자대출 연체율·상각률 (분기)
-const CCR = { id: 'ccr', name: '소비·신용', ids: ['us_ccredit', 'us_ccredit_q'] };
+const CCR = { id: 'ccr', name: '소비·신용', ids: ['us_ccredit', 'us_ccredit_q', 'us_hhdc'] };
 const CCR_BASE = ['2015-01', '2019-12'];
-let ccrData = null, ccrQ = null, ccrTab = 'credit', ccrCharts = [];
+let ccrData = null, ccrQ = null, ccrHh = null, ccrTab = 'gap', ccrCharts = [];
+let ccrAgeP = '카드';   // 연령별 연체 탭의 상품: 카드 | 자동차 | 주담대 | 학자금 | 전체
 
 async function enterCcr() {
   ccrData = await loadIndicator('us_ccredit').catch(() => null);
   ccrQ = await loadIndicator('us_ccredit_q').catch(() => null);
+  ccrHh = await loadIndicator('us_hhdc').catch(() => null);      // 뉴욕 연은 가계부채 보고서 (분기)
+  if (!usPceData) usPceData = await loadIndicator('us_pce').catch(() => null);   // 실질소비 품목·명목 소득 (BEA)
   if (!ccrData) { alert('소비자신용 데이터가 없습니다. python fetch.py us_ccredit us_ccredit_q 실행 필요.'); return; }
   current = { id: CCR.id, name: CCR.name, freq: 'M', unit: '십억달러·%',
               updated_at: ccrData.updated_at, series: [] };
@@ -11684,6 +11676,12 @@ function renderCcr() {
   const box = document.getElementById('retailWrap');
   document.querySelectorAll('#ccrTabs button').forEach(b => b.classList.toggle('active', b.dataset.ccr === ccrTab));
   ccrCharts.forEach(c => c && c.destroy()); ccrCharts = [];
+  usPceCharts.forEach(c => c && c.destroy()); usPceCharts = [null, null, null, null];
+  if (ccrTab === 'real') {      // 실질소비 품목 트리 — PCE 화면의 표·접기 코드를 그대로 빌린다
+    if (!usPceData) { box.innerHTML = '<div style="padding:24px;color:#888">PCE 데이터가 없습니다 — python fetch.py us_pce</div>'; return; }
+    renderUsPce('real');
+    return;
+  }
   const S = (n, src = ccrData) => { const x = src && src.series.find(y => y.name === n); return x ? new Map(x.data.map(p => [p.d, p.v])) : new Map(); };
   const addM = (d, k) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) + k, 0)).toISOString().slice(0, 10);
   const ml = d => `'${d.slice(2, 4)}.${d.slice(5, 7)}`;
@@ -11800,6 +11798,9 @@ function renderCcr() {
     const yi = ytd(RDI), yc = ytd(RPC);
     const CR = zip((c, i) => c / i * 100, TOT, NDI), RR = zip((c, i) => c / i * 100, REV, NDI);
     const sv12 = SAV.get(addM(end, -12));
+    const BI = n => { const x = usPceData && usPceData.series.find(y => baseName(y.name) === '소득·지출 · ' + n);
+      return x ? new Map(x.data.map(p => [p.d, p.v / 1e6])) : new Map(); };     // 백만달러 → 조달러
+    const NI = US_PCE_INC.map(([en, lv, ko]) => [ko, BI(en), lv]);
     out += chips([
       chip(`개인저축률 (${ml(end)})`, f1(SAV.get(end)) + '%', `2015~19 평균 ${f1(muS)}% · 1년 전 ${sv12 != null ? f1(sv12) : '—'}%`, SAV.get(end) < muS ? '#c0392b' : '#1a2b4a'),
       chip(`실질 가처분소득 (${end.slice(0, 4)}년 누적 연율)`, yi == null ? '—' : sg(yi) + '%', `전년비 ${sg(yI.get(end))}%`),
@@ -11808,7 +11809,7 @@ function renderCcr() {
       chip('소비자신용 ÷ 가처분소득', f1(CR.get(end)) + '%', `리볼빙 ${f2(RR.get(end))}%`),
     ])
       + note('실질소비가 실질 가처분소득보다 빨리 늘면 그 차이는 <b>저축률 하락</b>(또는 자산 매각·차입)으로 메운다. '
-        + '누적 연율 = 전년 12월 대비 최신월을 연율로 환산. 저축률은 소득 대비 비율이라, 소득이 개정되면 함께 크게 개정된다(BEA 연례 개정 주의).')
+        + '미국 PCE 화면에 있던 실질소비·소득·저축을 이 화면으로 합쳤다. 누적 연율 = 전년 12월 대비 최신월을 연율로 환산. 저축률은 소득 대비 비율이라, 소득이 개정되면 함께 크게 개정된다(BEA 연례 개정 주의).')
       + row2(canv('ccrC0'), canv('ccrC1'))
       + canv('ccrC2', 260)
       + table([
@@ -11816,7 +11817,10 @@ function renderCcr() {
         ['실질 가처분소득 전년비 (%)', yI, f1, true, 0], ['3개월 평균 연율', a3I, f1, true],
         ['실질 소비 전년비 (%)', yC, f1, true, 0], ['3개월 평균 연율', a3C, f1, true],
         ['소비 − 소득 (전년비, %p)', gapY, f1, true, 0], '-',
-        ['소비자신용 ÷ 가처분소득 (%)', CR, f1, false, 0], ['리볼빙 ÷ 가처분소득', RR, f2]]);
+        ['소비자신용 ÷ 가처분소득 (%)', CR, f1, false, 0], ['리볼빙 ÷ 가처분소득', RR, f2]])
+      + (NI[0][1].size ? '<div class="block-title">명목 소득·지출 (BEA 개인소득표, 조달러 · 연율)</div>'
+        + table([...NI.map(([ko, m, lv]) => [ko, m, f2, false, lv]), '-',
+          ...NI.map(([ko, m, lv]) => [ko + ' 전년비 (%)', chg(m, 12), f1, true, lv])]) : '');
     box.innerHTML = out;
     mk('ccrC0', '실질 소득 vs 실질 소비 (전년비 %)', cols, [
       br('소비 − 소득 (%p)', gapY, 'rgba(192,57,43,0.25)', cols),
@@ -11825,6 +11829,46 @@ function renderCcr() {
       ln('개인저축률', SAV, '#2e8b57', cols, { w: 2.4 }), ref('2015~19 평균', muS, cols)]);
     mk('ccrC2', '소비자신용 ÷ 명목 가처분소득 (%)', cols, [
       ln('총 소비자신용', CR, '#1a2b4a', cols, { w: 2.2 }), ln('리볼빙 (우)', RR, '#d9822b', cols, { y2: true })], { y2: '리볼빙 %' });
+  } else if (ccrTab === 'age') {
+    if (!ccrHh) { box.innerHTML = note('뉴욕 연은 데이터가 없습니다 — python fetch.py us_hhdc'); return; }
+    const H = n => S(n, ccrHh);
+    const PR = ['카드', '자동차', '학자금', '주담대', '전체'];
+    const AG = ccrAgeP === '학자금' ? ['18-29', '30-39', '40-49', '50+'] : ['18-29', '30-39', '40-49', '50-59', '60-69', '70+'];
+    const AC = { '18-29': '#c0392b', '30-39': '#d9822b', '40-49': '#b8a01b', '50-59': '#2e8b57', '50+': '#2e8b57', '60-69': '#5b8fd6', '70+': '#8e44ad' };
+    const A = AG.map(a => [a, H(`연령별 90일+ 이행률 · ${ccrAgeP} · ${a}`), AC[a]]);
+    const AT = H(`연령별 90일+ 이행률 · ${ccrAgeP} · 전체`);
+    const hq = [...new Set(ccrHh.series.flatMap(x => x.data.map(p => p.d)))].sort();
+    const q0 = cols[0] < '2015-01' ? cols[0] : '2015-01';         // 분기 자료는 길게 본다 (최소 2015년부터)
+    const qx = hq.filter(d => d >= q0 && d <= cols[cols.length - 1] + 'z');
+    const qE = lastD(AT), q4 = (() => { const i = hq.indexOf(qE); return i >= 4 ? hq[i - 4] : null; })();
+    const d4 = m => q4 && m.get(q4) != null ? m.get(qE) - m.get(q4) : null;
+    const pre19 = m => avg(m, '2015-01', '2019-12');
+    const TY = [['카드', '#c0392b'], ['자동차', '#d9822b'], ['학자금', '#8e44ad'], ['주담대', '#1a2b4a'], ['전체', '#8592a3']];
+    const B90 = TY.map(([n, c]) => [n, H('90일+ 잔액비중 · ' + n), c]);
+    const N90 = TY.map(([n, c]) => [n, H('신규 90일+ 이행률 · ' + n), c]);
+    const pb = v => `<button data-ccra="${v}" style="font-size:12px;padding:3px 10px;border:1px solid ${ccrAgeP === v ? '#1a4fa0' : '#c8d0dc'};`
+      + `background:${ccrAgeP === v ? '#1a4fa0' : '#fff'};color:${ccrAgeP === v ? '#fff' : '#333'};border-radius:4px;cursor:pointer">${v}</button>`;
+    out += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px;flex-wrap:wrap"><b>상품</b>'
+      + PR.map(pb).join('') + `<span style="color:#8592a3">뉴욕 연은 가계부채 보고서 ${mlQ(qE)} · 연간 90일+ 연체 이행률 (%)</span></div>`
+      + chips([...A, ['전체 연령', AT, '#1a2b4a']].map(([a, m, c]) => {
+        const v = m.get(qE), dv = d4(m), mu = pre19(m);
+        return chip(`${a}${a === '전체 연령' ? '' : '세'}`, f2(v) + '%',
+          `1년 전 대비 ${dv == null ? '—' : sg(dv, f2)}%p · 2015~19 평균 ${mu == null ? '—' : f2(mu)}`,
+          dv == null ? '#1a2b4a' : dv > 0 ? '#c0392b' : '#1a4fa0'); }))
+      + note('<b>연령별 90일+ 이행률</b> = 해당 상품 잔액 중 지난 1년(4분기 이동합) 동안 90일 이상 연체로 새로 넘어간 비율. 차주 신용기록 표본(Equifax) 기준, 계절조정 없음. '
+        + '상업은행 연체율(금리·연체 탭)은 은행 장부의 30일+ 연체라 대상·정의가 다르다. '
+        + (ccrAgeP === '학자금' || ccrAgeP === '전체' ? '학자금은 2020.3~2025 상환유예·신용보고 중단 기간이 있어 그 사이 값이 비정상적으로 낮고, 재개 후 급등한다. ' : '')
+        + '연체가 "급증"했는지는 수준보다 <b>1년 전 대비</b>와 <b>코로나 이전 평균</b>을 같이 볼 것.')
+      + row2(canv('ccrC0', 320), canv('ccrC1', 320))
+      + table([[`${ccrAgeP} · 전체 연령 (%)`, AT, f2, false, 0], ...A.map(([a, m]) => [a + '세', m, f2]), '-',
+        ['90일+ 잔액비중 (%)', B90[0][1], f2, false, 0, '잔액 중 현재 90일 이상 연체인 비중 (재고)'], ...B90.slice(1).map(([n, m]) => [n, m, f2]), '-',
+        ['신규 90일+ 이행률 (%)', N90[0][1], f2, false, 0, '연간 신규 진입 (흐름)'], ...N90.slice(1).map(([n, m]) => [n, m, f2])],
+        qx.filter(d => d >= '2019-01'), mlQ);
+    box.innerHTML = out;
+    box.querySelectorAll('[data-ccra]').forEach(b => b.onclick = () => { ccrAgeP = b.dataset.ccra; renderCcr(); });
+    mk('ccrC0', `${ccrAgeP} · 연령별 90일+ 연체 이행률 (%, 연간)`, qx, [ln('전체 연령', AT, '#1a2b4a', qx, { w: 3, dash: [5, 3] }),
+      ...A.map(([a, m, c]) => ln(a + '세', m, c, qx, { w: a === '70+' || a === '18-29' ? 2.4 : 1.6 }))], { fmt: f2, lab: mlQ });
+    mk('ccrC1', '상품별 90일+ 연체 잔액비중 (%)', qx, B90.map(([n, m, c], i) => ln(n, m, c, qx, { w: i === 0 ? 2.6 : 1.8, dash: n === '전체' ? [5, 3] : undefined })), { fmt: f2, lab: mlQ });
   } else {
     const RT = [['카드 금리 (전체 계좌)', '#c0392b'], ['카드 금리 (이자 부과 계좌)', '#e8826f'], ['개인대출 금리 (24개월)', '#8e44ad'],
       ['신차 대출 금리 (60개월)', '#5b8fd6'], ['신차 대출 금리 (72개월)', '#9bbbe6'], ['연방기금금리', '#1a2b4a']]
